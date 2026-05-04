@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-
+const { searchBusinessesWithApify } = require("./services/apifyService");
 const app = express();
 
 const PORT = process.env.PORT || 5000;
@@ -23,7 +23,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.post("/api/search", (req, res) => {
+app.post("/api/search", async (req, res) => {
   const { category, city, district } = req.body;
 
   console.log("Yeni arama isteği geldi:");
@@ -40,22 +40,55 @@ app.post("/api/search", (req, res) => {
 
   const searchQuery = `${category} ${district} ${city}`;
 
-  return res.status(200).json({
-    success: true,
-    message: "Arama isteği başarıyla alındı.",
-    query: {
-      category,
-      city,
-      district,
-      searchQuery,
-    },
-    results: {
-      phones: [],
-      emails: [],
-      instagrams: [],
-      businesses: [],
-    },
-  });
+  try {
+    const businesses = await searchBusinessesWithApify({
+  category,
+  city,
+  district,
+});
+
+    const phones = businesses
+      .filter((business) => business.phone)
+      .map((business) => ({
+        value: business.phone,
+        businessName: business.name,
+        source: "Google Places",
+        url: business.googleMapsUrl,
+      }));
+
+    const totalBusinesses = businesses.length;
+    const phonesFound = phones.length;
+
+    return res.status(200).json({
+      success: true,
+      message: "Apify arama sonuçları başarıyla getirildi.",
+      query: {
+        category,
+        city,
+        district,
+        searchQuery,
+      },
+      stats: {
+        totalBusinesses,
+        phonesFound,
+        emailsFound: 0,
+        instagramsFound: 0,
+      },
+      results: {
+        phones,
+        emails: [],
+        instagrams: [],
+      },
+      businesses,
+    });
+  } catch (error) {
+    console.error("/api/search hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Arama sırasında bir hata oluştu.",
+      error: error.message,
+    });
+  }
 });
 
 app.listen(PORT, () => {

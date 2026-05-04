@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { mockSearchResult } from "@/lib/mockData";
 import type { SearchResult } from "@/types/business";
 
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +46,7 @@ const handleSearch = async () => {
       return;
     }
 
-    setResults(mockSearchResult);
+    setResults(data);
   } catch (error) {
     console.error("Backend bağlantı hatası:", error);
     alert("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
