@@ -15,8 +15,9 @@ export type LeadSource =
 export type LeadItem = {
   value: string;
   businessName: string;
-  source: LeadSource | string;
+  source: LeadSource;
   url?: string;
+  address?: string;
 };
 
 export type Business = {

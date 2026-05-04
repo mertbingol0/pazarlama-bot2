@@ -9,6 +9,7 @@ type ListColumnProps = {
     businessName: string;
     source: string;
     url?: string;
+    address?: string;
   }[];
   type: "phone" | "email" | "instagram";
 };
@@ -86,6 +87,27 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
                       {getActionText()}
                     </a>
                   </Button>
+
+                  {item.url && (
+                  <Button variant="secondary" size="sm" asChild>
+                    <a href={item.url} target="_blank" rel="noreferrer">
+                      Google Maps
+                    </a>
+                  </Button>
+                )}
+
+                  {item.address && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopy(item.address!)}
+                  >
+                    Adres Kopyala
+                  </Button>
+                )}
+
+                
+                
                 </div>
               </div>
             ))}
