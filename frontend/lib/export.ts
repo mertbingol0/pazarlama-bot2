@@ -1,11 +1,21 @@
 import type { SearchResult } from "@/types/business";
 
+function escapeCsvCell(value: string) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+function formatPhoneForExcel(phone: string) {
+  const cleanedPhone = phone.trim();
+
+  return `="${cleanedPhone.replaceAll('"', '""')}"`;
+}
+
 export function downloadSearchResultsAsCsv(results: SearchResult) {
   const rows = [
     ["Type", "Value", "Business Name", "Source"],
     ...results.results.phones.map((item) => [
       "Phone",
-      item.value,
+      formatPhoneForExcel(item.value),
       item.businessName,
       item.source,
     ]),
@@ -26,12 +36,21 @@ export function downloadSearchResultsAsCsv(results: SearchResult) {
   const csvContent = rows
     .map((row) =>
       row
-        .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
-        .join(",")
-    )
-    .join("\n");
+        .map((cell) => {
+          if (String(cell).startsWith('="')) {
+            return cell;
+          }
 
-  const blob = new Blob([csvContent], {
+          return escapeCsvCell(String(cell));
+        })
+        .join(";")
+    )
+    .join("\r\n");
+
+    
+  const utf8Bom = "\uFEFF";
+
+  const blob = new Blob([utf8Bom + csvContent], {
     type: "text/csv;charset=utf-8;",
   });
 

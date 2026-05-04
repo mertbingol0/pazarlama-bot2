@@ -22,7 +22,7 @@ export default function Home() {
 
 const handleSearch = async () => {
   if (!category || !city || !district) {
-    alert("Lütfen kategori, il ve ilçe seçin.");
+    setErrorMessage("Lütfen kategori, il ve ilçe seçin.");
     return;
   }
 
@@ -48,7 +48,7 @@ const handleSearch = async () => {
     });
   } catch (error) {
     console.error("Backend bağlantı hatası:", error);
-    alert("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
+    setErrorMessage("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
   } finally {
     setIsLoading(false);
   }
