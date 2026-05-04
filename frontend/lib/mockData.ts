@@ -5,8 +5,8 @@ export const mockSearchResult: SearchResult = {
   status: "completed",
   query: {
     category: "guzellik",
-    city: "İstanbul",
-    district: "Kadıköy",
+    city: "istanbul",
+    district: "kadikoy",
   },
   stats: {
     totalBusinesses: 6,

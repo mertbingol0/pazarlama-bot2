@@ -1,14 +1,33 @@
 export const locations = [
   {
-    city: "İstanbul",
-    districts: ["Kadıköy", "Beşiktaş", "Şişli", "Üsküdar", "Ataşehir"],
+    label: "İstanbul",
+    value: "istanbul",
+    districts: [
+      { label: "Kadıköy", value: "kadikoy" },
+      { label: "Beşiktaş", value: "besiktas" },
+      { label: "Şişli", value: "sisli" },
+      { label: "Üsküdar", value: "uskudar" },
+      { label: "Ataşehir", value: "atasehir" },
+    ],
   },
   {
-    city: "Ankara",
-    districts: ["Çankaya", "Keçiören", "Mamak", "Yenimahalle"],
+    label: "Ankara",
+    value: "ankara",
+    districts: [
+      { label: "Çankaya", value: "cankaya" },
+      { label: "Keçiören", value: "kecioren" },
+      { label: "Mamak", value: "mamak" },
+      { label: "Yenimahalle", value: "yenimahalle" },
+    ],
   },
   {
-    city: "İzmir",
-    districts: ["Konak", "Karşıyaka", "Bornova", "Buca"],
+    label: "İzmir",
+    value: "izmir",
+    districts: [
+      { label: "Konak", value: "konak" },
+      { label: "Karşıyaka", value: "karsiyaka" },
+      { label: "Bornova", value: "bornova" },
+      { label: "Buca", value: "buca" },
+    ],
   },
 ];
