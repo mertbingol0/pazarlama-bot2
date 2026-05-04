@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { categories } from "@/lib/categories";
 import { locations } from "@/lib/tr-locations";
 import { Button } from "@/components/ui/button";
@@ -27,62 +28,52 @@ export function SearchForm({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-700">Kategori</label>
-        <select
-          value={category}
-          onChange={(event) => onCategoryChange(event.target.value)}
-          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-        >
-          <option value="">Kategori seç</option>
-          {categories.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <SearchableSelect
+        label="Kategori"
+        placeholder="Kategori seç"
+        searchPlaceholder="Kategori ara..."
+        emptyMessage="Kategori bulunamadı."
+        value={category}
+        options={categories}
+        onChange={onCategoryChange}
+      />
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-700">İl</label>
-        <select
-          value={city}
-          onChange={(event) => {
-            onCityChange(event.target.value);
-            onDistrictChange("");
-          }}
-          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-        >
-          <option value="">İl seç</option>
-          {locations.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <SearchableSelect
+        label="İl"
+        placeholder="İl seç"
+        searchPlaceholder="İl ara..."
+        emptyMessage="İl bulunamadı."
+        value={city}
+        options={locations.map((item) => ({
+          label: item.label,
+          value: item.value,
+        }))}
+        onChange={(value) => {
+          onCityChange(value);
+          onDistrictChange("");
+        }}
+      />
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-700">İlçe</label>
-        <select
-          value={district}
-          onChange={(event) => onDistrictChange(event.target.value)}
-          disabled={!city}
-          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-        >
-          <option value="">İlçe seç</option>
-          {selectedCity?.districts.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <SearchableSelect
+        label="İlçe"
+        placeholder="İlçe seç"
+        searchPlaceholder="İlçe ara..."
+        emptyMessage="İlçe bulunamadı."
+        value={district}
+        disabled={!city}
+        options={
+          selectedCity?.districts.map((item) => ({
+            label: item.label,
+            value: item.value,
+          })) || []
+        }
+        onChange={onDistrictChange}
+      />
 
       <Button
         onClick={onSearch}
         disabled={isLoading}
-        className="h-12 rounded-xl bg-indigo-600 px-8 text-white shadow-md transition hover:bg-indigo-700"
+        className="h-12 rounded-xl bg-emerald-500 px-8 text-white shadow-md shadow-emerald-200 transition hover:bg-emerald-600 disabled:bg-emerald-300"
       >
         {isLoading ? "Aranıyor..." : "Ara"}
       </Button>

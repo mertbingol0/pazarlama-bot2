@@ -23,7 +23,7 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
 
       {results.fromCache && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Bu sonuçlar 24 saatlik önbellekten getirildi.
+          Bu arama daha önce yapılmış. Sonuçlar kayıtlı verilerden getirildi.
         </div>
       )}
 

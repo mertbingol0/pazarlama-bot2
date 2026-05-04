@@ -52,21 +52,29 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50 px-6 py-8">
+    <main className="min-h-screen bg-[#f7fbf9] px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8 rounded-3xl border border-white/70 bg-white/80 p-8 shadow-sm backdrop-blur">
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge variant="secondary" className="rounded-full px-3 py-1">
-              Jefedes Lead Generation Tool
+        <header className="mb-10">
+          <div className="flex items-center justify-between">
+            <div className="text-3xl font-semibold tracking-tight text-slate-700">
+              Jefedes<span className="text-emerald-500">.</span>
+            </div>
+
+            <Badge
+              variant="secondary"
+              className="rounded-full border border-emerald-100 bg-white px-4 py-1.5 text-slate-600 shadow-sm"
+            >
+              Lead Generation Tool
             </Badge>
           </div>
 
-          <div className="mt-6">
-            <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">
-              Potansiyel Müşteri Arama Paneli
+          <div className="mx-auto mt-14 max-w-4xl text-center">
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-900 md:text-6xl">
+              Potansiyel müşterilerinizi{" "}
+              <span className="text-emerald-500">daha hızlı</span> bulun
             </h1>
 
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 md:text-lg">
               Kategori, il ve ilçe seçerek işletmeleri arayın. Telefon,
               e-posta ve Instagram sonuçlarını ayrı listelerde görüntüleyin,
               kopyalayın ve CSV olarak dışa aktarın.
@@ -74,11 +82,12 @@ export default function Home() {
           </div>
         </header>
 
-        <Card className="border-white/80 bg-white/90 shadow-md backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-xl text-slate-950">
+        <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl font-semibold text-slate-900">
               Arama Bilgileri
             </CardTitle>
+
             <p className="text-sm text-slate-500">
               Arama yapmak için kategori, il ve ilçe bilgilerini seçin.
             </p>
