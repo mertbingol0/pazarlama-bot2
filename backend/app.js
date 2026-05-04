@@ -1,3 +1,8 @@
+const {
+  initDatabase,
+  getCachedSearchResults,
+  saveSearchResults,
+} = require("./db");
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -41,11 +46,35 @@ app.post("/api/search", async (req, res) => {
   const searchQuery = `${category} ${district} ${city}`;
 
   try {
-    const businesses = await searchBusinessesWithApify({
+    let businesses = [];
+let fromCache = false;
+
+const cached = await getCachedSearchResults({
   category,
   city,
   district,
 });
+
+if (cached) {
+  businesses = cached.businesses;
+  fromCache = true;
+  console.log("Sonuçlar SQLite cache üzerinden getirildi.");
+} else {
+  businesses = await searchBusinessesWithApify({
+    category,
+    city,
+    district,
+  });
+
+  await saveSearchResults({
+    category,
+    city,
+    district,
+    businesses,
+  });
+
+  console.log("Sonuçlar Apify'dan çekildi ve SQLite'a kaydedildi.");
+}
 
 const phones = businesses
   .filter((business) => business.phone)
@@ -62,7 +91,10 @@ const phones = businesses
 
     return res.status(200).json({
       success: true,
-      message: "Apify arama sonuçları başarıyla getirildi.",
+      message: fromCache
+  ? "Sonuçlar database üzerinden getirildi."
+  : "Apify arama sonuçları başarıyla getirildi.",
+fromCache,
       query: {
         category,
         city,
@@ -92,6 +124,13 @@ const phones = businesses
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend ${PORT} portunda çalışıyor.`);
-});
+initDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Backend ${PORT} portunda çalışıyor.`);
+    });
+  })
+  .catch((error) => {
+    console.error("Database başlatılamadı:", error);
+    process.exit(1);
+  });
