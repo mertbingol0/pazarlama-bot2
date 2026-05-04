@@ -1,50 +1,25 @@
-import type { LeadItem } from "@/types/business";
-
-type SearchBusinessesParams = {
-  category: string;
-  city: string;
-  district: string;
-};
-
-type SearchBusinessesResponse = {
-  success: boolean;
-  message: string;
-  query: {
-    category: string;
-    city: string;
-    district: string;
-    searchQuery?: string;
-  };
-  stats: {
-    totalBusinesses: number;
-    phonesFound: number;
-    emailsFound: number;
-    instagramsFound: number;
-  };
-  results: {
-    phones: LeadItem[];
-    emails: LeadItem[];
-    instagrams: LeadItem[];
-  };
-  businesses?: any[];
-};
+import type { SearchApiResponse, SearchParams } from "@/types/business";
 
 const API_BASE_URL = "http://localhost:5000";
 
 export async function searchBusinesses(
-  params: SearchBusinessesParams
-): Promise<SearchBusinessesResponse> {
+  params: SearchParams
+): Promise<SearchApiResponse> {
   const response = await fetch(`${API_BASE_URL}/api/search`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      category: params.category,
+      city: params.city,
+      district: params.district,
+    }),
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
+  if (!response.ok || !data.success) {
     throw new Error(data.message || "Arama isteği başarısız oldu.");
   }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { mockSearchResult } from "@/lib/mockData";
 import { searchBusinesses } from "@/lib/api";
 import type { SearchResult } from "@/types/business";
 import { EmptyState } from "@/components/EmptyState";
@@ -20,39 +19,37 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-const handleSearch = async () => {
-  if (!category || !city || !district) {
-    setErrorMessage("Lütfen kategori, il ve ilçe seçin.");
-    return;
-  }
+  const handleSearch = async () => {
+    if (!category || !city || !district) {
+      setErrorMessage("Lütfen kategori, il ve ilçe seçin.");
+      return;
+    }
 
-  setIsLoading(true);
-  setErrorMessage(null);
+    setIsLoading(true);
+    setErrorMessage(null);
 
-  try {
-    const backendResponse = await searchBusinesses({
-      category,
-      city,
-      district,
-    });
-
-    console.log("Backend response:", backendResponse);
-
-    setResults({
-      ...mockSearchResult,
-      query: {
+    try {
+      const backendResponse = await searchBusinesses({
         category,
         city,
         district,
-      },
-    });
-  } catch (error) {
-    console.error("Backend bağlantı hatası:", error);
-    setErrorMessage("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+      });
+
+      setResults({
+        query: backendResponse.query,
+        stats: backendResponse.stats,
+        results: backendResponse.results,
+        fromCache: backendResponse.fromCache,
+      });
+    } catch (error) {
+      console.error("Backend bağlantı hatası:", error);
+      setErrorMessage(
+        "Backend bağlantısı kurulamadı veya arama sonuçları alınamadı."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50 px-6 py-8">

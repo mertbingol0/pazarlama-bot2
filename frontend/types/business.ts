@@ -5,18 +5,38 @@ export type SearchParams = {
   maxResults?: number;
 };
 
-export type LeadSource = string;
+export type LeadSource =
+  | "google_maps"
+  | "website_scrape"
+  | "google_places"
+  | "backend"
+  | "manual";
 
 export type LeadItem = {
   value: string;
   businessName: string;
-  source: LeadSource;
+  source: LeadSource | string;
   url?: string;
 };
 
+export type Business = {
+  id?: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  rating?: number;
+  userRatingCount?: number;
+  location?: {
+    lat?: number;
+    lng?: number;
+  };
+};
+
 export type SearchResult = {
-  searchId: string;
-  status: "processing" | "completed" | "failed";
+  searchId?: string;
+  status?: "processing" | "completed" | "failed";
   query: {
     category: string;
     city: string;
@@ -34,4 +54,10 @@ export type SearchResult = {
     instagrams: LeadItem[];
   };
   fromCache?: boolean;
+};
+
+export type SearchApiResponse = SearchResult & {
+  success: boolean;
+  message: string;
+  businesses?: Business[] | unknown[];
 };
