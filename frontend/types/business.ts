@@ -5,7 +5,7 @@ export type SearchParams = {
   maxResults?: number;
 };
 
-export type LeadSource = "google_maps" | "website_scrape" | "google_places";
+export type LeadSource = string;
 
 export type LeadItem = {
   value: string;

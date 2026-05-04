@@ -1,3 +1,5 @@
+import type { LeadItem } from "@/types/business";
+
 type SearchBusinessesParams = {
   category: string;
   city: string;
@@ -7,11 +9,24 @@ type SearchBusinessesParams = {
 type SearchBusinessesResponse = {
   success: boolean;
   message: string;
-  receivedData?: {
+  query: {
     category: string;
     city: string;
     district: string;
+    searchQuery?: string;
   };
+  stats: {
+    totalBusinesses: number;
+    phonesFound: number;
+    emailsFound: number;
+    instagramsFound: number;
+  };
+  results: {
+    phones: LeadItem[];
+    emails: LeadItem[];
+    instagrams: LeadItem[];
+  };
+  businesses?: any[];
 };
 
 const API_BASE_URL = "http://localhost:5000";

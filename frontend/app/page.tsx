@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { mockSearchResult } from "@/lib/mockData";
+import { searchBusinesses } from "@/lib/api";
 import type { SearchResult } from "@/types/business";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -45,17 +46,6 @@ const handleSearch = async () => {
         district,
       },
     });
-
-    const data = await response.json();
-
-    console.log("Backend response:", data);
-
-    if (!response.ok) {
-      alert(data.message || "Backend isteği başarısız oldu.");
-      return;
-    }
-
-    setResults(mockSearchResult);
   } catch (error) {
     console.error("Backend bağlantı hatası:", error);
     setErrorMessage("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
