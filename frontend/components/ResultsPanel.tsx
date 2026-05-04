@@ -1,3 +1,4 @@
+import { downloadSearchResultsAsCsv } from "@/lib/export";
 import type { SearchResult } from "@/types/business";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "@/components/ListColumn";
@@ -47,8 +48,19 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
       </section>
 
       <section className="mt-6 flex flex-wrap gap-3">
-        <Button variant="outline">CSV İndir</Button>
-        <Button variant="outline">Excel İndir</Button>
+        <Button
+          variant="outline"
+          onClick={() => downloadSearchResultsAsCsv(results)}
+        >
+          CSV İndir
+        </Button>
+
+        <Button
+          variant="outline"
+          onClick={() => downloadSearchResultsAsCsv(results)}
+        >
+          Excel İçin CSV İndir
+        </Button>
       </section>
     </>
   );

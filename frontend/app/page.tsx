@@ -4,7 +4,8 @@ import { useState } from "react";
 import { mockSearchResult } from "@/lib/mockData";
 import { searchBusinesses } from "@/lib/api";
 import type { SearchResult } from "@/types/business";
-
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchForm } from "@/components/SearchForm";
@@ -17,6 +18,7 @@ export default function Home() {
   const [district, setDistrict] = useState("");
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 const handleSearch = async () => {
   if (!category || !city || !district) {
@@ -25,6 +27,7 @@ const handleSearch = async () => {
   }
 
   setIsLoading(true);
+  setErrorMessage(null);
 
   try {
     const backendResponse = await searchBusinesses({
@@ -44,8 +47,8 @@ const handleSearch = async () => {
       },
     });
   } catch (error) {
-    console.error(error);
-    alert("Backend isteği başarısız oldu. Backend çalışıyor mu kontrol et.");
+    console.error("Backend bağlantı hatası:", error);
+    alert("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
   } finally {
     setIsLoading(false);
   }
@@ -88,7 +91,13 @@ const handleSearch = async () => {
 
         {isLoading && <LoadingState />}
 
-        {results && !isLoading && <ResultsPanel results={results} />}
+        {errorMessage && !isLoading && <ErrorState message={errorMessage} />}
+
+        {!results && !isLoading && !errorMessage && <EmptyState />}
+
+        {results && !isLoading && !errorMessage && (
+          <ResultsPanel results={results} />
+        )}
       </div>
     </main>
   );
