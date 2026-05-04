@@ -175,9 +175,67 @@ async function saveSearchResults({ category, city, district, businesses }) {
 
   return search.id;
 }
+async function getSearchHistory() {
+  const database = await getDb();
 
+  return database.all(`
+    SELECT 
+      s.id,
+      s.category,
+      s.city,
+      s.district,
+      s.created_at,
+      s.updated_at,
+      COUNT(b.id) AS totalBusinesses,
+      SUM(CASE WHEN b.phone IS NOT NULL AND b.phone != '' THEN 1 ELSE 0 END) AS phonesFound
+    FROM searches s
+    LEFT JOIN businesses b ON b.search_id = s.id
+    GROUP BY s.id
+    ORDER BY s.updated_at DESC
+  `);
+}
+
+async function getSearchDetailsById(searchId) {
+  const database = await getDb();
+
+  const search = await database.get(
+    "SELECT * FROM searches WHERE id = ?",
+    searchId
+  );
+
+  if (!search) {
+    return null;
+  }
+
+  const businesses = await database.all(
+    `
+    SELECT 
+      id,
+      name,
+      phone,
+      address,
+      website,
+      google_maps_url,
+      rating,
+      user_rating_count,
+      source,
+      created_at
+    FROM businesses
+    WHERE search_id = ?
+    ORDER BY id ASC
+    `,
+    searchId
+  );
+
+  return {
+    search,
+    businesses,
+  };
+}
 module.exports = {
   initDatabase,
   getCachedSearchResults,
   saveSearchResults,
+  getSearchHistory,
+  getSearchDetailsById,
 };

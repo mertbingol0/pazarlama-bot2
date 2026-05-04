@@ -2,6 +2,8 @@ const {
   initDatabase,
   getCachedSearchResults,
   saveSearchResults,
+  getSearchHistory,
+  getSearchDetailsById,
 } = require("./db");
 const express = require("express");
 const cors = require("cors");
@@ -21,13 +23,79 @@ app.use(
 
 app.use(express.json());
 
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Backend aktif.",
-  });
+app.get("/api/searches", async (req, res) => {
+  try {
+    const searches = await getSearchHistory();
+
+    return res.status(200).json({
+      success: true,
+      message: "Kayıtlı aramalar başarıyla getirildi.",
+      searches,
+    });
+  } catch (error) {
+    console.error("/api/searches hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Kayıtlı aramalar getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
 });
 
+app.get("/api/searches/:id", async (req, res) => {
+  try {
+    const searchId = Number(req.params.id);
+
+    if (!Number.isInteger(searchId) || searchId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli bir arama ID değeri gönderilmelidir.",
+      });
+    }
+
+    const details = await getSearchDetailsById(searchId);
+
+    if (!details) {
+      return res.status(404).json({
+        success: false,
+        message: "Arama kaydı bulunamadı.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Arama detayı başarıyla getirildi.",
+      search: details.search,
+      businesses: details.businesses,
+    });
+  } catch (error) {
+    console.error("/api/searches/:id hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Arama detayı getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/search", async (req, res) => {
+  const { category, city, district } = req.body;
+
+  console.log("Yeni arama isteği geldi:");
+  console.log("Kategori:", category);
+  console.log("İl:", city);
+  console.log("İlçe:", district);
+
+  if (!category || !city || !district) {
+    return res.status(400).json({
+      success: false,
+      message: "Kategori, il ve ilçe bilgileri zorunludur.",
+    });
+  }
+
+  const searchQuery = `${category} ${district} ${city}`;
 app.post("/api/search", async (req, res) => {
   const { category, city, district } = req.body;
 
@@ -47,44 +115,55 @@ app.post("/api/search", async (req, res) => {
 
   try {
     let businesses = [];
-let fromCache = false;
+    let fromCache = false;
 
-const cached = await getCachedSearchResults({
-  category,
-  city,
-  district,
-});
+    try {
+      businesses = await searchBusinessesWithApify({
+        category,
+        city,
+        district,
+      });
 
-if (cached) {
-  businesses = cached.businesses;
-  fromCache = true;
-  console.log("Sonuçlar SQLite cache üzerinden getirildi.");
-} else {
-  businesses = await searchBusinessesWithApify({
-    category,
-    city,
-    district,
-  });
+      await saveSearchResults({
+        category,
+        city,
+        district,
+        businesses,
+      });
 
-  await saveSearchResults({
-    category,
-    city,
-    district,
-    businesses,
-  });
+      console.log("Güncel sonuçlar Apify'dan çekildi ve SQLite'a kaydedildi.");
+    } catch (apifyError) {
+      console.error(
+        "Apify hata verdi, kayıtlı sonuç kontrol ediliyor:",
+        apifyError
+      );
 
-  console.log("Sonuçlar Apify'dan çekildi ve SQLite'a kaydedildi.");
-}
+      const cached = await getCachedSearchResults({
+        category,
+        city,
+        district,
+      });
 
-const phones = businesses
-  .filter((business) => business.phone)
-  .map((business) => ({
-    value: business.phone,
-    businessName: business.name,
-    address: business.address,
-    source: "Apify Google Maps Scraper",
-    url: business.googleMapsUrl,
-  }));
+      if (!cached) {
+        throw apifyError;
+      }
+
+      businesses = cached.businesses;
+      fromCache = true;
+      console.log(
+        "Apify hata verdiği için sonuçlar SQLite yedeğinden getirildi."
+      );
+    }
+
+    const phones = businesses
+      .filter((business) => business.phone)
+      .map((business) => ({
+        value: business.phone,
+        businessName: business.name,
+        address: business.address,
+        source: business.source || "Apify Google Maps Scraper",
+        url: business.googleMapsUrl,
+      }));
 
     const totalBusinesses = businesses.length;
     const phonesFound = phones.length;
@@ -92,9 +171,9 @@ const phones = businesses
     return res.status(200).json({
       success: true,
       message: fromCache
-  ? "Sonuçlar database üzerinden getirildi."
-  : "Apify arama sonuçları başarıyla getirildi.",
-fromCache,
+        ? "Güncel veri alınamadığı için kayıtlı son sonuçlar gösteriliyor."
+        : "Güncel Apify arama sonuçları başarıyla getirildi.",
+      fromCache,
       query: {
         category,
         city,
@@ -116,12 +195,14 @@ fromCache,
     });
   } catch (error) {
     console.error("/api/search hata:", error);
+
     return res.status(500).json({
       success: false,
       message: "Arama sırasında bir hata oluştu.",
       error: error.message,
     });
   }
+});
 });
 
 initDatabase()
