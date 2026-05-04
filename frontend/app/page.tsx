@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { mockSearchResult } from "@/lib/mockData";
+import { searchBusinesses } from "@/lib/api";
 import type { SearchResult } from "@/types/business";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,31 +27,25 @@ const handleSearch = async () => {
   setIsLoading(true);
 
   try {
-    const response = await fetch("http://localhost:5000/api/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const backendResponse = await searchBusinesses({
+      category,
+      city,
+      district,
+    });
+
+    console.log("Backend response:", backendResponse);
+
+    setResults({
+      ...mockSearchResult,
+      query: {
         category,
         city,
         district,
-      }),
+      },
     });
-
-    const data = await response.json();
-
-    console.log("Backend response:", data);
-
-    if (!response.ok) {
-      alert(data.message || "Backend isteği başarısız oldu.");
-      return;
-    }
-
-    setResults(mockSearchResult);
   } catch (error) {
-    console.error("Backend bağlantı hatası:", error);
-    alert("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
+    console.error(error);
+    alert("Backend isteği başarısız oldu. Backend çalışıyor mu kontrol et.");
   } finally {
     setIsLoading(false);
   }
