@@ -47,7 +47,7 @@ app.post("/api/search", async (req, res) => {
   district,
 });
 
-    const phones = businesses
+const phones = businesses
   .filter((business) => business.phone)
   .map((business) => ({
     value: business.phone,
