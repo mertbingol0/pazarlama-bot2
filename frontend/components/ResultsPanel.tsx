@@ -54,13 +54,6 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         >
           CSV İndir
         </Button>
-
-        <Button
-          variant="outline"
-          onClick={() => downloadSearchResultsAsCsv(results)}
-        >
-          Excel İçin CSV İndir
-        </Button>
       </section>
     </>
   );
