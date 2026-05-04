@@ -48,13 +48,14 @@ app.post("/api/search", async (req, res) => {
 });
 
     const phones = businesses
-      .filter((business) => business.phone)
-      .map((business) => ({
-        value: business.phone,
-        businessName: business.name,
-        source: "Google Places",
-        url: business.googleMapsUrl,
-      }));
+  .filter((business) => business.phone)
+  .map((business) => ({
+    value: business.phone,
+    businessName: business.name,
+    address: business.address,
+    source: "Apify Google Maps Scraper",
+    url: business.googleMapsUrl,
+  }));
 
     const totalBusinesses = businesses.length;
     const phonesFound = phones.length;
