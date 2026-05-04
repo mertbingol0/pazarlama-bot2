@@ -17,19 +17,44 @@ export default function Home() {
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSearch = () => {
-    if (!category || !city || !district) {
-      alert("Lütfen kategori, il ve ilçe seçin.");
+const handleSearch = async () => {
+  if (!category || !city || !district) {
+    alert("Lütfen kategori, il ve ilçe seçin.");
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    const response = await fetch("http://localhost:5000/api/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        category,
+        city,
+        district,
+      }),
+    });
+
+    const data = await response.json();
+
+    console.log("Backend response:", data);
+
+    if (!response.ok) {
+      alert(data.message || "Backend isteği başarısız oldu.");
       return;
     }
 
-    setIsLoading(true);
-
-    setTimeout(() => {
-      setResults(mockSearchResult);
-      setIsLoading(false);
-    }, 1000);
-  };
+    setResults(mockSearchResult);
+  } catch (error) {
+    console.error("Backend bağlantı hatası:", error);
+    alert("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <main className="min-h-screen bg-slate-100 px-6 py-8">
