@@ -38,13 +38,22 @@ app.post("/api/search", (req, res) => {
     });
   }
 
+  const searchQuery = `${category} ${district} ${city}`;
+
   return res.status(200).json({
     success: true,
-    message: "Bilgiler backend tarafından başarıyla alındı.",
-    receivedData: {
+    message: "Arama isteği başarıyla alındı.",
+    query: {
       category,
       city,
       district,
+      searchQuery,
+    },
+    results: {
+      phones: [],
+      emails: [],
+      instagrams: [],
+      businesses: [],
     },
   });
 });
