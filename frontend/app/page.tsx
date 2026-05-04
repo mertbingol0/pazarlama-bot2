@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { mockSearchResult } from "@/lib/mockData";
 import type { SearchResult } from "@/types/business";
-
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchForm } from "@/components/SearchForm";
@@ -15,26 +17,33 @@ export default function Home() {
   const [district, setDistrict] = useState("");
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 const handleSearch = async () => {
   if (!category || !city || !district) {
-    alert("Lütfen kategori, il ve ilçe seçin.");
+    setErrorMessage("Lütfen kategori, il ve ilçe seçin.");
     return;
   }
 
   setIsLoading(true);
+  setErrorMessage(null);
 
   try {
-    const response = await fetch("http://localhost:5000/api/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const backendResponse = await searchBusinesses({
+      category,
+      city,
+      district,
+    });
+
+    console.log("Backend response:", backendResponse);
+
+    setResults({
+      ...mockSearchResult,
+      query: {
         category,
         city,
         district,
-      }),
+      },
     });
 
     const data = await response.json();
@@ -46,34 +55,46 @@ const handleSearch = async () => {
       return;
     }
 
-    setResults(data);
+    setResults(mockSearchResult);
   } catch (error) {
     console.error("Backend bağlantı hatası:", error);
-    alert("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
+    setErrorMessage("Backend bağlantısı kurulamadı. Backend çalışıyor mu kontrol edin.");
   } finally {
     setIsLoading(false);
   }
 };
 
   return (
-    <main className="min-h-screen bg-slate-100 px-6 py-8">
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/40 to-purple-50 px-6 py-8">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8">
-          <Badge variant="secondary">Jefedes Lead Generation Tool</Badge>
+        <header className="mb-8 rounded-3xl border border-white/70 bg-white/80 p-8 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="secondary" className="rounded-full px-3 py-1">
+              Jefedes Lead Generation Tool
+            </Badge>
+          </div>
 
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">
-            Potansiyel Müşteri Arama Paneli
-          </h1>
+          <div className="mt-6">
+            <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">
+              Potansiyel Müşteri Arama Paneli
+            </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-            Kategori, il ve ilçe seçerek işletmeleri arayın. Telefon, e-posta
-            ve Instagram sonuçlarını ayrı listelerde görüntüleyin.
-          </p>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+              Kategori, il ve ilçe seçerek işletmeleri arayın. Telefon,
+              e-posta ve Instagram sonuçlarını ayrı listelerde görüntüleyin,
+              kopyalayın ve CSV olarak dışa aktarın.
+            </p>
+          </div>
         </header>
 
-        <Card>
+        <Card className="border-white/80 bg-white/90 shadow-md backdrop-blur">
           <CardHeader>
-            <CardTitle>Arama Bilgileri</CardTitle>
+            <CardTitle className="text-xl text-slate-950">
+              Arama Bilgileri
+            </CardTitle>
+            <p className="text-sm text-slate-500">
+              Arama yapmak için kategori, il ve ilçe bilgilerini seçin.
+            </p>
           </CardHeader>
 
           <CardContent>
@@ -92,7 +113,13 @@ const handleSearch = async () => {
 
         {isLoading && <LoadingState />}
 
-        {results && !isLoading && <ResultsPanel results={results} />}
+        {errorMessage && !isLoading && <ErrorState message={errorMessage} />}
+
+        {!results && !isLoading && !errorMessage && <EmptyState />}
+
+        {results && !isLoading && !errorMessage && (
+          <ResultsPanel results={results} />
+        )}
       </div>
     </main>
   );
