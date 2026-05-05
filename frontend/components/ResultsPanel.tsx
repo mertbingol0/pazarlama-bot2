@@ -29,11 +29,12 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
       )}
 
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
-        <ListColumn
-          title="WhatsApp / Telefon"
-          items={results.results.phones}
-          type="phone"
-        />
+      <ListColumn
+        title="WhatsApp / Telefon"
+        items={results.results.phones}
+        type="phone"
+        businesses={results.businesses || []}
+      />
 
         <ListColumn
           title="E-Posta"

@@ -42,16 +42,17 @@ export default function Home() {
       });
 
       setResults({
-        query: {
-          category: backendResponse.query.category,
-          city: backendResponse.query.city,
-          district: backendResponse.query.district,
-          limit,
-        },
-        stats: backendResponse.stats,
-        results: backendResponse.results,
-        fromCache: backendResponse.fromCache,
-      });
+      query: {
+        category: backendResponse.query.category,
+        city: backendResponse.query.city,
+        district: backendResponse.query.district,
+        limit,
+      },
+      stats: backendResponse.stats,
+      results: backendResponse.results,
+      businesses: backendResponse.businesses || [],
+      fromCache: backendResponse.fromCache,
+    });
     } catch (error) {
       console.error("Backend bağlantı hatası:", error);
       setErrorMessage(
@@ -128,3 +129,4 @@ export default function Home() {
     </main>
   );
 }
+

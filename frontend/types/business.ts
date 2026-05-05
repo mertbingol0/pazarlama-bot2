@@ -1,4 +1,5 @@
 export type LeadStatus = "approved" | "pending" | "rejected";
+
 export type LeadStatusFilter = "all" | LeadStatus;
 
 export type SearchLimit = "10" | "50" | "100" | "250" | "500" | "all";
@@ -66,11 +67,11 @@ export type SearchResult = {
     emails: LeadItem[];
     instagrams: LeadItem[];
   };
+  businesses?: Business[];
   fromCache?: boolean;
 };
 
 export type SearchApiResponse = SearchResult & {
   success: boolean;
   message: string;
-  businesses?: Business[] | unknown[];
 };
