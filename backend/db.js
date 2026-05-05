@@ -117,6 +117,9 @@ async function initDatabase() {
       user_rating_count INTEGER DEFAULT 0,
       source TEXT DEFAULT 'google_places',
       status TEXT DEFAULT 'pending',
+      category TEXT,
+      city TEXT,
+      district TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE CASCADE
     );
@@ -133,6 +136,18 @@ async function initDatabase() {
     await database.exec(
       "ALTER TABLE businesses ADD COLUMN status TEXT DEFAULT 'pending';"
     );
+  }
+
+  if (!businessColumnNames.includes("category")) {
+    await database.exec("ALTER TABLE businesses ADD COLUMN category TEXT;");
+  }
+
+  if (!businessColumnNames.includes("city")) {
+    await database.exec("ALTER TABLE businesses ADD COLUMN city TEXT;");
+  }
+
+  if (!businessColumnNames.includes("district")) {
+    await database.exec("ALTER TABLE businesses ADD COLUMN district TEXT;");
   }
 
   await database.run(`
@@ -176,6 +191,9 @@ async function getCachedSearchResults({ category, city, district }) {
       user_rating_count,
       source,
       status,
+      category,
+      city,
+      district,
       created_at
     FROM businesses
     WHERE search_id = ?
@@ -260,9 +278,12 @@ async function saveSearchResults({ category, city, district, businesses }) {
         rating,
         user_rating_count,
         source,
-        status
+        status,
+        category,
+        city,
+        district
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       search.id,
       business.externalId || business.id || null,
@@ -274,7 +295,10 @@ async function saveSearchResults({ category, city, district, businesses }) {
       business.rating || null,
       business.userRatingCount || 0,
       business.source || "google_places",
-      preservedStatus
+      preservedStatus,
+      business.category || null,
+      business.city || null,
+      business.district || null
     );
   }
 
@@ -330,6 +354,9 @@ async function getSearchDetailsById(searchId) {
       user_rating_count,
       source,
       status,
+      category,
+      city,
+      district,
       created_at
     FROM businesses
     WHERE search_id = ?
@@ -377,6 +404,9 @@ async function updateBusinessStatus(businessId, status) {
       user_rating_count,
       source,
       status,
+      category,
+      city,
+      district,
       created_at
     FROM businesses
     WHERE id = ?

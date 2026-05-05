@@ -2,20 +2,23 @@
 
 import { useState } from "react";
 import type { LeadItem, LeadStatus } from "@/types/business";
-import {
-  getLeadKey,
-  saveLeadStatus,
-  type StoredLeadType,
-} from "@/lib/lead-status-storage";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const API_BASE_URL = "http://localhost:5000";
+
+type LeadType = "phone" | "email" | "instagram";
+
 type ListColumnProps = {
   title: string;
   items: LeadItem[];
-  type: StoredLeadType;
+  type: LeadType;
+};
+
+type LeadItemWithId = LeadItem & {
+  id?: number;
 };
 
 function getStatusClassName(status: LeadStatus) {
@@ -28,6 +31,16 @@ function getStatusClassName(status: LeadStatus) {
   }
 
   return "border-orange-100 bg-orange-50/80 text-orange-700";
+}
+
+function getItemKey(item: LeadItem, type: LeadType) {
+  const itemWithId = item as LeadItemWithId;
+
+  if (itemWithId.id) {
+    return `${type}-${itemWithId.id}`;
+  }
+
+  return `${type}-${item.businessName}-${item.value}`;
 }
 
 export function ListColumn({ title, items, type }: ListColumnProps) {
@@ -58,6 +71,57 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
     alert("Kopyalandı");
   };
 
+  const handleStatusChange = async (
+    item: LeadItem,
+    itemKey: string,
+    currentStatus: LeadStatus,
+    nextStatus: LeadStatus
+  ) => {
+    const itemWithId = item as LeadItemWithId;
+
+    if (!itemWithId.id) {
+      alert(
+        "Bu kayıtta backend id bulunamadı. Önce arama sonucunun id gönderdiğini kontrol etmeliyiz."
+      );
+      return;
+    }
+
+    setLocalStatuses((prev) => ({
+      ...prev,
+      [itemKey]: nextStatus,
+    }));
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/businesses/${itemWithId.id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: nextStatus,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Firma durumu güncellenemedi.");
+      }
+    } catch (error) {
+      console.error("Status update error:", error);
+
+      setLocalStatuses((prev) => ({
+        ...prev,
+        [itemKey]: currentStatus,
+      }));
+
+      alert("Firma durumu güncellenirken hata oluştu.");
+    }
+  };
+
   return (
     <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -78,7 +142,7 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
         ) : (
           <div className="space-y-4">
             {items.map((item) => {
-              const itemKey = getLeadKey(item);
+              const itemKey = getItemKey(item, type);
               const currentStatus =
                 localStatuses[itemKey] || item.status || "pending";
 
@@ -109,26 +173,35 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
                       onChange={(event) => {
                         const nextStatus = event.target.value as LeadStatus;
 
-                        setLocalStatuses((prev) => ({
-                          ...prev,
-                          [itemKey]: nextStatus,
-                        }));
-
-                        saveLeadStatus(item, type, nextStatus);
+                        handleStatusChange(
+                          item,
+                          itemKey,
+                          currentStatus,
+                          nextStatus
+                        );
                       }}
                       className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
                         currentStatus
                       )}`}
                     >
-                      <option className="bg-white text-slate-700" value="approved">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="approved"
+                      >
                         Onaylanan
                       </option>
 
-                      <option className="bg-white text-slate-700" value="pending">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="pending"
+                      >
                         Bekleyen
                       </option>
 
-                      <option className="bg-white text-slate-700" value="rejected">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="rejected"
+                      >
                         Reddedilen
                       </option>
                     </select>
