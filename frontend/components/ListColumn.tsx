@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LeadItem, LeadStatus } from "@/types/business";
+import { updateBusinessStatus } from "@/lib/api";
 import {
   getLeadKey,
   saveLeadStatus,
@@ -30,6 +31,10 @@ function getStatusClassName(status: LeadStatus) {
   return "border-orange-100 bg-orange-50/80 text-orange-700";
 }
 
+function getBusinessId(item: LeadItem) {
+  return item.businessId || item.id;
+}
+
 export function ListColumn({ title, items, type }: ListColumnProps) {
   const [localStatuses, setLocalStatuses] = useState<Record<string, LeadStatus>>(
     {}
@@ -56,6 +61,41 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
   const handleCopy = async (value: string) => {
     await navigator.clipboard.writeText(value);
     alert("Kopyalandı");
+  };
+
+  const handleStatusChange = async (
+    item: LeadItem,
+    type: StoredLeadType,
+    currentStatus: LeadStatus,
+    nextStatus: LeadStatus
+  ) => {
+    const itemKey = getLeadKey(item);
+    const businessId = getBusinessId(item);
+
+    setLocalStatuses((prev) => ({
+      ...prev,
+      [itemKey]: nextStatus,
+    }));
+
+    try {
+      if (businessId) {
+        await updateBusinessStatus(businessId, nextStatus);
+      }
+
+      saveLeadStatus(item, type, nextStatus);
+    } catch (error) {
+      setLocalStatuses((prev) => ({
+        ...prev,
+        [itemKey]: currentStatus,
+      }));
+
+      console.error("Status update error:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Firma durumu güncellenirken hata oluştu."
+      );
+    }
   };
 
   return (
@@ -108,13 +148,12 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
                       value={currentStatus}
                       onChange={(event) => {
                         const nextStatus = event.target.value as LeadStatus;
-
-                        setLocalStatuses((prev) => ({
-                          ...prev,
-                          [itemKey]: nextStatus,
-                        }));
-
-                        saveLeadStatus(item, type, nextStatus);
+                        void handleStatusChange(
+                          item,
+                          type,
+                          currentStatus,
+                          nextStatus
+                        );
                       }}
                       className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
                         currentStatus

@@ -20,8 +20,8 @@ export type LeadSource =
   | string;
 
 export type LeadItem = {
-  id?: string;
-  businessId?: string;
+  id?: string | number;
+  businessId?: string | number;
   value: string;
   businessName: string;
   source: LeadSource;
@@ -31,7 +31,7 @@ export type LeadItem = {
 };
 
 export type Business = {
-  id?: string;
+  id?: string | number;
   name: string;
   address?: string;
   phone?: string;

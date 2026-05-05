@@ -1,4 +1,8 @@
-import type { SearchApiResponse, SearchParams } from "@/types/business";
+import type {
+  LeadStatus,
+  SearchApiResponse,
+  SearchParams,
+} from "@/types/business";
 
 export const API_BASE_URL = "http://localhost:5000";
 
@@ -42,6 +46,33 @@ export async function searchBusinesses(
 
   if (!response.ok || !data.success) {
     throw new Error(data.message || "Arama isteği başarısız oldu.");
+  }
+
+  return data;
+}
+
+export async function updateBusinessStatus(
+  businessId: string | number,
+  status: LeadStatus
+) {
+  const response = await fetch(`${API_BASE_URL}/api/businesses/${businessId}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      status,
+    }),
+  });
+
+  const data = await readJsonResponse<
+    BackendErrorResponse & {
+      success: boolean;
+    }
+  >(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Firma durumu guncellenirken hata olustu.");
   }
 
   return data;
