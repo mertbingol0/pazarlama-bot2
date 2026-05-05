@@ -1,7 +1,12 @@
+export type LeadStatus = "approved" | "pending" | "rejected";
+
+export type SearchLimit = "10" | "50" | "100" | "250" | "500" | "all";
+
 export type SearchParams = {
   category: string;
   city: string;
   district: string;
+  limit?: SearchLimit;
   maxResults?: number;
 };
 
@@ -10,14 +15,18 @@ export type LeadSource =
   | "website_scrape"
   | "google_places"
   | "backend"
-  | "manual";
+  | "manual"
+  | string;
 
 export type LeadItem = {
+  id?: string;
+  businessId?: string;
   value: string;
   businessName: string;
   source: LeadSource;
   url?: string;
   address?: string;
+  status?: LeadStatus;
 };
 
 export type Business = {
@@ -29,6 +38,7 @@ export type Business = {
   googleMapsUrl?: string;
   rating?: number;
   userRatingCount?: number;
+  status?: LeadStatus;
   location?: {
     lat?: number;
     lng?: number;
@@ -42,6 +52,7 @@ export type SearchResult = {
     category: string;
     city: string;
     district: string;
+    limit?: SearchLimit;
   };
   stats: {
     totalBusinesses: number;

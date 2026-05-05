@@ -14,6 +14,7 @@ export async function searchBusinesses(
       category: params.category,
       city: params.city,
       district: params.district,
+      limit: params.limit,
     }),
   });
 

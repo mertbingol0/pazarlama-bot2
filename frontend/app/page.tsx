@@ -1,20 +1,25 @@
 "use client";
 
 import { useState } from "react";
+
 import { searchBusinesses } from "@/lib/api";
-import type { SearchResult } from "@/types/business";
+import type { SearchLimit, SearchResult } from "@/types/business";
+
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchForm } from "@/components/SearchForm";
 import { LoadingState } from "@/components/LoadingState";
 import { ResultsPanel } from "@/components/ResultsPanel";
+
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Home() {
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
+  const [limit, setLimit] = useState<SearchLimit>("50");
+
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -33,10 +38,16 @@ export default function Home() {
         category,
         city,
         district,
+        limit,
       });
 
       setResults({
-        query: backendResponse.query,
+        query: {
+          category: backendResponse.query.category,
+          city: backendResponse.query.city,
+          district: backendResponse.query.district,
+          limit,
+        },
         stats: backendResponse.stats,
         results: backendResponse.results,
         fromCache: backendResponse.fromCache,
@@ -75,9 +86,9 @@ export default function Home() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 md:text-lg">
-              Kategori, il ve ilçe seçerek işletmeleri arayın. Telefon,
-              e-posta ve Instagram sonuçlarını ayrı listelerde görüntüleyin,
-              kopyalayın ve CSV olarak dışa aktarın.
+              Kategori, il, ilçe ve arama limiti seçerek işletmeleri arayın.
+              Telefon, e-posta ve Instagram sonuçlarını ayrı listelerde
+              görüntüleyin, kopyalayın ve CSV olarak dışa aktarın.
             </p>
           </div>
         </header>
@@ -89,7 +100,7 @@ export default function Home() {
             </CardTitle>
 
             <p className="text-sm text-slate-500">
-              Arama yapmak için kategori, il ve ilçe bilgilerini seçin.
+              Arama yapmak için kategori, il, ilçe ve limit bilgilerini seçin.
             </p>
           </CardHeader>
 
@@ -98,10 +109,12 @@ export default function Home() {
               category={category}
               city={city}
               district={district}
+              limit={limit}
               isLoading={isLoading}
               onCategoryChange={setCategory}
               onCityChange={setCity}
               onDistrictChange={setDistrict}
+              onLimitChange={setLimit}
               onSearch={handleSearch}
             />
           </CardContent>
