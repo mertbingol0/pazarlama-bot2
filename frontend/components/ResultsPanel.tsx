@@ -1,8 +1,9 @@
-import { downloadSearchResultsAsCsv } from "@/lib/export";
 import type { SearchResult } from "@/types/business";
+
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "@/components/ListColumn";
 import { StatCard } from "@/components/StatCard";
+import { downloadSearchResultsAsCsv } from "@/lib/export";
 
 type ResultsPanelProps = {
   results: SearchResult;
@@ -23,7 +24,7 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
 
       {results.fromCache && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Bu arama daha önce yapılmış. Sonuçlar kayıtlı verilerden getirildi.
+          Bu sonuçlar 24 saatlik önbellekten getirildi.
         </div>
       )}
 

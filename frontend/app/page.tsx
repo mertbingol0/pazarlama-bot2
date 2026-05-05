@@ -10,8 +10,8 @@ import { ErrorState } from "@/components/ErrorState";
 import { SearchForm } from "@/components/SearchForm";
 import { LoadingState } from "@/components/LoadingState";
 import { ResultsPanel } from "@/components/ResultsPanel";
+import { PageNavigation } from "@/components/PageNavigation";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Home() {
@@ -71,12 +71,7 @@ export default function Home() {
               Jefedes<span className="text-emerald-500">.</span>
             </div>
 
-            <Badge
-              variant="secondary"
-              className="rounded-full border border-emerald-100 bg-white px-4 py-1.5 text-slate-600 shadow-sm"
-            >
-              Lead Generation Tool
-            </Badge>
+            <PageNavigation />
           </div>
 
           <div className="mx-auto mt-14 max-w-4xl text-center">

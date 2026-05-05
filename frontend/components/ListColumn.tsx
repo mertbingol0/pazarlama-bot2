@@ -1,27 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import type { LeadStatus } from "@/types/business";
+import type { LeadItem, LeadStatus } from "@/types/business";
+import {
+  getLeadKey,
+  saveLeadStatus,
+  type StoredLeadType,
+} from "@/lib/lead-status-storage";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type ListColumnItem = {
-  id?: string;
-  businessId?: string;
-  value: string;
-  businessName: string;
-  source: string;
-  url?: string;
-  address?: string;
-  status?: LeadStatus;
-};
-
 type ListColumnProps = {
   title: string;
-  items: ListColumnItem[];
-  type: "phone" | "email" | "instagram";
+  items: LeadItem[];
+  type: StoredLeadType;
 };
 
 function getStatusClassName(status: LeadStatus) {
@@ -59,10 +53,6 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
     return "Profili Aç";
   };
 
-  const getItemKey = (item: ListColumnItem) => {
-    return item.id || item.businessId || `${item.businessName}-${item.value}`;
-  };
-
   const handleCopy = async (value: string) => {
     await navigator.clipboard.writeText(value);
     alert("Kopyalandı");
@@ -88,7 +78,7 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
         ) : (
           <div className="space-y-4">
             {items.map((item) => {
-              const itemKey = getItemKey(item);
+              const itemKey = getLeadKey(item);
               const currentStatus =
                 localStatuses[itemKey] || item.status || "pending";
 
@@ -117,21 +107,27 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
                     <select
                       value={currentStatus}
                       onChange={(event) => {
+                        const nextStatus = event.target.value as LeadStatus;
+
                         setLocalStatuses((prev) => ({
                           ...prev,
-                          [itemKey]: event.target.value as LeadStatus,
+                          [itemKey]: nextStatus,
                         }));
+
+                        saveLeadStatus(item, type, nextStatus);
                       }}
-                      className={`mt-0 h-8 min-w-[145px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
+                      className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
                         currentStatus
                       )}`}
                     >
                       <option className="bg-white text-slate-700" value="approved">
                         Onaylanan
                       </option>
+
                       <option className="bg-white text-slate-700" value="pending">
                         Bekleyen
                       </option>
+
                       <option className="bg-white text-slate-700" value="rejected">
                         Reddedilen
                       </option>
