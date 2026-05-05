@@ -33,6 +33,15 @@ function getStatusClassName(status: LeadStatus) {
   return "border-orange-100 bg-orange-50/80 text-orange-700";
 }
 
+function formatSource(source: string) {
+  if (source === "google_places") return "Google Places";
+  if (source === "google_maps") return "Google Maps";
+  if (source === "website_scrape") return "Website";
+  if (source === "backend") return "Backend";
+
+  return source;
+}
+
 function getItemKey(item: LeadItem, type: LeadType) {
   const itemWithId = item as LeadItemWithId;
 
@@ -209,7 +218,7 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="rounded-full">
-                      {item.source}
+                      Kaynak: {formatSource(item.source)}
                     </Badge>
                   </div>
 

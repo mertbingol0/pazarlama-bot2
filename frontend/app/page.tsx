@@ -11,14 +11,8 @@ import { SearchForm } from "@/components/SearchForm";
 import { LoadingState } from "@/components/LoadingState";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { PageNavigation } from "@/components/PageNavigation";
-import { Plus_Jakarta_Sans } from "next/font/google";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const plusJakartaSans = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
 
 export default function Home() {
   const [category, setCategory] = useState("");
@@ -80,7 +74,7 @@ export default function Home() {
             <PageNavigation />
           </div>
 
-          <div className={`mx-auto mt-14 max-w-4xl text-center ${plusJakartaSans.className}`}>
+          <div className="mx-auto mt-14 max-w-4xl text-center">
             <h1 className="text-4xl font-semibold leading-[1.18] tracking-tight text-slate-900 md:text-6xl md:leading-[1.16]">
               Potansiyel müşterilerinizi{" "}
               <span className="text-emerald-500">daha hızlı</span> bulun

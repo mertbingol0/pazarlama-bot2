@@ -4,4 +4,7 @@ export const categories = [
   { label: "Yiyecek & İçecek", value: "yiyecek_icecek" },
   { label: "Spor", value: "spor" },
   { label: "Eğitim", value: "egitim" },
+  { label: "Restoran", value: "restoran" },
+  { label: "Otel", value: "otel" },
+  { label: "Veteriner", value: "veteriner" },
 ];
