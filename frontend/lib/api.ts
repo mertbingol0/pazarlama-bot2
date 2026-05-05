@@ -1,6 +1,24 @@
 import type { SearchApiResponse, SearchParams } from "@/types/business";
 
-const API_BASE_URL = "http://localhost:5000";
+export const API_BASE_URL = "http://localhost:5000";
+
+type BackendErrorResponse = {
+  message?: string;
+};
+
+export async function readJsonResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.includes("application/json")) {
+    const bodyPreview = (await response.text()).trim().slice(0, 120);
+
+    throw new Error(
+      `Backend returned ${contentType || "unknown content"} instead of JSON (${response.status} ${response.statusText}). URL: ${response.url}. ${bodyPreview}`
+    );
+  }
+
+  return response.json() as Promise<T>;
+}
 
 export async function searchBusinesses(
   params: SearchParams
@@ -18,7 +36,9 @@ export async function searchBusinesses(
     }),
   });
 
-  const data = await response.json();
+  const data = await readJsonResponse<SearchApiResponse & BackendErrorResponse>(
+    response
+  );
 
   if (!response.ok || !data.success) {
     throw new Error(data.message || "Arama isteği başarısız oldu.");

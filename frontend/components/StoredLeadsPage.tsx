@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { LeadStatus } from "@/types/business";
+import { API_BASE_URL, readJsonResponse } from "@/lib/api";
 
 import { PageNavigation } from "@/components/PageNavigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-
-const API_BASE_URL = "http://localhost:5000";
 
 type StoredLeadsPageProps = {
   status: "approved" | "rejected";
@@ -31,6 +30,18 @@ type BackendBusiness = {
   category?: string;
   city?: string;
   district?: string;
+};
+
+type BusinessesByStatusResponse = {
+  success: boolean;
+  message?: string;
+  businesses?: BackendBusiness[];
+};
+
+type UpdateBusinessStatusResponse = {
+  success: boolean;
+  message?: string;
+  business?: BackendBusiness;
 };
 
 type LeadItem = {
@@ -93,7 +104,7 @@ export function StoredLeadsPage({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const refreshLeads = async () => {
+  const refreshLeads = useCallback(async () => {
     try {
       setIsLoading(true);
       setErrorMessage("");
@@ -102,7 +113,7 @@ export function StoredLeadsPage({
         `${API_BASE_URL}/api/businesses/status/${status}`
       );
 
-      const data = await response.json();
+      const data = await readJsonResponse<BusinessesByStatusResponse>(response);
 
       if (!response.ok || !data.success) {
         throw new Error(
@@ -125,11 +136,21 @@ export function StoredLeadsPage({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [status]);
 
   useEffect(() => {
-    refreshLeads();
-  }, [status]);
+    let isActive = true;
+
+    queueMicrotask(() => {
+      if (isActive) {
+        void refreshLeads();
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [refreshLeads]);
 
   const handleCopy = async (value: string) => {
     await navigator.clipboard.writeText(value);
@@ -153,7 +174,9 @@ export function StoredLeadsPage({
         }
       );
 
-      const data = await response.json();
+      const data = await readJsonResponse<UpdateBusinessStatusResponse>(
+        response
+      );
 
       if (!response.ok || !data.success) {
         throw new Error(
