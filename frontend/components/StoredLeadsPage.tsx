@@ -2,22 +2,62 @@
 
 import { useEffect, useState } from "react";
 import type { LeadStatus } from "@/types/business";
-import {
-  getStoredLeadsByStatus,
-  saveLeadStatus,
-  type StoredLeadItem,
-} from "@/lib/lead-status-storage";
 
 import { PageNavigation } from "@/components/PageNavigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+const API_BASE_URL = "http://localhost:5000";
+
 type StoredLeadsPageProps = {
   status: "approved" | "rejected";
   title: string;
   description: string;
 };
+
+type BackendBusiness = {
+  id: number;
+  externalId?: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  rating?: number | null;
+  userRatingCount?: number | null;
+  source?: string;
+  status: LeadStatus;
+  category?: string;
+  city?: string;
+  district?: string;
+};
+
+type LeadItem = {
+  id: number;
+  type: "phone";
+  value: string;
+  businessName: string;
+  address?: string;
+  source?: string;
+  url?: string;
+  website?: string;
+  status: LeadStatus;
+};
+
+function mapBusinessToLead(business: BackendBusiness): LeadItem {
+  return {
+    id: business.id,
+    type: "phone",
+    value: business.phone || "",
+    businessName: business.name || "İsimsiz İşletme",
+    address: business.address,
+    source: business.source || "google_places",
+    url: business.googleMapsUrl,
+    website: business.website,
+    status: business.status || "pending",
+  };
+}
 
 function getStatusClassName(status: LeadStatus) {
   if (status === "approved") {
@@ -31,28 +71,17 @@ function getStatusClassName(status: LeadStatus) {
   return "border-orange-100 bg-orange-50/80 text-orange-700";
 }
 
-function getActionHref(lead: StoredLeadItem) {
-  if (lead.type === "phone") {
-    return `https://wa.me/${lead.value.replace(/\D/g, "")}`;
-  }
-
-  if (lead.type === "email") {
-    return `mailto:${lead.value}`;
-  }
-
-  return lead.url || `https://instagram.com/${lead.value.replace("@", "")}`;
+function getActionHref(lead: LeadItem) {
+  return `https://wa.me/${lead.value.replace(/\D/g, "")}`;
 }
 
-function getActionText(lead: StoredLeadItem) {
-  if (lead.type === "phone") return "WhatsApp";
-  if (lead.type === "email") return "Mail Gönder";
-  return "Profili Aç";
+function getActionText() {
+  return "WhatsApp";
 }
 
-function getTypeLabel(type: StoredLeadItem["type"]) {
+function getTypeLabel(type: LeadItem["type"]) {
   if (type === "phone") return "Telefon";
-  if (type === "email") return "E-posta";
-  return "Instagram";
+  return "Telefon";
 }
 
 export function StoredLeadsPage({
@@ -60,10 +89,42 @@ export function StoredLeadsPage({
   title,
   description,
 }: StoredLeadsPageProps) {
-  const [leads, setLeads] = useState<StoredLeadItem[]>([]);
+  const [leads, setLeads] = useState<LeadItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const refreshLeads = () => {
-    setLeads(getStoredLeadsByStatus(status));
+  const refreshLeads = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/businesses/status/${status}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Kayıtlı firmalar getirilirken hata oluştu."
+        );
+      }
+
+      const mappedLeads = (data.businesses || [])
+        .filter((business: BackendBusiness) => business.phone)
+        .map(mapBusinessToLead);
+
+      setLeads(mappedLeads);
+    } catch (error) {
+      console.error("Stored leads fetch error:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Kayıtlı firmalar getirilirken hata oluştu."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -75,9 +136,53 @@ export function StoredLeadsPage({
     alert("Kopyalandı");
   };
 
-  const handleStatusChange = (lead: StoredLeadItem, nextStatus: LeadStatus) => {
-    saveLeadStatus(lead, lead.type, nextStatus);
-    refreshLeads();
+  const handleStatusChange = async (lead: LeadItem, nextStatus: LeadStatus) => {
+    try {
+      setErrorMessage("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/businesses/${lead.id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: nextStatus,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Firma durumu güncellenirken hata oluştu."
+        );
+      }
+
+      if (nextStatus !== status) {
+        setLeads((currentLeads) =>
+          currentLeads.filter((currentLead) => currentLead.id !== lead.id)
+        );
+        return;
+      }
+
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          currentLead.id === lead.id
+            ? { ...currentLead, status: nextStatus }
+            : currentLead
+        )
+      );
+    } catch (error) {
+      console.error("Status update error:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Firma durumu güncellenirken hata oluştu."
+      );
+    }
   };
 
   return (
@@ -112,7 +217,23 @@ export function StoredLeadsPage({
           </div>
         </header>
 
-        {leads.length === 0 ? (
+        {errorMessage && (
+          <Card className="mb-6 rounded-3xl border border-red-100 bg-red-50 shadow-sm">
+            <CardContent className="p-5 text-sm text-red-700">
+              {errorMessage}
+            </CardContent>
+          </Card>
+        )}
+
+        {isLoading ? (
+          <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-10 text-center">
+              <p className="text-xl font-semibold text-slate-900">
+                Kayıtlar yükleniyor...
+              </p>
+            </CardContent>
+          </Card>
+        ) : leads.length === 0 ? (
           <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <CardContent className="p-10 text-center">
               <p className="text-xl font-semibold text-slate-900">
@@ -129,7 +250,7 @@ export function StoredLeadsPage({
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {leads.map((lead) => (
               <Card
-                key={`${lead.businessName}-${lead.value}`}
+                key={lead.id}
                 className="rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-100 hover:shadow-md"
               >
                 <CardContent className="p-5">
@@ -162,15 +283,24 @@ export function StoredLeadsPage({
                         lead.status
                       )}`}
                     >
-                      <option className="bg-white text-slate-700" value="approved">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="approved"
+                      >
                         Onaylanan
                       </option>
 
-                      <option className="bg-white text-slate-700" value="pending">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="pending"
+                      >
                         Bekleyen
                       </option>
 
-                      <option className="bg-white text-slate-700" value="rejected">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="rejected"
+                      >
                         Reddedilen
                       </option>
                     </select>
@@ -205,7 +335,7 @@ export function StoredLeadsPage({
                         target="_blank"
                         rel="noreferrer"
                       >
-                        {getActionText(lead)}
+                        {getActionText()}
                       </a>
                     </Button>
 

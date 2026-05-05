@@ -1,11 +1,15 @@
 const { searchBusinessesWithGoogle } = require("./services/googlePlacesService");
+
 const {
   initDatabase,
   getCachedSearchResults,
   saveSearchResults,
   getSearchHistory,
   getSearchDetailsById,
+  updateBusinessStatus,
+  getBusinessesByStatus,
 } = require("./db");
+
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -17,12 +21,16 @@ const PORT = process.env.PORT || 5000;
 app.use(
   cors({
     origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PATCH"],
     allowedHeaders: ["Content-Type"],
   })
 );
 
 app.use(express.json());
+
+function isValidStatus(status) {
+  return ["approved", "pending", "rejected"].includes(status);
+}
 
 app.get("/api/searches", async (req, res) => {
   try {
@@ -81,6 +89,92 @@ app.get("/api/searches/:id", async (req, res) => {
   }
 });
 
+app.patch("/api/businesses/:id/status", async (req, res) => {
+  try {
+    const businessId = Number(req.params.id);
+    const status = String(req.body.status || "")
+      .trim()
+      .toLowerCase();
+
+    if (!Number.isInteger(businessId) || businessId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli bir işletme ID değeri gönderilmelidir.",
+      });
+    }
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Status alanı zorunludur.",
+      });
+    }
+
+    if (!isValidStatus(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status sadece approved, pending veya rejected olabilir.",
+      });
+    }
+
+    const updatedBusiness = await updateBusinessStatus(businessId, status);
+
+    if (!updatedBusiness) {
+      return res.status(404).json({
+        success: false,
+        message: "İşletme bulunamadı.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "İşletme durumu başarıyla güncellendi.",
+      business: updatedBusiness,
+    });
+  } catch (error) {
+    console.error("/api/businesses/:id/status hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "İşletme durumu güncellenirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/businesses/status/:status", async (req, res) => {
+  try {
+    const status = String(req.params.status || "")
+      .trim()
+      .toLowerCase();
+
+    if (!isValidStatus(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status sadece approved, pending veya rejected olabilir.",
+      });
+    }
+
+    const businesses = await getBusinessesByStatus(status);
+
+    return res.status(200).json({
+      success: true,
+      message: `${status} durumundaki işletmeler başarıyla getirildi.`,
+      status,
+      count: businesses.length,
+      businesses,
+    });
+  } catch (error) {
+    console.error("/api/businesses/status/:status hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Duruma göre işletmeler getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
 app.post("/api/search", async (req, res) => {
   const { category, city, district, limit = 10 } = req.body;
 
@@ -112,14 +206,22 @@ app.post("/api/search", async (req, res) => {
         limit,
       });
 
-      businesses = googleResult.businesses || [];
+      const googleBusinesses = googleResult.businesses || [];
 
       await saveSearchResults({
         category,
         city,
         district,
-        businesses,
+        businesses: googleBusinesses,
       });
+
+      const savedResults = await getCachedSearchResults({
+        category,
+        city,
+        district,
+      });
+
+      businesses = savedResults?.businesses || googleBusinesses;
 
       console.log("Güncel sonuçlar Google Places API'den çekildi.");
       console.log("Sonuçlar SQLite'a kaydedildi.");
@@ -150,6 +252,7 @@ app.post("/api/search", async (req, res) => {
     const phones = businesses
       .filter((business) => business.phone)
       .map((business) => ({
+        id: business.id,
         value: business.phone,
         businessName: business.name,
         address: business.address,
@@ -200,7 +303,6 @@ app.post("/api/search", async (req, res) => {
     });
   }
 });
-
 
 initDatabase()
   .then(() => {
