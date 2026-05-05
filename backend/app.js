@@ -1,3 +1,5 @@
+const { searchBusinessesWithApify } = require("./services/apifyService");
+const { searchBusinessesWithGoogle } = require("./services/googlePlacesService");
 const {
   initDatabase,
   getCachedSearchResults,
@@ -8,7 +10,7 @@ const {
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { searchBusinessesWithApify } = require("./services/apifyService");
+
 const app = express();
 
 const PORT = process.env.PORT || 5000;
@@ -81,12 +83,13 @@ app.get("/api/searches/:id", async (req, res) => {
 });
 
 app.post("/api/search", async (req, res) => {
-  const { category, city, district } = req.body;
+  const { category, city, district, limit = 10 } = req.body;
 
   console.log("Yeni arama isteği geldi:");
   console.log("Kategori:", category);
   console.log("İl:", city);
   console.log("İlçe:", district);
+  console.log("Limit:", limit);
 
   if (!category || !city || !district) {
     return res.status(400).json({
@@ -95,21 +98,11 @@ app.post("/api/search", async (req, res) => {
     });
   }
 
-  const searchQuery = `${category} ${district} ${city}`;
-app.post("/api/search", async (req, res) => {
-  const { category, city, district } = req.body;
+  const selectedProvider = (process.env.SEARCH_PROVIDER || "apify")
+    .trim()
+    .toLowerCase();
 
-  console.log("Yeni arama isteği geldi:");
-  console.log("Kategori:", category);
-  console.log("İl:", city);
-  console.log("İlçe:", district);
-
-  if (!category || !city || !district) {
-    return res.status(400).json({
-      success: false,
-      message: "Kategori, il ve ilçe bilgileri zorunludur.",
-    });
-  }
+  console.log("Aktif provider:", selectedProvider);
 
   const searchQuery = `${category} ${district} ${city}`;
 
@@ -118,11 +111,27 @@ app.post("/api/search", async (req, res) => {
     let fromCache = false;
 
     try {
-      businesses = await searchBusinessesWithApify({
-        category,
-        city,
-        district,
-      });
+      if (selectedProvider === "google") {
+        const googleResult = await searchBusinessesWithGoogle({
+          category,
+          city,
+          district,
+          limit,
+        });
+
+        businesses = googleResult.businesses || [];
+
+        console.log("Güncel sonuçlar Google Places API'den çekildi.");
+      } else {
+        businesses = await searchBusinessesWithApify({
+          category,
+          city,
+          district,
+          limit,
+        });
+
+        console.log("Güncel sonuçlar Apify'dan çekildi.");
+      }
 
       await saveSearchResults({
         category,
@@ -131,11 +140,11 @@ app.post("/api/search", async (req, res) => {
         businesses,
       });
 
-      console.log("Güncel sonuçlar Apify'dan çekildi ve SQLite'a kaydedildi.");
-    } catch (apifyError) {
+      console.log("Sonuçlar SQLite'a kaydedildi.");
+    } catch (providerError) {
       console.error(
-        "Apify hata verdi, kayıtlı sonuç kontrol ediliyor:",
-        apifyError
+        "Provider hata verdi, kayıtlı sonuç kontrol ediliyor:",
+        providerError
       );
 
       const cached = await getCachedSearchResults({
@@ -145,13 +154,14 @@ app.post("/api/search", async (req, res) => {
       });
 
       if (!cached) {
-        throw apifyError;
+        throw providerError;
       }
 
       businesses = cached.businesses;
       fromCache = true;
+
       console.log(
-        "Apify hata verdiği için sonuçlar SQLite yedeğinden getirildi."
+        "Provider hata verdiği için sonuçlar SQLite yedeğinden getirildi."
       );
     }
 
@@ -161,8 +171,11 @@ app.post("/api/search", async (req, res) => {
         value: business.phone,
         businessName: business.name,
         address: business.address,
-        source: business.source || "Apify Google Maps Scraper",
+        source: business.source || selectedProvider,
         url: business.googleMapsUrl,
+        website: business.website,
+        rating: business.rating,
+        status: business.status || "pending",
       }));
 
     const totalBusinesses = businesses.length;
@@ -170,14 +183,18 @@ app.post("/api/search", async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      provider: selectedProvider,
       message: fromCache
         ? "Güncel veri alınamadığı için kayıtlı son sonuçlar gösteriliyor."
+        : selectedProvider === "google"
+        ? "Güncel Google Places arama sonuçları başarıyla getirildi."
         : "Güncel Apify arama sonuçları başarıyla getirildi.",
       fromCache,
       query: {
         category,
         city,
         district,
+        limit,
         searchQuery,
       },
       stats: {
@@ -202,7 +219,6 @@ app.post("/api/search", async (req, res) => {
       error: error.message,
     });
   }
-});
 });
 
 initDatabase()
