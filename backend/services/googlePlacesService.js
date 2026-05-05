@@ -1,7 +1,9 @@
+const crypto = require("crypto");
+
 const GOOGLE_TEXT_SEARCH_URL =
   "https://places.googleapis.com/v1/places:searchText";
 
-function normalizeGoogleBusiness(place) {
+function normalizeGoogleBusiness(place, { category, city, district } = {}) {
   return {
     id: place.id || place.name || crypto.randomUUID(),
     name: place.displayName?.text || "İsimsiz İşletme",
@@ -22,6 +24,9 @@ function normalizeGoogleBusiness(place) {
       : null,
     status: "pending",
     source: "google_places",
+    category: category || null,
+    city: city || null,
+    district: district || null,
   };
 }
 
@@ -88,7 +93,9 @@ async function searchBusinessesWithGoogle({
     );
   }
 
-  const businesses = (data.places || []).map(normalizeGoogleBusiness);
+  const businesses = (data.places || []).map((place) =>
+    normalizeGoogleBusiness(place, { category, city, district })
+  );
 
   return {
     provider: "google_places",

@@ -2,21 +2,23 @@
 
 import { useState } from "react";
 import type { LeadItem, LeadStatus } from "@/types/business";
-import { updateBusinessStatus } from "@/lib/api";
-import {
-  getLeadKey,
-  saveLeadStatus,
-  type StoredLeadType,
-} from "@/lib/lead-status-storage";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const API_BASE_URL = "http://localhost:5000";
+
+type LeadType = "phone" | "email" | "instagram";
+
 type ListColumnProps = {
   title: string;
   items: LeadItem[];
-  type: StoredLeadType;
+  type: LeadType;
+};
+
+type LeadItemWithId = LeadItem & {
+  id?: number;
 };
 
 function getStatusClassName(status: LeadStatus) {
@@ -31,8 +33,14 @@ function getStatusClassName(status: LeadStatus) {
   return "border-orange-100 bg-orange-50/80 text-orange-700";
 }
 
-function getBusinessId(item: LeadItem) {
-  return item.businessId || item.id;
+function getItemKey(item: LeadItem, type: LeadType) {
+  const itemWithId = item as LeadItemWithId;
+
+  if (itemWithId.id) {
+    return `${type}-${itemWithId.id}`;
+  }
+
+  return `${type}-${item.businessName}-${item.value}`;
 }
 
 export function ListColumn({ title, items, type }: ListColumnProps) {
@@ -65,12 +73,18 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
 
   const handleStatusChange = async (
     item: LeadItem,
-    type: StoredLeadType,
+    itemKey: string,
     currentStatus: LeadStatus,
     nextStatus: LeadStatus
   ) => {
-    const itemKey = getLeadKey(item);
-    const businessId = getBusinessId(item);
+    const itemWithId = item as LeadItemWithId;
+
+    if (!itemWithId.id) {
+      alert(
+        "Bu kayıtta backend id bulunamadı. Önce arama sonucunun id gönderdiğini kontrol etmeliyiz."
+      );
+      return;
+    }
 
     setLocalStatuses((prev) => ({
       ...prev,
@@ -78,23 +92,33 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
     }));
 
     try {
-      if (businessId) {
-        await updateBusinessStatus(businessId, nextStatus);
-      }
+      const response = await fetch(
+        `${API_BASE_URL}/api/businesses/${itemWithId.id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: nextStatus,
+          }),
+        }
+      );
 
-      saveLeadStatus(item, type, nextStatus);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Firma durumu güncellenemedi.");
+      }
     } catch (error) {
+      console.error("Status update error:", error);
+
       setLocalStatuses((prev) => ({
         ...prev,
         [itemKey]: currentStatus,
       }));
 
-      console.error("Status update error:", error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Firma durumu güncellenirken hata oluştu."
-      );
+      alert("Firma durumu güncellenirken hata oluştu.");
     }
   };
 
@@ -118,7 +142,7 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
         ) : (
           <div className="space-y-4">
             {items.map((item) => {
-              const itemKey = getLeadKey(item);
+              const itemKey = getItemKey(item, type);
               const currentStatus =
                 localStatuses[itemKey] || item.status || "pending";
 
@@ -148,9 +172,10 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
                       value={currentStatus}
                       onChange={(event) => {
                         const nextStatus = event.target.value as LeadStatus;
-                        void handleStatusChange(
+
+                        handleStatusChange(
                           item,
-                          type,
+                          itemKey,
                           currentStatus,
                           nextStatus
                         );
@@ -159,15 +184,24 @@ export function ListColumn({ title, items, type }: ListColumnProps) {
                         currentStatus
                       )}`}
                     >
-                      <option className="bg-white text-slate-700" value="approved">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="approved"
+                      >
                         Onaylanan
                       </option>
 
-                      <option className="bg-white text-slate-700" value="pending">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="pending"
+                      >
                         Bekleyen
                       </option>
 
-                      <option className="bg-white text-slate-700" value="rejected">
+                      <option
+                        className="bg-white text-slate-700"
+                        value="rejected"
+                      >
                         Reddedilen
                       </option>
                     </select>
