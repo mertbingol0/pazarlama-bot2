@@ -70,6 +70,7 @@ export function ListColumn({
     {}
   );
   const [showWithoutPhones, setShowWithoutPhones] = useState(false);
+  const [updatingItemKey, setUpdatingItemKey] = useState<string | null>(null);
 
   const missingPhoneItems = useMemo<DisplayLeadItem[]>(() => {
     if (type !== "phone") return [];
@@ -86,6 +87,7 @@ export function ListColumn({
         address: business.address,
         noPhone: true,
         website: business.website,
+        status: business.status || "pending",
       }));
   }, [businesses, type]);
 
@@ -120,32 +122,45 @@ export function ListColumn({
   const handleStatusChange = async (
     item: DisplayLeadItem,
     itemKey: string,
+    currentStatus: LeadStatus,
     nextStatus: LeadStatus
   ) => {
+    if (currentStatus === nextStatus) return;
+
+    const businessId = item.businessId || item.id;
+
+    setUpdatingItemKey(itemKey);
+
     setLocalStatuses((prev) => ({
       ...prev,
       [itemKey]: nextStatus,
     }));
 
-    saveLeadStatus(item, type, nextStatus);
-
     try {
-      const businessId = item.businessId || item.id;
-
       if (!businessId) {
+        saveLeadStatus(item, type, nextStatus);
         console.warn("Business ID bulunamadı, sadece localStorage güncellendi.");
         return;
       }
 
       await updateBusinessStatus(businessId, nextStatus);
+
+      saveLeadStatus(item, type, nextStatus);
+
       console.log("Backend status güncellendi:", businessId, nextStatus);
     } catch (error) {
       console.error("Backend status güncelleme hatası:", error);
-      alert("Durum tarayıcıya kaydedildi ama backend'e kaydedilemedi.");
+
+      setLocalStatuses((prev) => ({
+        ...prev,
+        [itemKey]: currentStatus,
+      }));
+
+      alert("Durum güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin.");
+    } finally {
+      setUpdatingItemKey(null);
     }
   };
-
-
 
   return (
     <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -196,13 +211,16 @@ export function ListColumn({
                 }
 
                 return (
-                  normalizeText(business.name) === normalizeText(item.businessName)
+                  normalizeText(business.name) ===
+                  normalizeText(item.businessName)
                 );
               });
 
               const websiteUrl = normalizeExternalUrl(
                 item.website || relatedBusiness?.website
               );
+
+              const isUpdating = updatingItemKey === itemKey;
 
               return (
                 <div
@@ -232,10 +250,16 @@ export function ListColumn({
 
                     <select
                       value={currentStatus}
+                      disabled={isUpdating}
                       onChange={(event) =>
-                        handleStatusChange(item, itemKey, event.target.value as LeadStatus)
+                        void handleStatusChange(
+                          item,
+                          itemKey,
+                          currentStatus,
+                          event.target.value as LeadStatus
+                        )
                       }
-                      className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
+                      className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getStatusClassName(
                         currentStatus
                       )}`}
                     >
@@ -270,6 +294,12 @@ export function ListColumn({
                     {isNoPhoneItem && (
                       <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
                         Telefon kaydı yok
+                      </Badge>
+                    )}
+
+                    {isUpdating && (
+                      <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
+                        Güncelleniyor...
                       </Badge>
                     )}
                   </div>

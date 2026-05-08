@@ -18,8 +18,11 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           title="Toplam İşletme"
           value={results.stats.totalBusinesses}
         />
+
         <StatCard title="Telefon" value={results.stats.phonesFound} />
+
         <StatCard title="E-posta" value={results.stats.emailsFound} />
+
         <StatCard title="Instagram" value={results.stats.instagramsFound} />
       </section>
 

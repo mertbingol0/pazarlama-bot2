@@ -1,4 +1,5 @@
 import type {
+  Business,
   LeadStatus,
   SearchApiResponse,
   SearchParams,
@@ -8,6 +9,22 @@ export const API_BASE_URL = "http://localhost:5000";
 
 type BackendErrorResponse = {
   message?: string;
+  error?: string;
+};
+
+type StatusUpdateResponse = BackendErrorResponse & {
+  success: boolean;
+};
+
+type BusinessesByStatusResponse = BackendErrorResponse & {
+  success: boolean;
+  status: LeadStatus;
+  count: number;
+  businesses: Business[];
+};
+
+type WhatsAppTestMessageResponse = BackendErrorResponse & {
+  success: boolean;
 };
 
 export async function readJsonResponse<T>(response: Response): Promise<T> {
@@ -17,7 +34,11 @@ export async function readJsonResponse<T>(response: Response): Promise<T> {
     const bodyPreview = (await response.text()).trim().slice(0, 120);
 
     throw new Error(
-      `Backend returned ${contentType || "unknown content"} instead of JSON (${response.status} ${response.statusText}). URL: ${response.url}. ${bodyPreview}`
+      `Backend returned ${
+        contentType || "unknown content"
+      } instead of JSON (${response.status} ${response.statusText}). URL: ${
+        response.url
+      }. ${bodyPreview}`
     );
   }
 
@@ -40,12 +61,12 @@ export async function searchBusinesses(
     }),
   });
 
-  const data = await readJsonResponse<SearchApiResponse & BackendErrorResponse>(
-    response
-  );
+  const data = await readJsonResponse<
+    SearchApiResponse & BackendErrorResponse
+  >(response);
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message || "Arama isteği başarısız oldu.");
+    throw new Error(data.message || data.error || "Arama isteği başarısız oldu.");
   }
 
   return data;
@@ -54,25 +75,44 @@ export async function searchBusinesses(
 export async function updateBusinessStatus(
   businessId: string | number,
   status: LeadStatus
-) {
-  const response = await fetch(`${API_BASE_URL}/api/businesses/${businessId}/status`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      status,
-    }),
-  });
-
-  const data = await readJsonResponse<
-    BackendErrorResponse & {
-      success: boolean;
+): Promise<StatusUpdateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/businesses/${businessId}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        status,
+      }),
     }
-  >(response);
+  );
+
+  const data = await readJsonResponse<StatusUpdateResponse>(response);
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message || "Firma durumu guncellenirken hata olustu.");
+    throw new Error(
+      data.message || data.error || "Firma durumu güncellenirken hata oluştu."
+    );
+  }
+
+  return data;
+}
+
+export async function getBusinessesByStatus(
+  status: LeadStatus
+): Promise<BusinessesByStatusResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/businesses/status/${status}`
+  );
+
+  const data = await readJsonResponse<BusinessesByStatusResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Duruma göre firmalar getirilemedi."
+    );
   }
 
   return data;
@@ -86,7 +126,7 @@ export type SendWhatsAppTestMessageParams = {
 export async function sendWhatsAppTestMessage({
   to,
   message,
-}: SendWhatsAppTestMessageParams) {
+}: SendWhatsAppTestMessageParams): Promise<WhatsAppTestMessageResponse> {
   const response = await fetch(`${API_BASE_URL}/api/whatsapp/send-test`, {
     method: "POST",
     headers: {
@@ -98,17 +138,7 @@ export async function sendWhatsAppTestMessage({
     }),
   });
 
-  let data: {
-    success?: boolean;
-    message?: string;
-    error?: string;
-  };
-
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error("Backend JSON cevabı döndürmedi.");
-  }
+  const data = await readJsonResponse<WhatsAppTestMessageResponse>(response);
 
   if (!response.ok || !data.success) {
     throw new Error(
