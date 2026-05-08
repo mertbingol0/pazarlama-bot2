@@ -28,6 +28,7 @@ export type LeadItem = {
   source: LeadSource;
   url?: string;
   address?: string;
+  website?: string;
   status?: LeadStatus;
 };
 

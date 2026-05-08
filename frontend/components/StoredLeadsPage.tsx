@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { LeadStatus } from "@/types/business";
 import {
+  clearStoredLeadsByStatus,
   getStoredLeadsByStatus,
   saveLeadStatus,
   type StoredLeadItem,
@@ -64,6 +65,64 @@ function getTypeLabel(type: StoredLeadItem["type"]) {
   return "Instagram";
 }
 
+function escapeCsvValue(value?: string | number | null) {
+  const safeValue = String(value ?? "");
+  return `"${safeValue.replaceAll('"', '""')}"`;
+}
+
+function downloadStoredLeadsAsCsv(
+  leads: StoredLeadItem[],
+  status: "approved" | "rejected"
+) {
+  const headers = [
+    "Durum",
+    "Tip",
+    "Deger",
+    "Isletme Adi",
+    "Adres",
+    "Kaynak",
+    "Google Maps",
+    "Website",
+    "Guncellenme Tarihi",
+  ];
+
+  const rows = leads.map((lead) => [
+    status === "approved" ? "Onaylanan" : "Reddedilen",
+    getTypeLabel(lead.type),
+    lead.value || "Telefon bulunamadı",
+    lead.businessName,
+    lead.address || "",
+    formatSource(lead.source),
+    lead.url || "",
+    lead.website || "",
+    lead.updatedAt || "",
+  ]);
+
+  const csvContent =
+    "\uFEFF" +
+    [headers, ...rows]
+      .map((row) => row.map((value) => escapeCsvValue(value)).join(";"))
+      .join("\n");
+
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download =
+    status === "approved"
+      ? "onaylanan-firmalar.csv"
+      : "reddedilen-firmalar.csv";
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function StoredLeadsPage({
   status,
   title,
@@ -86,6 +145,22 @@ export function StoredLeadsPage({
 
   const handleStatusChange = (lead: StoredLeadItem, nextStatus: LeadStatus) => {
     saveLeadStatus(lead, lead.type, nextStatus);
+    refreshLeads();
+  };
+
+  const handleClearLeads = () => {
+    const message =
+      status === "approved"
+        ? "Onaylanan firmalar listesini temizlemek istediğine emin misin?"
+        : "Reddedilen firmalar listesini temizlemek istediğine emin misin?";
+
+    const isConfirmed = window.confirm(message);
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    clearStoredLeadsByStatus(status);
     refreshLeads();
   };
 
@@ -121,6 +196,19 @@ export function StoredLeadsPage({
           </div>
         </header>
 
+        {leads.length > 0 && (
+          <div className="mb-6 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClearLeads}
+              className="rounded-full border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
+            >
+              Temizle
+            </Button>
+          </div>
+        )}
+
         {leads.length === 0 ? (
           <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <CardContent className="p-10 text-center">
@@ -135,152 +223,173 @@ export function StoredLeadsPage({
             </CardContent>
           </Card>
         ) : (
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {leads.map((lead) => {
-              const isNoPhoneLead =
-                lead.type === "phone" &&
-                (!lead.value || lead.value === "Telefon bulunamadı");
+          <>
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {leads.map((lead) => {
+                const isNoPhoneLead =
+                  lead.type === "phone" &&
+                  (!lead.value || lead.value === "Telefon bulunamadı");
 
-              return (
-                <Card
-                  key={`${lead.businessName}-${lead.value}-${lead.updatedAt}`}
-                  className="rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-100 hover:shadow-md"
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`break-all font-semibold ${
-                            isNoPhoneLead ? "text-slate-400" : "text-slate-900"
-                          }`}
-                        >
-                          {lead.value || "Telefon bulunamadı"}
-                        </p>
-
-                        <p className="mt-1 text-sm text-slate-600">
-                          {lead.businessName}
-                        </p>
-
-                        {lead.address && (
-                          <p className="mt-2 text-xs leading-5 text-slate-400">
-                            {lead.address}
+                return (
+                  <Card
+                    key={`${lead.businessName}-${lead.value}-${lead.updatedAt}`}
+                    className="rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={`break-all font-semibold ${
+                              isNoPhoneLead
+                                ? "text-slate-400"
+                                : "text-slate-900"
+                            }`}
+                          >
+                            {lead.value || "Telefon bulunamadı"}
                           </p>
+
+                          <p className="mt-1 text-sm text-slate-600">
+                            {lead.businessName}
+                          </p>
+
+                          {lead.address && (
+                            <p className="mt-2 text-xs leading-5 text-slate-400">
+                              {lead.address}
+                            </p>
+                          )}
+                        </div>
+
+                        <select
+                          value={lead.status}
+                          onChange={(event) =>
+                            handleStatusChange(
+                              lead,
+                              event.target.value as LeadStatus
+                            )
+                          }
+                          className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
+                            lead.status
+                          )}`}
+                        >
+                          <option
+                            className="bg-white text-slate-700"
+                            value="approved"
+                          >
+                            Onaylanan
+                          </option>
+
+                          <option
+                            className="bg-white text-slate-700"
+                            value="pending"
+                          >
+                            Bekleyen
+                          </option>
+
+                          <option
+                            className="bg-white text-slate-700"
+                            value="rejected"
+                          >
+                            Reddedilen
+                          </option>
+                        </select>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="outline" className="rounded-full">
+                          {getTypeLabel(lead.type)}
+                        </Badge>
+
+                        <Badge variant="outline" className="rounded-full">
+                          Kaynak: {formatSource(lead.source)}
+                        </Badge>
+
+                        {isNoPhoneLead && (
+                          <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
+                            Telefon kaydı yok
+                          </Badge>
                         )}
                       </div>
 
-                      <select
-                        value={lead.status}
-                        onChange={(event) =>
-                          handleStatusChange(
-                            lead,
-                            event.target.value as LeadStatus
-                          )
-                        }
-                        className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
-                          lead.status
-                        )}`}
-                      >
-                        <option
-                          className="bg-white text-slate-700"
-                          value="approved"
-                        >
-                          Onaylanan
-                        </option>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {!isNoPhoneLead && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopy(lead.value)}
+                            >
+                              Kopyala
+                            </Button>
 
-                        <option
-                          className="bg-white text-slate-700"
-                          value="pending"
-                        >
-                          Bekleyen
-                        </option>
+                            <Button
+                              size="sm"
+                              asChild
+                              className="bg-emerald-500 text-white hover:bg-emerald-600"
+                            >
+                              <a
+                                href={getActionHref(lead)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {getActionText(lead)}
+                              </a>
+                            </Button>
+                          </>
+                        )}
 
-                        <option
-                          className="bg-white text-slate-700"
-                          value="rejected"
-                        >
-                          Reddedilen
-                        </option>
-                      </select>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge variant="outline" className="rounded-full">
-                        {getTypeLabel(lead.type)}
-                      </Badge>
-
-                      <Badge variant="outline" className="rounded-full">
-                        Kaynak: {formatSource(lead.source)}
-                      </Badge>
-
-                      {isNoPhoneLead && (
-                        <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
-                          Telefon kaydı yok
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {!isNoPhoneLead && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCopy(lead.value)}
-                          >
-                            Kopyala
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            asChild
-                            className="bg-emerald-500 text-white hover:bg-emerald-600"
-                          >
+                        {lead.url && (
+                          <Button variant="secondary" size="sm" asChild>
                             <a
-                              href={getActionHref(lead)}
+                              href={lead.url}
                               target="_blank"
                               rel="noreferrer"
                             >
-                              {getActionText(lead)}
+                              Google Maps
                             </a>
                           </Button>
-                        </>
-                      )}
+                        )}
 
-                      {lead.url && (
-                        <Button variant="secondary" size="sm" asChild>
-                          <a href={lead.url} target="_blank" rel="noreferrer">
-                            Google Maps
-                          </a>
-                        </Button>
-                      )}
+                        {lead.website && (
+                          <Button variant="outline" size="sm" asChild>
+                            <a
+                              href={lead.website}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Website
+                            </a>
+                          </Button>
+                        )}
 
-                      {lead.website && (
-                        <Button variant="outline" size="sm" asChild>
-                          <a
-                            href={lead.website}
-                            target="_blank"
-                            rel="noreferrer"
+                        {lead.address && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(lead.address || "")}
                           >
-                            Website
-                          </a>
-                        </Button>
-                      )}
+                            Adres Kopyala
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </section>
 
-                      {lead.address && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopy(lead.address || "")}
-                        >
-                          Adres Kopyala
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </section>
+            <section className="mt-6 flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => downloadStoredLeadsAsCsv(leads, status)}
+                className="rounded-xl border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
+              >
+                {status === "approved"
+                  ? "Onaylananları CSV İndir"
+                  : "Reddedilenleri CSV İndir"}
+              </Button>
+            </section>
+          </>
         )}
       </div>
     </main>

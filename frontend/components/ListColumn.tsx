@@ -45,6 +45,20 @@ function formatSource(source: string) {
   return source;
 }
 
+function normalizeExternalUrl(url?: string) {
+  if (!url) return "";
+
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  return `https://${url}`;
+}
+
+function normalizeText(value?: string) {
+  return (value || "").trim().toLocaleLowerCase("tr-TR");
+}
+
 export function ListColumn({
   title,
   items,
@@ -141,6 +155,23 @@ export function ListColumn({
                 localStatuses[itemKey] || item.status || "pending";
 
               const isNoPhoneItem = item.noPhone === true;
+
+              const relatedBusiness = businesses.find((business) => {
+                const itemId = item.businessId || item.id;
+                const businessId = business.id;
+
+                if (itemId && businessId && String(itemId) === String(businessId)) {
+                  return true;
+                }
+
+                return (
+                  normalizeText(business.name) === normalizeText(item.businessName)
+                );
+              });
+
+              const websiteUrl = normalizeExternalUrl(
+                item.website || relatedBusiness?.website
+              );
 
               return (
                 <div
@@ -254,10 +285,10 @@ export function ListColumn({
                       </Button>
                     )}
 
-                    {isNoPhoneItem && item.website && (
+                    {websiteUrl && (
                       <Button variant="outline" size="sm" asChild>
-                        <a href={item.website} target="_blank" rel="noreferrer">
-                          Website
+                        <a href={websiteUrl} target="_blank" rel="noreferrer">
+                          Web Sitesi
                         </a>
                       </Button>
                     )}

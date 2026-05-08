@@ -73,3 +73,20 @@ export function saveLeadStatus(
 export function getStoredLeadsByStatus(status: LeadStatus) {
   return getStoredLeads().filter((lead) => lead.status === status);
 }
+
+export function clearStoredLeadsByStatus(status: LeadStatus) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const remainingLeads = getStoredLeads().filter(
+    (lead) => lead.status !== status
+  );
+
+  if (remainingLeads.length === 0) {
+    localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(remainingLeads));
+}

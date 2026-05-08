@@ -36,17 +36,19 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         businesses={results.businesses || []}
       />
 
-        <ListColumn
-          title="E-Posta"
-          items={results.results.emails}
-          type="email"
-        />
+      <ListColumn
+        title="E-Posta"
+        items={results.results.emails}
+        type="email"
+        businesses={results.businesses || []}
+      />
 
-        <ListColumn
-          title="Instagram"
-          items={results.results.instagrams}
-          type="instagram"
-        />
+      <ListColumn
+        title="Instagram"
+        items={results.results.instagrams}
+        type="instagram"
+        businesses={results.businesses || []}
+      />
       </section>
 
       <section className="mt-6 flex flex-wrap gap-3">
