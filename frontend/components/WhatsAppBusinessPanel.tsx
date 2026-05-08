@@ -12,7 +12,7 @@ const TEST_PHONE_NUMBER = "905313439734";
 export function WhatsAppBusinessPanel() {
   const [to, setTo] = useState(TEST_PHONE_NUMBER);
   const [message, setMessage] = useState(
-    "Merhaba, işletmenizle iletişime geçmek istiyoruz."
+    "Merhaba, isletmenizle iletisime gecmek istiyoruz."
   );
   const [isSending, setIsSending] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -20,7 +20,7 @@ export function WhatsAppBusinessPanel() {
 
   const handleSendMessage = async () => {
     if (!to.trim() || !message.trim()) {
-      setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
+      setErrorMessage("Lutfen alici numara ve mesaj icerigini doldurun.");
       setSuccessMessage("");
       return;
     }
@@ -30,19 +30,29 @@ export function WhatsAppBusinessPanel() {
       setErrorMessage("");
       setSuccessMessage("");
 
-      await sendWhatsAppTestMessage({
+      const response = await sendWhatsAppTestMessage({
         to: to.trim(),
         message: message.trim(),
       });
 
-      setSuccessMessage("WhatsApp mesajı başarıyla gönderildi.");
+      const normalizedTo = response.result?.to || to.trim();
+      const messageStatus = response.result?.messageStatus;
+
+      if (messageStatus === "accepted") {
+        setSuccessMessage(
+          `Istek Meta tarafindan kabul edildi (${normalizedTo}). Bu, mesajin henuz WhatsApp'a teslim edildigi anlamina gelmez.`
+        );
+        return;
+      }
+
+      setSuccessMessage(`Mesaj istegi islendi (${normalizedTo}).`);
     } catch (error) {
       console.error("WhatsApp send error:", error);
 
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "WhatsApp mesajı gönderilemedi."
+          : "WhatsApp mesaji gonderilemedi."
       );
     } finally {
       setIsSending(false);
@@ -58,7 +68,7 @@ export function WhatsAppBusinessPanel() {
           </CardTitle>
 
           <p className="mt-1 text-sm text-slate-500">
-            Test numarasına mesaj gönderimi.
+            Test numarasina mesaj gonderimi.
           </p>
         </div>
 
@@ -70,7 +80,7 @@ export function WhatsAppBusinessPanel() {
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700">
-            Alıcı Numara
+            Alici Numara
           </label>
 
           <input
@@ -81,20 +91,20 @@ export function WhatsAppBusinessPanel() {
           />
 
           <p className="text-xs text-slate-400">
-            Test için numara Türkiye koduyla gönderilir: 905313439734
+            Numarayi ulke koduyla gir: 905313439734 veya +905313439734
           </p>
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700">
-            Mesaj İçeriği
+            Mesaj Icerigi
           </label>
 
           <textarea
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             rows={6}
-            placeholder="Gönderilecek mesajı yaz..."
+            placeholder="Gonderilecek mesaji yaz..."
             className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
           />
         </div>
@@ -106,7 +116,7 @@ export function WhatsAppBusinessPanel() {
         )}
 
         {errorMessage && (
-          <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="whitespace-pre-line rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
           </p>
         )}
@@ -117,7 +127,7 @@ export function WhatsAppBusinessPanel() {
           disabled={isSending}
           className="h-11 w-full rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-100 hover:bg-emerald-600 disabled:bg-emerald-300"
         >
-          {isSending ? "Gönderiliyor..." : "Mesaj Gönder"}
+          {isSending ? "Gonderiliyor..." : "Mesaj Gonder"}
         </Button>
       </CardContent>
     </Card>

@@ -25,6 +25,13 @@ type BusinessesByStatusResponse = BackendErrorResponse & {
 
 type WhatsAppTestMessageResponse = BackendErrorResponse & {
   success: boolean;
+  result?: {
+    requestAccepted?: boolean;
+    to?: string;
+    messageId?: string | null;
+    messageStatus?: string;
+    raw?: unknown;
+  };
 };
 
 export async function readJsonResponse<T>(response: Response): Promise<T> {
@@ -66,7 +73,9 @@ export async function searchBusinesses(
   >(response);
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message || data.error || "Arama isteği başarısız oldu.");
+    throw new Error(
+      data.message || data.error || "Arama isteği başarısız oldu."
+    );
   }
 
   return data;
@@ -121,11 +130,13 @@ export async function getBusinessesByStatus(
 export type SendWhatsAppTestMessageParams = {
   to: string;
   message: string;
+  mode?: "template" | "text";
 };
 
 export async function sendWhatsAppTestMessage({
   to,
   message,
+  mode = "text",
 }: SendWhatsAppTestMessageParams): Promise<WhatsAppTestMessageResponse> {
   const response = await fetch(`${API_BASE_URL}/api/whatsapp/send-test`, {
     method: "POST",
@@ -135,6 +146,7 @@ export async function sendWhatsAppTestMessage({
     body: JSON.stringify({
       to,
       message,
+      mode,
     }),
   });
 

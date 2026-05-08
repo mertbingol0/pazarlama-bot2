@@ -1,5 +1,8 @@
 const { searchBusinessesWithGoogle } = require("./services/googlePlacesService");
-const { sendWhatsAppTextMessage } = require("./services/whatsappService");
+const {
+  sendWhatsAppTextMessage,
+  sendWhatsAppTemplateTest,
+} = require("./services/whatsappService");
 const {
   initDatabase,
   getCachedSearchResults,
@@ -303,9 +306,10 @@ app.post("/api/search", async (req, res) => {
     });
   }
 });
+
 app.post("/api/whatsapp/send-test", async (req, res) => {
   try {
-    const { to, message } = req.body;
+    const { to, message, mode = "template" } = req.body;
 
     if (!to) {
       return res.status(400).json({
@@ -314,14 +318,32 @@ app.post("/api/whatsapp/send-test", async (req, res) => {
       });
     }
 
-    const result = await sendWhatsAppTextMessage({
-      to,
-      message: message || "Jefedes WhatsApp test mesajı.",
-    });
+    let result;
+
+    if (mode === "text") {
+      if (!message || !String(message).trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Text mesaj göndermek için mesaj içeriği zorunludur.",
+        });
+      }
+
+      result = await sendWhatsAppTextMessage({
+        to,
+        message,
+      });
+    } else {
+      result = await sendWhatsAppTemplateTest({
+        to,
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      message: "WhatsApp test mesajı gönderildi.",
+      message:
+        mode === "text"
+          ? "WhatsApp text mesaj isteği gönderildi."
+          : "WhatsApp template test mesajı gönderildi.",
       result,
     });
   } catch (error) {
@@ -333,6 +355,7 @@ app.post("/api/whatsapp/send-test", async (req, res) => {
     });
   }
 });
+
 initDatabase()
   .then(() => {
     app.listen(PORT, () => {
