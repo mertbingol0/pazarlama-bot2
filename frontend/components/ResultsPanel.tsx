@@ -32,22 +32,28 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         </div>
       )}
 
-      <section className="mt-6 grid gap-4 lg:grid-cols-3">
-        <ListColumn
-          title="WhatsApp / Telefon"
-          items={results.results.phones}
-          type="phone"
-          businesses={results.businesses || []}
-        />
+      <section className="mt-6 grid gap-4 xl:grid-cols-3">
+        <div className="order-1 xl:order-3">
+          <WhatsAppBusinessPanel />
+        </div>
 
-        <ListColumn
-          title="E-Posta"
-          items={results.results.emails}
-          type="email"
-          businesses={results.businesses || []}
-        />
+        <div className="order-2 xl:order-1">
+          <ListColumn
+            title="WhatsApp / Telefon"
+            items={results.results.phones}
+            type="phone"
+            businesses={results.businesses || []}
+          />
+        </div>
 
-        <WhatsAppBusinessPanel />
+        <div className="order-3 xl:order-2">
+          <ListColumn
+            title="E-Posta"
+            items={results.results.emails}
+            type="email"
+            businesses={results.businesses || []}
+          />
+        </div>
       </section>
 
       <section className="mt-6 flex flex-wrap gap-3">
