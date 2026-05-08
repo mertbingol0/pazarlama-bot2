@@ -1,5 +1,5 @@
 const { searchBusinessesWithGoogle } = require("./services/googlePlacesService");
-
+const { sendWhatsAppTextMessage } = require("./services/whatsappService");
 const {
   initDatabase,
   getCachedSearchResults,
@@ -303,7 +303,36 @@ app.post("/api/search", async (req, res) => {
     });
   }
 });
+app.post("/api/whatsapp/send-test", async (req, res) => {
+  try {
+    const { to, message } = req.body;
 
+    if (!to) {
+      return res.status(400).json({
+        success: false,
+        message: "Mesaj gönderilecek telefon numarası zorunludur.",
+      });
+    }
+
+    const result = await sendWhatsAppTextMessage({
+      to,
+      message: message || "Jefedes WhatsApp test mesajı.",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "WhatsApp test mesajı gönderildi.",
+      result,
+    });
+  } catch (error) {
+    console.error("WhatsApp send test error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "WhatsApp test mesajı gönderilemedi.",
+    });
+  }
+});
 initDatabase()
   .then(() => {
     app.listen(PORT, () => {
