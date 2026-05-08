@@ -1,6 +1,35 @@
 ﻿const GRAPH_API_VERSION = "v22.0";
 
-async function sendWhatsAppTextMessage({ to, message }) {
+function normalizeWhatsAppNumber(value) {
+  const rawValue = String(value || "").trim();
+
+  if (!rawValue) {
+    throw new Error("Mesaj gönderilecek telefon numarası eksik.");
+  }
+
+  const digitsOnly = rawValue.replace(/\D/g, "");
+  const normalizedNumber = digitsOnly.startsWith("00")
+    ? digitsOnly.slice(2)
+    : digitsOnly;
+
+  if (!normalizedNumber) {
+    throw new Error("Telefon numarası sadece rakamlardan oluşmalıdır.");
+  }
+
+  if (normalizedNumber.startsWith("0")) {
+    throw new Error(
+      "Telefon numarasını ülke koduyla gönderin. Örnek: 905551112233"
+    );
+  }
+
+  if (normalizedNumber.length < 8 || normalizedNumber.length > 15) {
+    throw new Error("Telefon numarası geçerli bir uluslararası formatta değil.");
+  }
+
+  return normalizedNumber;
+}
+
+function getWhatsAppConfig() {
   const token = process.env.WHATSAPP_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
@@ -12,17 +41,16 @@ async function sendWhatsAppTextMessage({ to, message }) {
     throw new Error("WHATSAPP_PHONE_NUMBER_ID .env içinde tanımlı değil.");
   }
 
-  if (!to) {
-    throw new Error("Mesaj gönderilecek telefon numarası eksik.");
-  }
-console.log("WhatsApp env kontrol:", {
-  tokenVarMi: Boolean(token),
-  tokenIlkKarakterler: token?.slice(0, 6),
-  tokenUzunluk: token?.length,
-  phoneNumberId,
-  graphApiVersion: GRAPH_API_VERSION,
-  aliciNumara: to,
-});
+
+  return {
+    token,
+    phoneNumberId,
+  };
+}
+
+async function sendWhatsAppPayload(payload) {
+  const { token, phoneNumberId } = getWhatsAppConfig();
+
   const response = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
     {
@@ -31,29 +59,72 @@ console.log("WhatsApp env kontrol:", {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to,
-        type: "text",
-        text: {
-          body: message,
-        },
-      }),
+      body: JSON.stringify(payload),
     }
   );
 
-const data = await response.json();
+  const data = await response.json();
 
-if (!response.ok) {
-  console.error("WhatsApp API error:", data);
-  throw new Error(data.error?.message || "WhatsApp mesajı gönderilemedi.");
+  console.log("WhatsApp API response:", {
+    status: response.status,
+    ok: response.ok,
+    data,
+  });
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || "WhatsApp mesajı gönderilemedi.");
+  }
+
+  const metaMessage = Array.isArray(data.messages) ? data.messages[0] : null;
+
+  return {
+    requestAccepted: true,
+    to: payload.to,
+    messageId: metaMessage?.id || null,
+    messageStatus: metaMessage?.message_status || "accepted",
+    raw: data,
+  };
 }
 
-console.log("WhatsApp API success:", data);
+async function sendWhatsAppTextMessage({ to, message }) {
+  const normalizedTo = normalizeWhatsAppNumber(to);
 
-return data;
+  if (!message || !String(message).trim()) {
+    throw new Error("Gönderilecek mesaj içeriği boş olamaz.");
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: normalizedTo,
+    type: "text",
+    text: {
+      preview_url: false,
+      body: String(message).trim(),
+    },
+  };
+
+  return sendWhatsAppPayload(payload);
+}
+
+async function sendWhatsAppTemplateTest({ to }) {
+  const normalizedTo = normalizeWhatsAppNumber(to);
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: normalizedTo,
+    type: "template",
+    template: {
+      name: "hello_world",
+      language: {
+        code: "en_US",
+      },
+    },
+  };
+
+  return sendWhatsAppPayload(payload);
 }
 
 module.exports = {
   sendWhatsAppTextMessage,
+  sendWhatsAppTemplateTest,
 };
