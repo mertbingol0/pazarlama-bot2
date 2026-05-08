@@ -77,3 +77,44 @@ export async function updateBusinessStatus(
 
   return data;
 }
+
+export type SendWhatsAppTestMessageParams = {
+  to: string;
+  message: string;
+};
+
+export async function sendWhatsAppTestMessage({
+  to,
+  message,
+}: SendWhatsAppTestMessageParams) {
+  const response = await fetch(`${API_BASE_URL}/api/whatsapp/send-test`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to,
+      message,
+    }),
+  });
+
+  let data: {
+    success?: boolean;
+    message?: string;
+    error?: string;
+  };
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Backend JSON cevabı döndürmedi.");
+  }
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "WhatsApp mesajı gönderilemedi."
+    );
+  }
+
+  return data;
+}

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ListColumn } from "@/components/ListColumn";
 import { StatCard } from "@/components/StatCard";
 import { downloadSearchResultsAsCsv } from "@/lib/export";
+import { WhatsAppBusinessPanel } from "@/components/WhatsAppBusinessPanel";
 
 type ResultsPanelProps = {
   results: SearchResult;
@@ -29,26 +30,21 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
       )}
 
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
-      <ListColumn
-        title="WhatsApp / Telefon"
-        items={results.results.phones}
-        type="phone"
-        businesses={results.businesses || []}
-      />
+        <ListColumn
+          title="WhatsApp / Telefon"
+          items={results.results.phones}
+          type="phone"
+          businesses={results.businesses || []}
+        />
 
-      <ListColumn
-        title="E-Posta"
-        items={results.results.emails}
-        type="email"
-        businesses={results.businesses || []}
-      />
+        <ListColumn
+          title="E-Posta"
+          items={results.results.emails}
+          type="email"
+          businesses={results.businesses || []}
+        />
 
-      <ListColumn
-        title="Instagram"
-        items={results.results.instagrams}
-        type="instagram"
-        businesses={results.businesses || []}
-      />
+        <WhatsAppBusinessPanel />
       </section>
 
       <section className="mt-6 flex flex-wrap gap-3">

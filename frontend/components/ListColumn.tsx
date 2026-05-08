@@ -7,6 +7,7 @@ import {
   saveLeadStatus,
   type StoredLeadType,
 } from "@/lib/lead-status-storage";
+import { updateBusinessStatus } from "@/lib/api";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,6 +117,36 @@ export function ListColumn({
     alert("Kopyalandı");
   };
 
+  const handleStatusChange = async (
+    item: DisplayLeadItem,
+    itemKey: string,
+    nextStatus: LeadStatus
+  ) => {
+    setLocalStatuses((prev) => ({
+      ...prev,
+      [itemKey]: nextStatus,
+    }));
+
+    saveLeadStatus(item, type, nextStatus);
+
+    try {
+      const businessId = item.businessId || item.id;
+
+      if (!businessId) {
+        console.warn("Business ID bulunamadı, sadece localStorage güncellendi.");
+        return;
+      }
+
+      await updateBusinessStatus(businessId, nextStatus);
+      console.log("Backend status güncellendi:", businessId, nextStatus);
+    } catch (error) {
+      console.error("Backend status güncelleme hatası:", error);
+      alert("Durum tarayıcıya kaydedildi ama backend'e kaydedilemedi.");
+    }
+  };
+
+
+
   return (
     <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -201,16 +232,9 @@ export function ListColumn({
 
                     <select
                       value={currentStatus}
-                      onChange={(event) => {
-                        const nextStatus = event.target.value as LeadStatus;
-
-                        setLocalStatuses((prev) => ({
-                          ...prev,
-                          [itemKey]: nextStatus,
-                        }));
-
-                        saveLeadStatus(item, type, nextStatus);
-                      }}
+                      onChange={(event) =>
+                        handleStatusChange(item, itemKey, event.target.value as LeadStatus)
+                      }
                       className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
                         currentStatus
                       )}`}
