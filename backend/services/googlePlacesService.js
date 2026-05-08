@@ -3,9 +3,19 @@ const crypto = require("crypto");
 const GOOGLE_TEXT_SEARCH_URL =
   "https://places.googleapis.com/v1/places:searchText";
 
-const GOOGLE_MAX_PAGE_SIZE = 20;
 const DEFAULT_LIMIT = 10;
-const MAX_SAFE_RESULTS = Number(process.env.MAX_SAFE_RESULTS || 50);
+const DEFAULT_MAX_SAFE_RESULTS = 50;
+const GOOGLE_MAX_PAGE_SIZE = 20;
+
+function getMaxSafeResults() {
+  const parsedValue = Number(process.env.MAX_SAFE_RESULTS);
+
+  if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+    return DEFAULT_MAX_SAFE_RESULTS;
+  }
+
+  return parsedValue;
+}
 
 const CATEGORY_KEYWORD_MAP = {
   güzellik: [
@@ -150,8 +160,10 @@ function normalizeGoogleBusiness(
 }
 
 function normalizeLimit(limit) {
+  const maxSafeResults = getMaxSafeResults();
+
   if (limit === "all") {
-    return MAX_SAFE_RESULTS;
+    return maxSafeResults;
   }
 
   const parsedLimit = Number(limit);
@@ -160,7 +172,7 @@ function normalizeLimit(limit) {
     return DEFAULT_LIMIT;
   }
 
-  return Math.min(Math.max(parsedLimit, DEFAULT_LIMIT), MAX_SAFE_RESULTS);
+  return Math.min(Math.max(parsedLimit, DEFAULT_LIMIT), maxSafeResults);
 }
 function getBusinessUniqueKey(business) {
   if (business.id) {
