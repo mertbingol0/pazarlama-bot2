@@ -15,7 +15,14 @@ async function sendWhatsAppTextMessage({ to, message }) {
   if (!to) {
     throw new Error("Mesaj gönderilecek telefon numarası eksik.");
   }
-
+console.log("WhatsApp env kontrol:", {
+  tokenVarMi: Boolean(token),
+  tokenIlkKarakterler: token?.slice(0, 6),
+  tokenUzunluk: token?.length,
+  phoneNumberId,
+  graphApiVersion: GRAPH_API_VERSION,
+  aliciNumara: to,
+});
   const response = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
     {
@@ -35,14 +42,16 @@ async function sendWhatsAppTextMessage({ to, message }) {
     }
   );
 
-  const data = await response.json();
+const data = await response.json();
 
-  if (!response.ok) {
-    console.error("WhatsApp API error:", data);
-    throw new Error(data.error?.message || "WhatsApp mesajı gönderilemedi.");
-  }
+if (!response.ok) {
+  console.error("WhatsApp API error:", data);
+  throw new Error(data.error?.message || "WhatsApp mesajı gönderilemedi.");
+}
 
-  return data;
+console.log("WhatsApp API success:", data);
+
+return data;
 }
 
 module.exports = {
