@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { searchBusinesses } from "@/lib/api";
 import type { SearchLimit, SearchResult } from "@/types/business";
@@ -11,8 +11,19 @@ import { SearchForm } from "@/components/SearchForm";
 import { LoadingState } from "@/components/LoadingState";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { PageNavigation } from "@/components/PageNavigation";
+
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const LAST_SEARCH_STORAGE_KEY = "jefedes-last-search";
+
+type SavedSearchState = {
+  category: string;
+  city: string;
+  district: string;
+  limit: SearchLimit;
+  results: SearchResult;
+};
 
 export default function Home() {
   const [category, setCategory] = useState("");
@@ -23,6 +34,40 @@ export default function Home() {
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const savedSearch = localStorage.getItem(LAST_SEARCH_STORAGE_KEY);
+
+    if (!savedSearch) {
+      return;
+    }
+
+    try {
+      const parsedSearch = JSON.parse(savedSearch) as SavedSearchState;
+
+      setCategory(parsedSearch.category || "");
+      setCity(parsedSearch.city || "");
+      setDistrict(parsedSearch.district || "");
+      setLimit(parsedSearch.limit || "50");
+      setResults(parsedSearch.results || null);
+    } catch {
+      localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
+    }
+  }, []);
+
+  const saveLastSearch = (searchState: SavedSearchState) => {
+    localStorage.setItem(LAST_SEARCH_STORAGE_KEY, JSON.stringify(searchState));
+  };
+
+  const handleClearSearch = () => {
+    setCategory("");
+    setCity("");
+    setDistrict("");
+    setLimit("50");
+    setResults(null);
+    setErrorMessage(null);
+    localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
+  };
 
   const handleSearch = async () => {
     if (!category || !city || !district) {
@@ -41,18 +86,28 @@ export default function Home() {
         limit,
       });
 
-      setResults({
-      query: {
-        category: backendResponse.query.category,
-        city: backendResponse.query.city,
-        district: backendResponse.query.district,
+      const nextResults: SearchResult = {
+        query: {
+          category: backendResponse.query.category,
+          city: backendResponse.query.city,
+          district: backendResponse.query.district,
+          limit,
+        },
+        stats: backendResponse.stats,
+        results: backendResponse.results,
+        businesses: backendResponse.businesses || [],
+        fromCache: backendResponse.fromCache,
+      };
+
+      setResults(nextResults);
+
+      saveLastSearch({
+        category,
+        city,
+        district,
         limit,
-      },
-      stats: backendResponse.stats,
-      results: backendResponse.results,
-      businesses: backendResponse.businesses || [],
-      fromCache: backendResponse.fromCache,
-    });
+        results: nextResults,
+      });
     } catch (error) {
       console.error("Backend bağlantı hatası:", error);
       setErrorMessage(
@@ -91,13 +146,29 @@ export default function Home() {
 
         <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
           <CardHeader className="pb-4">
-            <CardTitle className="text-xl font-semibold text-slate-900">
-              Arama Bilgileri
-            </CardTitle>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold text-slate-900">
+                  Arama Bilgileri
+                </CardTitle>
 
-            <p className="text-sm text-slate-500">
-              Arama yapmak için kategori, il, ilçe ve limit bilgilerini seçin.
-            </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Arama yapmak için kategori, il, ilçe ve limit bilgilerini
+                  seçin.
+                </p>
+              </div>
+
+              {results && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleClearSearch}
+                  className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
+                >
+                  Aramayı Temizle
+                </Button>
+              )}
+            </div>
           </CardHeader>
 
           <CardContent>
@@ -129,4 +200,3 @@ export default function Home() {
     </main>
   );
 }
-

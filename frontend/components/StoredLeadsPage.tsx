@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { LeadStatus } from "@/types/business";
-import { API_BASE_URL, readJsonResponse } from "@/lib/api";
+import {
+  getStoredLeadsByStatus,
+  saveLeadStatus,
+  type StoredLeadItem,
+} from "@/lib/lead-status-storage";
 
 import { PageNavigation } from "@/components/PageNavigation";
 import { Badge } from "@/components/ui/badge";
@@ -14,61 +18,6 @@ type StoredLeadsPageProps = {
   title: string;
   description: string;
 };
-
-type BackendBusiness = {
-  id: number;
-  externalId?: string;
-  name?: string;
-  phone?: string;
-  address?: string;
-  website?: string;
-  googleMapsUrl?: string;
-  rating?: number | null;
-  userRatingCount?: number | null;
-  source?: string;
-  status: LeadStatus;
-  category?: string;
-  city?: string;
-  district?: string;
-};
-
-type BusinessesByStatusResponse = {
-  success: boolean;
-  message?: string;
-  businesses?: BackendBusiness[];
-};
-
-type UpdateBusinessStatusResponse = {
-  success: boolean;
-  message?: string;
-  business?: BackendBusiness;
-};
-
-type LeadItem = {
-  id: number;
-  type: "phone";
-  value: string;
-  businessName: string;
-  address?: string;
-  source?: string;
-  url?: string;
-  website?: string;
-  status: LeadStatus;
-};
-
-function mapBusinessToLead(business: BackendBusiness): LeadItem {
-  return {
-    id: business.id,
-    type: "phone",
-    value: business.phone || "",
-    businessName: business.name || "İsimsiz İşletme",
-    address: business.address,
-    source: business.source || "google_places",
-    url: business.googleMapsUrl,
-    website: business.website,
-    status: business.status || "pending",
-  };
-}
 
 function getStatusClassName(status: LeadStatus) {
   if (status === "approved") {
@@ -82,17 +31,37 @@ function getStatusClassName(status: LeadStatus) {
   return "border-orange-100 bg-orange-50/80 text-orange-700";
 }
 
-function getActionHref(lead: LeadItem) {
-  return `https://wa.me/${lead.value.replace(/\D/g, "")}`;
+function formatSource(source?: string) {
+  if (source === "google_places") return "Google Places";
+  if (source === "google_maps") return "Google Maps";
+  if (source === "website_scrape") return "Website";
+  if (source === "backend") return "Backend";
+
+  return source || "Bilinmiyor";
 }
 
-function getActionText() {
-  return "WhatsApp";
+function getActionHref(lead: StoredLeadItem) {
+  if (lead.type === "phone") {
+    return `https://wa.me/${lead.value.replace(/\D/g, "")}`;
+  }
+
+  if (lead.type === "email") {
+    return `mailto:${lead.value}`;
+  }
+
+  return lead.url || `https://instagram.com/${lead.value.replace("@", "")}`;
 }
 
-function getTypeLabel(type: LeadItem["type"]) {
+function getActionText(lead: StoredLeadItem) {
+  if (lead.type === "phone") return "WhatsApp";
+  if (lead.type === "email") return "Mail Gönder";
+  return "Profili Aç";
+}
+
+function getTypeLabel(type: StoredLeadItem["type"]) {
   if (type === "phone") return "Telefon";
-  return "Telefon";
+  if (type === "email") return "E-posta";
+  return "Instagram";
 }
 
 export function StoredLeadsPage({
@@ -100,112 +69,24 @@ export function StoredLeadsPage({
   title,
   description,
 }: StoredLeadsPageProps) {
-  const [leads, setLeads] = useState<LeadItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [leads, setLeads] = useState<StoredLeadItem[]>([]);
 
-  const refreshLeads = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setErrorMessage("");
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/businesses/status/${status}`
-      );
-
-      const data = await readJsonResponse<BusinessesByStatusResponse>(response);
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Kayıtlı firmalar getirilirken hata oluştu."
-        );
-      }
-
-      const mappedLeads = (data.businesses || [])
-        .filter((business: BackendBusiness) => business.phone)
-        .map(mapBusinessToLead);
-
-      setLeads(mappedLeads);
-    } catch (error) {
-      console.error("Stored leads fetch error:", error);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Kayıtlı firmalar getirilirken hata oluştu."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [status]);
+  const refreshLeads = () => {
+    setLeads(getStoredLeadsByStatus(status));
+  };
 
   useEffect(() => {
-    let isActive = true;
-
-    queueMicrotask(() => {
-      if (isActive) {
-        void refreshLeads();
-      }
-    });
-
-    return () => {
-      isActive = false;
-    };
-  }, [refreshLeads]);
+    refreshLeads();
+  }, [status]);
 
   const handleCopy = async (value: string) => {
     await navigator.clipboard.writeText(value);
     alert("Kopyalandı");
   };
 
-  const handleStatusChange = async (lead: LeadItem, nextStatus: LeadStatus) => {
-    try {
-      setErrorMessage("");
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/businesses/${lead.id}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: nextStatus,
-          }),
-        }
-      );
-
-      const data = await readJsonResponse<UpdateBusinessStatusResponse>(
-        response
-      );
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Firma durumu güncellenirken hata oluştu."
-        );
-      }
-
-      if (nextStatus !== status) {
-        setLeads((currentLeads) =>
-          currentLeads.filter((currentLead) => currentLead.id !== lead.id)
-        );
-        return;
-      }
-
-      setLeads((currentLeads) =>
-        currentLeads.map((currentLead) =>
-          currentLead.id === lead.id
-            ? { ...currentLead, status: nextStatus }
-            : currentLead
-        )
-      );
-    } catch (error) {
-      console.error("Status update error:", error);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Firma durumu güncellenirken hata oluştu."
-      );
-    }
+  const handleStatusChange = (lead: StoredLeadItem, nextStatus: LeadStatus) => {
+    saveLeadStatus(lead, lead.type, nextStatus);
+    refreshLeads();
   };
 
   return (
@@ -240,23 +121,7 @@ export function StoredLeadsPage({
           </div>
         </header>
 
-        {errorMessage && (
-          <Card className="mb-6 rounded-3xl border border-red-100 bg-red-50 shadow-sm">
-            <CardContent className="p-5 text-sm text-red-700">
-              {errorMessage}
-            </CardContent>
-          </Card>
-        )}
-
-        {isLoading ? (
-          <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-10 text-center">
-              <p className="text-xl font-semibold text-slate-900">
-                Kayıtlar yükleniyor...
-              </p>
-            </CardContent>
-          </Card>
-        ) : leads.length === 0 ? (
+        {leads.length === 0 ? (
           <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <CardContent className="p-10 text-center">
               <p className="text-xl font-semibold text-slate-900">
@@ -271,118 +136,150 @@ export function StoredLeadsPage({
           </Card>
         ) : (
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {leads.map((lead) => (
-              <Card
-                key={lead.id}
-                className="rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-100 hover:shadow-md"
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="break-all font-semibold text-slate-900">
-                        {lead.value}
-                      </p>
+            {leads.map((lead) => {
+              const isNoPhoneLead =
+                lead.type === "phone" &&
+                (!lead.value || lead.value === "Telefon bulunamadı");
 
-                      <p className="mt-1 text-sm text-slate-600">
-                        {lead.businessName}
-                      </p>
-
-                      {lead.address && (
-                        <p className="mt-2 text-xs leading-5 text-slate-400">
-                          {lead.address}
+              return (
+                <Card
+                  key={`${lead.businessName}-${lead.value}-${lead.updatedAt}`}
+                  className="rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`break-all font-semibold ${
+                            isNoPhoneLead ? "text-slate-400" : "text-slate-900"
+                          }`}
+                        >
+                          {lead.value || "Telefon bulunamadı"}
                         </p>
+
+                        <p className="mt-1 text-sm text-slate-600">
+                          {lead.businessName}
+                        </p>
+
+                        {lead.address && (
+                          <p className="mt-2 text-xs leading-5 text-slate-400">
+                            {lead.address}
+                          </p>
+                        )}
+                      </div>
+
+                      <select
+                        value={lead.status}
+                        onChange={(event) =>
+                          handleStatusChange(
+                            lead,
+                            event.target.value as LeadStatus
+                          )
+                        }
+                        className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
+                          lead.status
+                        )}`}
+                      >
+                        <option
+                          className="bg-white text-slate-700"
+                          value="approved"
+                        >
+                          Onaylanan
+                        </option>
+
+                        <option
+                          className="bg-white text-slate-700"
+                          value="pending"
+                        >
+                          Bekleyen
+                        </option>
+
+                        <option
+                          className="bg-white text-slate-700"
+                          value="rejected"
+                        >
+                          Reddedilen
+                        </option>
+                      </select>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge variant="outline" className="rounded-full">
+                        {getTypeLabel(lead.type)}
+                      </Badge>
+
+                      <Badge variant="outline" className="rounded-full">
+                        Kaynak: {formatSource(lead.source)}
+                      </Badge>
+
+                      {isNoPhoneLead && (
+                        <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
+                          Telefon kaydı yok
+                        </Badge>
                       )}
                     </div>
 
-                    <select
-                      value={lead.status}
-                      onChange={(event) =>
-                        handleStatusChange(
-                          lead,
-                          event.target.value as LeadStatus
-                        )
-                      }
-                      className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
-                        lead.status
-                      )}`}
-                    >
-                      <option
-                        className="bg-white text-slate-700"
-                        value="approved"
-                      >
-                        Onaylanan
-                      </option>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {!isNoPhoneLead && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(lead.value)}
+                          >
+                            Kopyala
+                          </Button>
 
-                      <option
-                        className="bg-white text-slate-700"
-                        value="pending"
-                      >
-                        Bekleyen
-                      </option>
+                          <Button
+                            size="sm"
+                            asChild
+                            className="bg-emerald-500 text-white hover:bg-emerald-600"
+                          >
+                            <a
+                              href={getActionHref(lead)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {getActionText(lead)}
+                            </a>
+                          </Button>
+                        </>
+                      )}
 
-                      <option
-                        className="bg-white text-slate-700"
-                        value="rejected"
-                      >
-                        Reddedilen
-                      </option>
-                    </select>
-                  </div>
+                      {lead.url && (
+                        <Button variant="secondary" size="sm" asChild>
+                          <a href={lead.url} target="_blank" rel="noreferrer">
+                            Google Maps
+                          </a>
+                        </Button>
+                      )}
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="outline" className="rounded-full">
-                      {getTypeLabel(lead.type)}
-                    </Badge>
+                      {lead.website && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={lead.website}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Website
+                          </a>
+                        </Button>
+                      )}
 
-                    <Badge variant="outline" className="rounded-full">
-                      {lead.source}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopy(lead.value)}
-                    >
-                      Kopyala
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      asChild
-                      className="bg-emerald-500 text-white hover:bg-emerald-600"
-                    >
-                      <a
-                        href={getActionHref(lead)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {getActionText()}
-                      </a>
-                    </Button>
-
-                    {lead.url && (
-                      <Button variant="secondary" size="sm" asChild>
-                        <a href={lead.url} target="_blank" rel="noreferrer">
-                          Google Maps
-                        </a>
-                      </Button>
-                    )}
-
-                    {lead.address && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCopy(lead.address || "")}
-                      >
-                        Adres Kopyala
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                      {lead.address && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopy(lead.address || "")}
+                        >
+                          Adres Kopyala
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </section>
         )}
       </div>

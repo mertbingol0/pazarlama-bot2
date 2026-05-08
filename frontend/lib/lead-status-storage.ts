@@ -6,12 +6,16 @@ export type StoredLeadItem = LeadItem & {
   status: LeadStatus;
   type: StoredLeadType;
   updatedAt: string;
+  website?: string;
+  rating?: number;
 };
 
 const STORAGE_KEY = "jefedes-lead-statuses";
 
 export function getLeadKey(item: LeadItem) {
-  return item.id || item.businessId || `${item.businessName}-${item.value}`;
+  return String(
+    item.id || item.businessId || `${item.businessName}-${item.value}`
+  );
 }
 
 export function getStoredLeads(): StoredLeadItem[] {
