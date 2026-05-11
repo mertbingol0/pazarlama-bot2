@@ -179,23 +179,39 @@ app.get("/api/businesses/status/:status", async (req, res) => {
 });
 
 app.post("/api/search", async (req, res) => {
-  const { category, city, district, limit = 10 } = req.body;
+  const {
+    category,
+    city = "",
+    district = "",
+    limit = 10,
+  } = req.body;
+
+  const normalizedCategory = String(category || "").trim();
+  const normalizedCity = String(city || "").trim();
+  const normalizedDistrict = String(district || "").trim();
 
   console.log("Yeni arama isteği geldi:");
-  console.log("Kategori:", category);
-  console.log("İl:", city);
-  console.log("İlçe:", district);
+  console.log("Kategori:", normalizedCategory || "Seçilmedi");
+  console.log("İl:", normalizedCity || "Seçilmedi");
+  console.log("İlçe:", normalizedDistrict || "Seçilmedi");
   console.log("Limit:", limit);
   console.log("Aktif provider: google");
 
-  if (!category || !city || !district) {
+  if (!normalizedCategory) {
     return res.status(400).json({
       success: false,
-      message: "Kategori, il ve ilçe bilgileri zorunludur.",
+      message: "Kategori bilgisi zorunludur.",
     });
   }
 
-  const searchQuery = `${category} ${district} ${city}`;
+  const searchQuery = [
+    normalizedCategory,
+    normalizedDistrict,
+    normalizedCity,
+    "Türkiye",
+  ]
+    .filter((value) => value && String(value).trim())
+    .join(" ");
 
   try {
     let businesses = [];
@@ -203,25 +219,25 @@ app.post("/api/search", async (req, res) => {
 
     try {
       const googleResult = await searchBusinessesWithGoogle({
-        category,
-        city,
-        district,
+        category: normalizedCategory,
+        city: normalizedCity,
+        district: normalizedDistrict,
         limit,
       });
 
       const googleBusinesses = googleResult.businesses || [];
 
       await saveSearchResults({
-        category,
-        city,
-        district,
+        category: normalizedCategory,
+        city: normalizedCity,
+        district: normalizedDistrict,
         businesses: googleBusinesses,
       });
 
       const savedResults = await getCachedSearchResults({
-        category,
-        city,
-        district,
+        category: normalizedCategory,
+        city: normalizedCity,
+        district: normalizedDistrict,
       });
 
       businesses = savedResults?.businesses || googleBusinesses;
@@ -235,9 +251,9 @@ app.post("/api/search", async (req, res) => {
       );
 
       const cached = await getCachedSearchResults({
-        category,
-        city,
-        district,
+        category: normalizedCategory,
+        city: normalizedCity,
+        district: normalizedDistrict,
       });
 
       if (!cached) {
@@ -277,9 +293,9 @@ app.post("/api/search", async (req, res) => {
         : "Güncel Google Places arama sonuçları başarıyla getirildi.",
       fromCache,
       query: {
-        category,
-        city,
-        district,
+        category: normalizedCategory,
+        city: normalizedCity,
+        district: normalizedDistrict,
         limit,
         searchQuery,
       },

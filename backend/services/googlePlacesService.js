@@ -18,12 +18,12 @@ function getMaxSafeResults() {
 }
 
 const CATEGORY_KEYWORD_MAP = {
-  güzellik: [
+  guzellik: [
     "güzellik salonu",
     "kadın kuaförü",
     "erkek kuaförü",
     "berber",
-    "lazer epilasyon",
+    "lazer epilasyon merkezi",
     "epilasyon merkezi",
     "protez tırnak",
     "tırnak stüdyosu",
@@ -32,6 +32,35 @@ const CATEGORY_KEYWORD_MAP = {
     "kaş kirpik tasarım",
     "spa merkezi",
     "masaj salonu",
+  ],
+
+  güzellik: [
+    "güzellik salonu",
+    "kadın kuaförü",
+    "erkek kuaförü",
+    "berber",
+    "lazer epilasyon merkezi",
+    "epilasyon merkezi",
+    "protez tırnak",
+    "tırnak stüdyosu",
+    "cilt bakım merkezi",
+    "kalıcı makyaj",
+    "kaş kirpik tasarım",
+    "spa merkezi",
+    "masaj salonu",
+  ],
+
+  saglik: [
+    "diş kliniği",
+    "eczane",
+    "özel hastane",
+    "tıp merkezi",
+    "poliklinik",
+    "fizyoterapi merkezi",
+    "psikolog",
+    "diyetisyen",
+    "göz kliniği",
+    "dermatoloji kliniği",
   ],
 
   sağlık: [
@@ -47,8 +76,9 @@ const CATEGORY_KEYWORD_MAP = {
     "dermatoloji kliniği",
   ],
 
-  "yiyecek & içecek": [
+  yiyecek_icecek: [
     "kafe",
+    "cafe",
     "pastane",
     "fırın",
     "dönerci",
@@ -58,17 +88,48 @@ const CATEGORY_KEYWORD_MAP = {
     "kahvaltı salonu",
     "lokanta",
     "burgerci",
+    "kahveci",
+  ],
+
+  "yiyecek & içecek": [
+    "kafe",
+    "cafe",
+    "pastane",
+    "fırın",
+    "dönerci",
+    "kebapçı",
+    "pideci",
+    "tatlıcı",
+    "kahvaltı salonu",
+    "lokanta",
+    "burgerci",
+    "kahveci",
   ],
 
   spor: [
     "spor salonu",
     "fitness merkezi",
     "pilates salonu",
+    "pilates stüdyosu",
     "yoga stüdyosu",
     "crossfit salonu",
     "yüzme kursu",
     "dans kursu",
     "boks salonu",
+    "kick boks salonu",
+  ],
+
+  egitim: [
+    "anaokulu",
+    "kreş",
+    "özel okul",
+    "dil kursu",
+    "sürücü kursu",
+    "etüt merkezi",
+    "dershane",
+    "müzik kursu",
+    "resim kursu",
+    "yazılım kursu",
   ],
 
   eğitim: [
@@ -80,6 +141,7 @@ const CATEGORY_KEYWORD_MAP = {
     "etüt merkezi",
     "dershane",
     "müzik kursu",
+    "resim kursu",
     "yazılım kursu",
   ],
 
@@ -93,27 +155,36 @@ const CATEGORY_KEYWORD_MAP = {
     "burgerci",
     "pizza restoranı",
     "balık restoranı",
-    "kahvaltı salonu",
+    "steakhouse",
+    "sushi restoranı",
+    "vegan restoran",
   ],
 
   otel: [
     "otel",
+    "hotel",
     "butik otel",
     "apart otel",
     "pansiyon",
     "hostel",
     "konukevi",
-    "bungalov",
+    "suit otel",
+    "rezidans otel",
     "termal otel",
+    "bungalov",
   ],
 
   veteriner: [
     "veteriner",
     "veteriner kliniği",
     "hayvan hastanesi",
+    "pet klinik",
+    "hayvan kliniği",
+    "veteriner polikliniği",
+    "acil veteriner",
+    "kedi köpek veterineri",
     "pet shop",
     "pet kuaförü",
-    "hayvan bakım merkezi",
     "pet otel",
   ],
 };
@@ -128,6 +199,12 @@ function getCategoryKeywords(category) {
   return CATEGORY_KEYWORD_MAP[key] || [category];
 }
 
+function buildSearchQuery({ keyword, city, district }) {
+  return [keyword, district, city, "Türkiye"]
+    .filter((value) => value && String(value).trim())
+    .join(" ");
+}
+
 function normalizeGoogleBusiness(
   place,
   { category, city, district, searchKeyword } = {}
@@ -136,10 +213,7 @@ function normalizeGoogleBusiness(
     id: place.id || place.name || crypto.randomUUID(),
     name: place.displayName?.text || "İsimsiz İşletme",
     address: place.formattedAddress || "",
-    phone:
-      place.nationalPhoneNumber ||
-      place.internationalPhoneNumber ||
-      "",
+    phone: place.nationalPhoneNumber || place.internationalPhoneNumber || "",
     website: place.websiteUri || "",
     googleMapsUrl: place.googleMapsUri || "",
     rating: place.rating || null,
@@ -174,6 +248,7 @@ function normalizeLimit(limit) {
 
   return Math.min(Math.max(parsedLimit, DEFAULT_LIMIT), maxSafeResults);
 }
+
 function getBusinessUniqueKey(business) {
   if (business.id) {
     return `id:${business.id}`;
@@ -215,7 +290,11 @@ async function searchGooglePlacesByKeyword({
   district,
   pageSize,
 }) {
-  const textQuery = `${keyword} ${district} ${city} Türkiye`;
+  const textQuery = buildSearchQuery({
+    keyword,
+    city,
+    district,
+  });
 
   const response = await fetch(GOOGLE_TEXT_SEARCH_URL, {
     method: "POST",
@@ -269,14 +348,18 @@ async function searchGooglePlacesByKeyword({
 
 async function searchBusinessesWithGoogle({
   category,
-  city,
-  district,
+  city = "",
+  district = "",
   limit = 10,
 }) {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
   if (!apiKey) {
     throw new Error("GOOGLE_PLACES_API_KEY .env içinde tanımlı değil.");
+  }
+
+  if (!category) {
+    throw new Error("Kategori bilgisi zorunludur.");
   }
 
   const safeLimit = normalizeLimit(limit);
@@ -291,7 +374,11 @@ async function searchBusinessesWithGoogle({
   const searchedQueries = [];
 
   for (const keyword of keywords) {
-    const textQuery = `${keyword} ${district} ${city} Türkiye`;
+    const textQuery = buildSearchQuery({
+      keyword,
+      city,
+      district,
+    });
 
     console.log("Google Places alt kategori araması:", textQuery);
 
