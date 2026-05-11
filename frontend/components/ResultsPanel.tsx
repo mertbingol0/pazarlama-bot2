@@ -3,6 +3,7 @@ import type { SearchResult } from "@/types/business";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "@/components/ListColumn";
 import { StatCard } from "@/components/StatCard";
+import { ResultsMap } from "@/components/ResultsMap";
 import { downloadSearchResultsAsCsv } from "@/lib/export";
 import { WhatsAppBusinessPanel } from "@/components/WhatsAppBusinessPanel";
 
@@ -11,22 +12,15 @@ type ResultsPanelProps = {
 };
 
 export function ResultsPanel({ results }: ResultsPanelProps) {
-  const businessesWithoutPhone = Math.max(
-    results.stats.totalBusinesses - results.stats.phonesFound,
-    0
-  );
-
   return (
     <>
-      <section className="mt-6 grid gap-4 md:grid-cols-3">
+      <section className="mt-6 grid gap-4 md:grid-cols-2">
         <StatCard
           title="Toplam İşletme"
           value={results.stats.totalBusinesses}
         />
 
         <StatCard title="Telefon" value={results.stats.phonesFound} />
-
-        <StatCard title="Telefonsuz" value={businessesWithoutPhone} />
       </section>
 
       {results.fromCache && (
@@ -35,28 +29,30 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         </div>
       )}
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.9fr)]">
-        <div className="order-1 xl:order-2">
-          <WhatsAppBusinessPanel />
-        </div>
+      <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.95fr)]">
+        <div className="order-2 space-y-4 xl:order-1">
+          <ResultsMap businesses={results.businesses || []} />
 
-        <div className="order-2 xl:order-1">
           <ListColumn
             title="WhatsApp / Telefon"
             items={results.results.phones}
             type="phone"
             businesses={results.businesses || []}
           />
-        </div>
-      </section>
 
-      <section className="mt-6 flex flex-wrap gap-3">
-        <Button
-          variant="outline"
-          onClick={() => downloadSearchResultsAsCsv(results)}
-        >
-          CSV İndir
-        </Button>
+          <section className="flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              onClick={() => downloadSearchResultsAsCsv(results)}
+            >
+              CSV İndir
+            </Button>
+          </section>
+        </div>
+
+        <div className="order-1 xl:order-2">
+          <WhatsAppBusinessPanel />
+        </div>
       </section>
     </>
   );

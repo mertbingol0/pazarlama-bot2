@@ -2,6 +2,14 @@ export type LeadStatus = "approved" | "pending" | "rejected";
 
 export type LeadStatusFilter = "all" | LeadStatus;
 
+export type WhatsAppStatus =
+  | "not_sent"
+  | "template_sent"
+  | "waiting_reply"
+  | "replied";
+
+export type WhatsAppStatusFilter = "all" | WhatsAppStatus;
+
 export type SearchLimit = "10" | "50" | "100" | "250" | "500" | "all";
 
 export type SearchParams = {
@@ -30,6 +38,7 @@ export type LeadItem = {
   address?: string;
   website?: string;
   status?: LeadStatus;
+  whatsappStatus?: WhatsAppStatus;
 };
 
 export type Business = {
@@ -42,6 +51,7 @@ export type Business = {
   rating?: number;
   userRatingCount?: number;
   status?: LeadStatus;
+  whatsappStatus?: WhatsAppStatus;
   location?: {
     lat?: number;
     lng?: number;

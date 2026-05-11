@@ -145,16 +145,16 @@ export default function Home() {
             <PageNavigation />
           </div>
 
-          <div className="mx-auto mt-14 max-w-4xl text-center">
-            <h1 className="text-4xl font-semibold leading-[1.18] tracking-tight text-slate-900 md:text-6xl md:leading-[1.16]">
+          <div className="mx-auto mt-8 max-w-3xl text-center">
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-5xl">
               Potansiyel müşterilerinizi{" "}
               <span className="text-emerald-500">daha hızlı</span> bulun
             </h1>
 
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 md:text-lg">
-              Kategori ve arama limiti seçerek işletmeleri arayın. İsterseniz
-              il ve ilçe bilgisiyle aramayı daraltın; telefon, web sitesi ve
-              Google Maps bilgilerini görüntüleyip CSV olarak dışa aktarın.
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-500 md:text-base">
+              Kategori ve arama limiti seçerek işletmeleri arayın. İsterseniz il ve
+              ilçe bilgisiyle aramayı daraltın; telefon, web sitesi ve Google Maps
+              bilgilerini görüntüleyip CSV olarak dışa aktarın.
             </p>
           </div>
         </header>

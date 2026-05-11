@@ -345,7 +345,7 @@ export function StoredLeadsPage({
   return (
     <main className="min-h-screen bg-[#f7fbf9] px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-10">
+        <header className="mb-6">
           <div className="flex items-center justify-between">
             <div className="text-3xl font-semibold tracking-tight text-slate-700">
               Jefedes<span className="text-emerald-500">.</span>
@@ -363,12 +363,12 @@ export function StoredLeadsPage({
             </div>
           </div>
 
-          <div className="mx-auto mt-14 max-w-4xl text-center">
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          <div className="mx-auto mt-8 max-w-3xl text-center">
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-5xl">
               {title}
             </h1>
 
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 md:text-lg">
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-500 md:text-base">
               {description}
             </p>
           </div>

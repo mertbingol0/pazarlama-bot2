@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Business, LeadItem, LeadStatus } from "@/types/business";
+import type {
+  Business,
+  LeadItem,
+  LeadStatus,
+  WhatsAppStatus,
+  WhatsAppStatusFilter,
+} from "@/types/business";
 import {
   getLeadKey,
   saveLeadStatus,
@@ -23,7 +29,30 @@ type ListColumnProps = {
 type DisplayLeadItem = LeadItem & {
   noPhone?: boolean;
   website?: string;
+  whatsappStatus?: WhatsAppStatus;
 };
+
+const whatsappStatusFilters: {
+  label: string;
+  value: WhatsAppStatusFilter;
+}[] = [
+  {
+    label: "Tümü",
+    value: "all",
+  },
+  {
+    label: "Template gönderilenler",
+    value: "template_sent",
+  },
+  {
+    label: "Cevap bekleyenler",
+    value: "waiting_reply",
+  },
+  {
+    label: "Cevap verenler",
+    value: "replied",
+  },
+];
 
 function getStatusClassName(status: LeadStatus) {
   if (status === "approved") {
@@ -35,6 +64,30 @@ function getStatusClassName(status: LeadStatus) {
   }
 
   return "border-orange-100 bg-orange-50/80 text-orange-700";
+}
+
+function getWhatsAppStatusClassName(status: WhatsAppStatus) {
+  if (status === "template_sent") {
+    return "border-blue-100 bg-blue-50/80 text-blue-700";
+  }
+
+  if (status === "waiting_reply") {
+    return "border-slate-100 bg-slate-50 text-slate-600";
+  }
+
+  if (status === "replied") {
+    return "border-emerald-100 bg-emerald-50/80 text-emerald-700";
+  }
+
+  return "border-slate-100 bg-slate-50 text-slate-500";
+}
+
+function getWhatsAppStatusLabel(status: WhatsAppStatus) {
+  if (status === "template_sent") return "Template gönderildi";
+  if (status === "waiting_reply") return "Cevap bekleniyor";
+  if (status === "replied") return "Cevap verdi";
+
+  return "N/A";
 }
 
 function formatSource(source: string) {
@@ -71,6 +124,9 @@ export function ListColumn({
   );
   const [showWithoutPhones, setShowWithoutPhones] = useState(false);
   const [updatingItemKey, setUpdatingItemKey] = useState<string | null>(null);
+  const [whatsappStatusFilter, setWhatsappStatusFilter] =
+    useState<WhatsAppStatusFilter>("all");
+  const [isWhatsappFilterOpen, setIsWhatsappFilterOpen] = useState(false);
 
   const missingPhoneItems = useMemo<DisplayLeadItem[]>(() => {
     if (type !== "phone") return [];
@@ -88,13 +144,40 @@ export function ListColumn({
         noPhone: true,
         website: business.website,
         status: business.status || "pending",
+        whatsappStatus: business.whatsappStatus || "not_sent",
       }));
   }, [businesses, type]);
 
-  const displayItems: DisplayLeadItem[] =
+  const allDisplayItems: DisplayLeadItem[] =
     type === "phone" && showWithoutPhones
       ? [...items, ...missingPhoneItems]
       : items;
+
+  const getRelatedBusiness = (item: DisplayLeadItem) => {
+    return businesses.find((business) => {
+      const itemId = item.businessId || item.id;
+      const businessId = business.id;
+
+      if (itemId && businessId && String(itemId) === String(businessId)) {
+        return true;
+      }
+
+      return normalizeText(business.name) === normalizeText(item.businessName);
+    });
+  };
+
+  const displayItems = allDisplayItems.filter((item) => {
+    if (whatsappStatusFilter === "all") {
+      return true;
+    }
+
+    const relatedBusiness = getRelatedBusiness(item);
+
+    const currentWhatsAppStatus =
+      item.whatsappStatus || relatedBusiness?.whatsappStatus || "not_sent";
+
+    return currentWhatsAppStatus === whatsappStatusFilter;
+  });
 
   const getHref = (value: string, url?: string) => {
     if (type === "phone") {
@@ -156,39 +239,98 @@ export function ListColumn({
         [itemKey]: currentStatus,
       }));
 
-      alert("Durum güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin.");
+      alert(
+        "Durum güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin."
+      );
     } finally {
       setUpdatingItemKey(null);
     }
   };
 
   return (
-    <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle className="text-base font-semibold text-slate-800">
-          {title}
-        </CardTitle>
+    <Card className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <CardHeader className="space-y-4 overflow-visible">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <CardTitle className="text-base font-semibold text-slate-800">
+            {title}
+          </CardTitle>
 
-        <div className="flex items-center gap-2">
-          {type === "phone" && missingPhoneItems.length > 0 && (
+          <div className="flex items-center gap-2">
+            {type === "phone" && missingPhoneItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowWithoutPhones((prev) => !prev)}
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+              >
+                {showWithoutPhones
+                  ? "Telefonsuzları gizle"
+                  : `Telefonsuzları göster (${missingPhoneItems.length})`}
+              </button>
+            )}
+
+            <Badge className="rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+              {displayItems.length}
+            </Badge>
+          </div>
+        </div>
+
+        {type === "phone" && (
+          <div className="relative flex justify-end">
             <button
               type="button"
-              onClick={() => setShowWithoutPhones((prev) => !prev)}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+              onClick={() => setIsWhatsappFilterOpen((prev) => !prev)}
+              className="inline-flex items-center gap-2 rounded-xl px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
             >
-              {showWithoutPhones
-                ? "Telefonsuzları gizle"
-                : `Telefonsuzları göster (${missingPhoneItems.length})`}
-            </button>
-          )}
+              <span>WhatsApp durumuna göre filtrele</span>
 
-          <Badge className="rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
-            {displayItems.length}
-          </Badge>
-        </div>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="text-slate-500"
+              >
+                <path
+                  d="M4 6h16M7 12h10M10 18h4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+
+            {isWhatsappFilterOpen && (
+              <div className="absolute right-0 top-8 z-50 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70">
+                {whatsappStatusFilters.map((filter) => {
+                  const isActive = whatsappStatusFilter === filter.value;
+
+                  return (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      onClick={() => {
+                        setWhatsappStatusFilter(filter.value);
+                        setIsWhatsappFilterOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium transition ${
+                        isActive
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span>{filter.label}</span>
+
+                      {isActive && <span className="text-emerald-600">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="overflow-visible">
         {displayItems.length === 0 ? (
           <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
             Sonuç bulunamadı.
@@ -202,23 +344,16 @@ export function ListColumn({
 
               const isNoPhoneItem = item.noPhone === true;
 
-              const relatedBusiness = businesses.find((business) => {
-                const itemId = item.businessId || item.id;
-                const businessId = business.id;
-
-                if (itemId && businessId && String(itemId) === String(businessId)) {
-                  return true;
-                }
-
-                return (
-                  normalizeText(business.name) ===
-                  normalizeText(item.businessName)
-                );
-              });
+              const relatedBusiness = getRelatedBusiness(item);
 
               const websiteUrl = normalizeExternalUrl(
                 item.website || relatedBusiness?.website
               );
+
+              const currentWhatsAppStatus =
+                item.whatsappStatus ||
+                relatedBusiness?.whatsappStatus ||
+                "not_sent";
 
               const isUpdating = updatingItemKey === itemKey;
 
@@ -227,18 +362,18 @@ export function ListColumn({
                   key={itemKey}
                   className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_160px_180px]">
+                    <div className="min-w-0">
+                      <p className="break-words text-base font-semibold text-slate-900">
+                        {item.businessName}
+                      </p>
+
                       <p
-                        className={`break-all font-semibold ${
-                          isNoPhoneItem ? "text-slate-400" : "text-slate-900"
+                        className={`mt-1 break-all text-sm font-semibold ${
+                          isNoPhoneItem ? "text-slate-400" : "text-slate-800"
                         }`}
                       >
                         {item.value}
-                      </p>
-
-                      <p className="mt-1 text-sm text-slate-600">
-                        {item.businessName}
                       </p>
 
                       {item.address && (
@@ -246,62 +381,82 @@ export function ListColumn({
                           {item.address}
                         </p>
                       )}
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="rounded-full">
+                          Kaynak: {formatSource(item.source)}
+                        </Badge>
+
+                        {isNoPhoneItem && (
+                          <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
+                            Telefon kaydı yok
+                          </Badge>
+                        )}
+
+                        {isUpdating && (
+                          <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
+                            Güncelleniyor...
+                          </Badge>
+                        )}
+                      </div>
                     </div>
 
-                    <select
-                      value={currentStatus}
-                      disabled={isUpdating}
-                      onChange={(event) =>
-                        void handleStatusChange(
-                          item,
-                          itemKey,
-                          currentStatus,
-                          event.target.value as LeadStatus
-                        )
-                      }
-                      className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getStatusClassName(
-                        currentStatus
-                      )}`}
-                    >
-                      <option
-                        className="bg-white text-slate-700"
-                        value="approved"
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-400">
+                        Onay Durumu
+                      </p>
+
+                      <select
+                        value={currentStatus}
+                        disabled={isUpdating}
+                        onChange={(event) =>
+                          void handleStatusChange(
+                            item,
+                            itemKey,
+                            currentStatus,
+                            event.target.value as LeadStatus
+                          )
+                        }
+                        className={`h-9 w-full rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getStatusClassName(
+                          currentStatus
+                        )}`}
                       >
-                        Onaylanan
-                      </option>
+                        <option
+                          className="bg-white text-slate-700"
+                          value="approved"
+                        >
+                          Onaylanan
+                        </option>
 
-                      <option
-                        className="bg-white text-slate-700"
-                        value="pending"
+                        <option
+                          className="bg-white text-slate-700"
+                          value="pending"
+                        >
+                          Bekleyen
+                        </option>
+
+                        <option
+                          className="bg-white text-slate-700"
+                          value="rejected"
+                        >
+                          Reddedilen
+                        </option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-400">
+                        WhatsApp Durumu
+                      </p>
+
+                      <div
+                        className={`flex h-9 items-center rounded-xl border px-3 text-xs font-medium ${getWhatsAppStatusClassName(
+                          currentWhatsAppStatus
+                        )}`}
                       >
-                        Bekleyen
-                      </option>
-
-                      <option
-                        className="bg-white text-slate-700"
-                        value="rejected"
-                      >
-                        Reddedilen
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="rounded-full">
-                      Kaynak: {formatSource(item.source)}
-                    </Badge>
-
-                    {isNoPhoneItem && (
-                      <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
-                        Telefon kaydı yok
-                      </Badge>
-                    )}
-
-                    {isUpdating && (
-                      <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
-                        Güncelleniyor...
-                      </Badge>
-                    )}
+                        {getWhatsAppStatusLabel(currentWhatsAppStatus)}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
