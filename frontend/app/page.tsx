@@ -70,8 +70,8 @@ export default function Home() {
   };
 
   const handleSearch = async () => {
-    if (!category || !city || !district) {
-      setErrorMessage("Lütfen kategori, il ve ilçe seçin.");
+    if (!category) {
+      setErrorMessage("Lütfen en az bir kategori seçin.");
       return;
     }
 
@@ -153,8 +153,8 @@ export default function Home() {
                 </CardTitle>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Arama yapmak için kategori, il, ilçe ve limit bilgilerini
-                  seçin.
+                  Arama yapmak için kategori ve limit seçin.
+                  İsterseniz il ve ilçe bilgisiyle aramayı daraltabilirsiniz.
                 </p>
               </div>
 
