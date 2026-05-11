@@ -56,6 +56,16 @@ function mapBusinessRow(row) {
     userRatingCount: row.user_rating_count,
     source: row.source,
     status: row.status || "pending",
+
+    lat: row.lat,
+    lng: row.lng,
+
+    whatsappStatus: row.whatsapp_status || "not_sent",
+    templateSentAt: row.template_sent_at,
+    lastIncomingAt: row.last_incoming_at,
+    lastMessageText: row.last_message_text,
+    lastWhatsappMessageId: row.last_whatsapp_message_id,
+
     createdAt: row.created_at,
     category: row.category,
     city: row.city,
@@ -72,7 +82,20 @@ function validateBusinessStatus(status) {
     );
   }
 }
+function validateWhatsAppStatus(status) {
+  const allowedStatuses = [
+    "not_sent",
+    "template_sent",
+    "waiting_reply",
+    "replied",
+  ];
 
+  if (!allowedStatuses.includes(status)) {
+    throw new Error(
+      "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply veya replied olabilir."
+    );
+  }
+}
 async function getDb() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -120,6 +143,14 @@ async function initDatabase() {
       category TEXT,
       city TEXT,
       district TEXT,
+      lat REAL,
+      lng REAL,
+      whatsapp_status TEXT DEFAULT 'not_sent',
+      template_sent_at TEXT,
+      last_incoming_at TEXT,
+      last_message_text TEXT,
+      last_whatsapp_message_id TEXT,
+
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE CASCADE
     );
@@ -149,6 +180,37 @@ async function initDatabase() {
   if (!businessColumnNames.includes("district")) {
     await database.exec("ALTER TABLE businesses ADD COLUMN district TEXT;");
   }
+  if (!businessColumnNames.includes("lat")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN lat REAL;");
+}
+
+if (!businessColumnNames.includes("lng")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN lng REAL;");
+}
+
+if (!businessColumnNames.includes("whatsapp_status")) {
+  await database.exec(
+    "ALTER TABLE businesses ADD COLUMN whatsapp_status TEXT DEFAULT 'not_sent';"
+  );
+}
+
+if (!businessColumnNames.includes("template_sent_at")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN template_sent_at TEXT;");
+}
+
+if (!businessColumnNames.includes("last_incoming_at")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN last_incoming_at TEXT;");
+}
+
+if (!businessColumnNames.includes("last_message_text")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN last_message_text TEXT;");
+}
+
+if (!businessColumnNames.includes("last_whatsapp_message_id")) {
+  await database.exec(
+    "ALTER TABLE businesses ADD COLUMN last_whatsapp_message_id TEXT;"
+  );
+}
 
   await database.run(`
     UPDATE businesses
@@ -159,6 +221,8 @@ async function initDatabase() {
   await database.exec(`
     CREATE INDEX IF NOT EXISTS idx_businesses_status ON businesses(status);
     CREATE INDEX IF NOT EXISTS idx_businesses_external_id ON businesses(external_id);
+    CREATE INDEX IF NOT EXISTS idx_businesses_whatsapp_status 
+    ON businesses(whatsapp_status);
   `);
 
   console.log("SQLite database hazır.");
@@ -177,30 +241,37 @@ async function getCachedSearchResults({ category, city, district }) {
     return null;
   }
 
-  const rows = await database.all(
-    `
-    SELECT 
-      id,
-      external_id,
-      name,
-      phone,
-      address,
-      website,
-      google_maps_url,
-      rating,
-      user_rating_count,
-      source,
-      status,
-      category,
-      city,
-      district,
-      created_at
-    FROM businesses
-    WHERE search_id = ?
-    ORDER BY id ASC
-    `,
-    search.id
-  );
+const rows = await database.all(
+  `
+  SELECT 
+    id,
+    external_id,
+    name,
+    phone,
+    address,
+    website,
+    google_maps_url,
+    rating,
+    user_rating_count,
+    source,
+    status,
+    category,
+    city,
+    district,
+    lat,
+    lng,
+    whatsapp_status,
+    template_sent_at,
+    last_incoming_at,
+    last_message_text,
+    last_whatsapp_message_id,
+    created_at
+  FROM businesses
+  WHERE search_id = ?
+  ORDER BY id ASC
+  `,
+  search.id
+);
 
   const businesses = rows.map(mapBusinessRow);
 
@@ -244,26 +315,46 @@ async function saveSearchResults({ category, city, district, businesses }) {
       phone,
       address,
       google_maps_url,
-      status
+      status,
+      whatsapp_status,
+      template_sent_at,
+      last_incoming_at,
+      last_message_text,
+      last_whatsapp_message_id
     FROM businesses
     WHERE search_id = ?
     `,
     search.id
   );
 
-  const existingStatusMap = new Map();
+  const existingBusinessStateMap = new Map();
 
   for (const existingBusiness of existingBusinesses) {
     const key = createBusinessIdentityKey(existingBusiness);
-    existingStatusMap.set(key, existingBusiness.status || "pending");
+
+    existingBusinessStateMap.set(key, {
+      status: existingBusiness.status || "pending",
+      whatsappStatus: existingBusiness.whatsapp_status || "not_sent",
+      templateSentAt: existingBusiness.template_sent_at || null,
+      lastIncomingAt: existingBusiness.last_incoming_at || null,
+      lastMessageText: existingBusiness.last_message_text || null,
+      lastWhatsappMessageId: existingBusiness.last_whatsapp_message_id || null,
+    });
   }
 
   await database.run("DELETE FROM businesses WHERE search_id = ?", search.id);
 
   for (const business of businesses) {
     const businessKey = createBusinessIdentityKey(business);
+    const previousBusinessState = existingBusinessStateMap.get(businessKey) || {};
+
     const preservedStatus =
-      existingStatusMap.get(businessKey) || business.status || "pending";
+      previousBusinessState.status || business.status || "pending";
+
+    const preservedWhatsAppStatus =
+      previousBusinessState.whatsappStatus ||
+      business.whatsappStatus ||
+      "not_sent";
 
     await database.run(
       `
@@ -281,9 +372,16 @@ async function saveSearchResults({ category, city, district, businesses }) {
         status,
         category,
         city,
-        district
+        district,
+        lat,
+        lng,
+        whatsapp_status,
+        template_sent_at,
+        last_incoming_at,
+        last_message_text,
+        last_whatsapp_message_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       search.id,
       business.externalId || business.id || null,
@@ -298,7 +396,16 @@ async function saveSearchResults({ category, city, district, businesses }) {
       preservedStatus,
       business.category || null,
       business.city || null,
-      business.district || null
+      business.district || null,
+      business.lat || business.location?.latitude || null,
+      business.lng || business.location?.longitude || null,
+      preservedWhatsAppStatus,
+      previousBusinessState.templateSentAt || business.templateSentAt || null,
+      previousBusinessState.lastIncomingAt || business.lastIncomingAt || null,
+      previousBusinessState.lastMessageText || business.lastMessageText || null,
+      previousBusinessState.lastWhatsappMessageId ||
+        business.lastWhatsappMessageId ||
+        null
     );
   }
 
@@ -341,29 +448,36 @@ async function getSearchDetailsById(searchId) {
   }
 
   const rows = await database.all(
-    `
-    SELECT 
-      id,
-      external_id,
-      name,
-      phone,
-      address,
-      website,
-      google_maps_url,
-      rating,
-      user_rating_count,
-      source,
-      status,
-      category,
-      city,
-      district,
-      created_at
-    FROM businesses
-    WHERE search_id = ?
-    ORDER BY id ASC
-    `,
-    searchId
-  );
+  `
+  SELECT 
+    id,
+    external_id,
+    name,
+    phone,
+    address,
+    website,
+    google_maps_url,
+    rating,
+    user_rating_count,
+    source,
+    status,
+    category,
+    city,
+    district,
+    lat,
+    lng,
+    whatsapp_status,
+    template_sent_at,
+    last_incoming_at,
+    last_message_text,
+    last_whatsapp_message_id,
+    created_at
+  FROM businesses
+  WHERE search_id = ?
+  ORDER BY id ASC
+  `,
+  searchId
+);
 
   return {
     search,
@@ -390,7 +504,84 @@ async function updateBusinessStatus(businessId, status) {
     return null;
   }
 
-  const updatedBusiness = await database.get(
+const updatedBusiness = await database.get(
+  `
+  SELECT
+    id,
+    external_id,
+    name,
+    phone,
+    address,
+    website,
+    google_maps_url,
+    rating,
+    user_rating_count,
+    source,
+    status,
+    category,
+    city,
+    district,
+    lat,
+    lng,
+    whatsapp_status,
+    template_sent_at,
+    last_incoming_at,
+    last_message_text,
+    last_whatsapp_message_id,
+    created_at
+  FROM businesses
+  WHERE id = ?
+  `,
+  businessId
+);
+
+  return mapBusinessRow(updatedBusiness);
+}
+
+async function getBusinessesByStatus(status) {
+  validateBusinessStatus(status);
+
+  const database = await getDb();
+
+const rows = await database.all(
+  `
+  SELECT
+    b.id,
+    b.external_id,
+    b.name,
+    b.phone,
+    b.address,
+    b.website,
+    b.google_maps_url,
+    b.rating,
+    b.user_rating_count,
+    b.source,
+    b.status,
+    b.lat,
+    b.lng,
+    b.whatsapp_status,
+    b.template_sent_at,
+    b.last_incoming_at,
+    b.last_message_text,
+    b.last_whatsapp_message_id,
+    b.created_at,
+    s.category,
+    s.city,
+    s.district
+  FROM businesses b
+  LEFT JOIN searches s ON s.id = b.search_id
+  WHERE b.status = ?
+  ORDER BY b.created_at DESC, b.id DESC
+  `,
+  status
+);
+
+  return rows.map(mapBusinessRow);
+}
+async function getBusinessById(businessId) {
+  const database = await getDb();
+
+  const row = await database.get(
     `
     SELECT
       id,
@@ -404,6 +595,13 @@ async function updateBusinessStatus(businessId, status) {
       user_rating_count,
       source,
       status,
+      lat,
+      lng,
+      whatsapp_status,
+      template_sent_at,
+      last_incoming_at,
+      last_message_text,
+      last_whatsapp_message_id,
       category,
       city,
       district,
@@ -414,43 +612,186 @@ async function updateBusinessStatus(businessId, status) {
     businessId
   );
 
-  return mapBusinessRow(updatedBusiness);
+  if (!row) {
+    return null;
+  }
+
+  return mapBusinessRow(row);
 }
 
-async function getBusinessesByStatus(status) {
-  validateBusinessStatus(status);
-
+async function getBusinessesByWhatsAppStatus(whatsappStatus = "all") {
   const database = await getDb();
 
-  const rows = await database.all(
-    `
-    SELECT
-      b.id,
-      b.external_id,
-      b.name,
-      b.phone,
-      b.address,
-      b.website,
-      b.google_maps_url,
-      b.rating,
-      b.user_rating_count,
-      b.source,
-      b.status,
-      b.created_at,
-      s.category,
-      s.city,
-      s.district
-    FROM businesses b
-    LEFT JOIN searches s ON s.id = b.search_id
-    WHERE b.status = ?
-    ORDER BY b.created_at DESC, b.id DESC
-    `,
-    status
-  );
+  const normalizedStatus = String(whatsappStatus || "all")
+    .trim()
+    .toLowerCase();
+
+  let rows;
+
+  if (normalizedStatus === "all") {
+    rows = await database.all(`
+      SELECT
+        id,
+        external_id,
+        name,
+        phone,
+        address,
+        website,
+        google_maps_url,
+        rating,
+        user_rating_count,
+        source,
+        status,
+        lat,
+        lng,
+        whatsapp_status,
+        template_sent_at,
+        last_incoming_at,
+        last_message_text,
+        last_whatsapp_message_id,
+        category,
+        city,
+        district,
+        created_at
+      FROM businesses
+      ORDER BY created_at DESC, id DESC
+    `);
+  } else {
+    validateWhatsAppStatus(normalizedStatus);
+
+    rows = await database.all(
+      `
+      SELECT
+        id,
+        external_id,
+        name,
+        phone,
+        address,
+        website,
+        google_maps_url,
+        rating,
+        user_rating_count,
+        source,
+        status,
+        lat,
+        lng,
+        whatsapp_status,
+        template_sent_at,
+        last_incoming_at,
+        last_message_text,
+        last_whatsapp_message_id,
+        category,
+        city,
+        district,
+        created_at
+      FROM businesses
+      WHERE whatsapp_status = ?
+      ORDER BY created_at DESC, id DESC
+      `,
+      normalizedStatus
+    );
+  }
 
   return rows.map(mapBusinessRow);
 }
 
+async function updateBusinessWhatsAppStatus(businessId, whatsappStatus) {
+  validateWhatsAppStatus(whatsappStatus);
+
+  const database = await getDb();
+
+  const result = await database.run(
+    `
+    UPDATE businesses
+    SET whatsapp_status = ?
+    WHERE id = ?
+    `,
+    whatsappStatus,
+    businessId
+  );
+
+  if (result.changes === 0) {
+    return null;
+  }
+
+  return getBusinessById(businessId);
+}
+
+async function markTemplateSent({
+  businessId,
+  whatsappStatus = "waiting_reply",
+  messageId = null,
+}) {
+  validateWhatsAppStatus(whatsappStatus);
+
+  const database = await getDb();
+
+  const result = await database.run(
+    `
+    UPDATE businesses
+    SET
+      whatsapp_status = ?,
+      template_sent_at = CURRENT_TIMESTAMP,
+      last_whatsapp_message_id = ?
+    WHERE id = ?
+    `,
+    whatsappStatus,
+    messageId,
+    businessId
+  );
+
+  if (result.changes === 0) {
+    return null;
+  }
+
+  return getBusinessById(businessId);
+}
+
+async function markIncomingWhatsAppReply({
+  phone,
+  messageText = "",
+  messageId = null,
+}) {
+  const database = await getDb();
+
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+
+  if (!normalizedPhone) {
+    return null;
+  }
+
+  const row = await database.get(
+    `
+    SELECT id
+    FROM businesses
+    WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '') LIKE ?
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    `%${normalizedPhone.slice(-10)}%`
+  );
+
+  if (!row) {
+    return null;
+  }
+
+  await database.run(
+    `
+    UPDATE businesses
+    SET
+      whatsapp_status = 'replied',
+      last_incoming_at = CURRENT_TIMESTAMP,
+      last_message_text = ?,
+      last_whatsapp_message_id = ?
+    WHERE id = ?
+    `,
+    messageText,
+    messageId,
+    row.id
+  );
+
+  return getBusinessById(row.id);
+}
 module.exports = {
   initDatabase,
   getCachedSearchResults,
@@ -459,4 +800,10 @@ module.exports = {
   getSearchDetailsById,
   updateBusinessStatus,
   getBusinessesByStatus,
+
+  getBusinessById,
+  getBusinessesByWhatsAppStatus,
+  updateBusinessWhatsAppStatus,
+  markTemplateSent,
+  markIncomingWhatsAppReply,
 };

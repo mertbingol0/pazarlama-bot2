@@ -13,7 +13,10 @@ import {
   saveLeadStatus,
   type StoredLeadType,
 } from "@/lib/lead-status-storage";
-import { updateBusinessStatus } from "@/lib/api";
+import {
+  updateBusinessStatus,
+  updateBusinessWhatsAppStatus,
+} from "@/lib/api";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -122,8 +125,14 @@ export function ListColumn({
   const [localStatuses, setLocalStatuses] = useState<Record<string, LeadStatus>>(
     {}
   );
+  const [localWhatsAppStatuses, setLocalWhatsAppStatuses] = useState<
+  Record<string, WhatsAppStatus>
+>({});
   const [showWithoutPhones, setShowWithoutPhones] = useState(false);
   const [updatingItemKey, setUpdatingItemKey] = useState<string | null>(null);
+  const [updatingWhatsAppItemKey, setUpdatingWhatsAppItemKey] = useState<
+  string | null
+>(null);
   const [whatsappStatusFilter, setWhatsappStatusFilter] =
     useState<WhatsAppStatusFilter>("all");
   const [isWhatsappFilterOpen, setIsWhatsappFilterOpen] = useState(false);
@@ -173,8 +182,13 @@ export function ListColumn({
 
     const relatedBusiness = getRelatedBusiness(item);
 
-    const currentWhatsAppStatus =
-      item.whatsappStatus || relatedBusiness?.whatsappStatus || "not_sent";
+    const itemKey = getLeadKey(item);
+
+const currentWhatsAppStatus =
+  localWhatsAppStatuses[itemKey] ||
+  item.whatsappStatus ||
+  relatedBusiness?.whatsappStatus ||
+  "not_sent";
 
     return currentWhatsAppStatus === whatsappStatusFilter;
   });
@@ -246,7 +260,51 @@ export function ListColumn({
       setUpdatingItemKey(null);
     }
   };
+const handleWhatsAppStatusChange = async (
+  item: DisplayLeadItem,
+  itemKey: string,
+  currentWhatsAppStatus: WhatsAppStatus,
+  nextWhatsAppStatus: WhatsAppStatus
+) => {
+  if (currentWhatsAppStatus === nextWhatsAppStatus) return;
 
+  const businessId = item.businessId || item.id;
+
+  if (!businessId) {
+    alert("Business ID bulunamadı. WhatsApp durumu güncellenemedi.");
+    return;
+  }
+
+  setUpdatingWhatsAppItemKey(itemKey);
+
+  setLocalWhatsAppStatuses((prev) => ({
+    ...prev,
+    [itemKey]: nextWhatsAppStatus,
+  }));
+
+  try {
+    await updateBusinessWhatsAppStatus(businessId, nextWhatsAppStatus);
+
+    console.log(
+      "Backend WhatsApp status güncellendi:",
+      businessId,
+      nextWhatsAppStatus
+    );
+  } catch (error) {
+    console.error("WhatsApp status güncelleme hatası:", error);
+
+    setLocalWhatsAppStatuses((prev) => ({
+      ...prev,
+      [itemKey]: currentWhatsAppStatus,
+    }));
+
+    alert(
+      "WhatsApp durumu güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin."
+    );
+  } finally {
+    setUpdatingWhatsAppItemKey(null);
+  }
+};
   return (
     <Card className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
       <CardHeader className="space-y-4 overflow-visible">
@@ -350,12 +408,14 @@ export function ListColumn({
                 item.website || relatedBusiness?.website
               );
 
-              const currentWhatsAppStatus =
-                item.whatsappStatus ||
-                relatedBusiness?.whatsappStatus ||
-                "not_sent";
+             const currentWhatsAppStatus =
+  localWhatsAppStatuses[itemKey] ||
+  item.whatsappStatus ||
+  relatedBusiness?.whatsappStatus ||
+  "not_sent";
 
-              const isUpdating = updatingItemKey === itemKey;
+const isUpdating = updatingItemKey === itemKey;
+const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
 
               return (
                 <div
@@ -449,13 +509,37 @@ export function ListColumn({
                         WhatsApp Durumu
                       </p>
 
-                      <div
-                        className={`flex h-9 items-center rounded-xl border px-3 text-xs font-medium ${getWhatsAppStatusClassName(
-                          currentWhatsAppStatus
-                        )}`}
-                      >
-                        {getWhatsAppStatusLabel(currentWhatsAppStatus)}
-                      </div>
+                     <select
+  value={currentWhatsAppStatus}
+  disabled={isWhatsAppUpdating}
+  onChange={(event) =>
+    void handleWhatsAppStatusChange(
+      item,
+      itemKey,
+      currentWhatsAppStatus,
+      event.target.value as WhatsAppStatus
+    )
+  }
+  className={`h-9 w-full rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getWhatsAppStatusClassName(
+    currentWhatsAppStatus
+  )}`}
+>
+  <option className="bg-white text-slate-700" value="not_sent">
+    N/A
+  </option>
+
+  <option className="bg-white text-slate-700" value="template_sent">
+    Template gönderildi
+  </option>
+
+  <option className="bg-white text-slate-700" value="waiting_reply">
+    Cevap bekleniyor
+  </option>
+
+  <option className="bg-white text-slate-700" value="replied">
+    Cevap verdi
+  </option>
+</select>
                     </div>
                   </div>
 

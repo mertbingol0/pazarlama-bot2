@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  GoogleMap,
+  InfoWindow,
+  Marker,
+  useLoadScript,
+} from "@react-google-maps/api";
+
 import type { Business } from "@/types/business";
 
 import { Button } from "@/components/ui/button";
@@ -11,144 +18,234 @@ type ResultsMapProps = {
 };
 
 type MapBusiness = Business & {
-  location: {
+  mapLocation: {
     lat: number;
     lng: number;
   };
 };
 
-function hasValidLocation(business: Business): business is MapBusiness {
-  return (
-    typeof business.location?.lat === "number" &&
-    typeof business.location?.lng === "number"
-  );
+function getBusinessLocation(business: Business) {
+  const location = business.location as
+    | {
+        lat?: number;
+        lng?: number;
+        latitude?: number;
+        longitude?: number;
+      }
+    | undefined;
+
+  const lat = business.lat ?? location?.lat ?? location?.latitude ?? null;
+  const lng = business.lng ?? location?.lng ?? location?.longitude ?? null;
+
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return null;
+  }
+
+  return { lat, lng };
 }
 
-function getPinPosition(
-  business: MapBusiness,
-  bounds: {
-    minLat: number;
-    maxLat: number;
-    minLng: number;
-    maxLng: number;
-  }
-) {
-  const latRange = bounds.maxLat - bounds.minLat || 1;
-  const lngRange = bounds.maxLng - bounds.minLng || 1;
+function getMapBusinesses(businesses: Business[]): MapBusiness[] {
+  return businesses
+    .map((business) => {
+      const mapLocation = getBusinessLocation(business);
 
-  const x = ((business.location.lng - bounds.minLng) / lngRange) * 82 + 9;
-  const y = (1 - (business.location.lat - bounds.minLat) / latRange) * 68 + 16;
+      if (!mapLocation) {
+        return null;
+      }
+
+      return {
+        ...business,
+        mapLocation,
+      };
+    })
+    .filter((business): business is MapBusiness => business !== null);
+}
+
+function getCenter(mapBusinesses: MapBusiness[]) {
+  if (mapBusinesses.length === 0) {
+    return {
+      lat: 41.0082,
+      lng: 28.9784,
+    };
+  }
+
+  const total = mapBusinesses.reduce(
+    (acc, business) => ({
+      lat: acc.lat + business.mapLocation.lat,
+      lng: acc.lng + business.mapLocation.lng,
+    }),
+    { lat: 0, lng: 0 }
+  );
 
   return {
-    left: `${Math.min(Math.max(x, 6), 94)}%`,
-    top: `${Math.min(Math.max(y, 10), 90)}%`,
+    lat: total.lat / mapBusinesses.length,
+    lng: total.lng / mapBusinesses.length,
   };
+}
+
+function normalizeExternalUrl(url?: string) {
+  if (!url) return "";
+
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  return `https://${url}`;
 }
 
 export function ResultsMap({ businesses }: ResultsMapProps) {
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [selectedBusiness, setSelectedBusiness] = useState<MapBusiness | null>(
+    null
+  );
+
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: apiKey,
+  });
 
   const mapBusinesses = useMemo(
-    () => businesses.filter(hasValidLocation),
+    () => getMapBusinesses(businesses),
     [businesses]
   );
 
-  const bounds = useMemo(() => {
-    if (mapBusinesses.length === 0) {
-      return {
-        minLat: 39,
-        maxLat: 42,
-        minLng: 28,
-        maxLng: 32,
-      };
+  const center = useMemo(() => getCenter(mapBusinesses), [mapBusinesses]);
+
+  const fitMapToMarkers = useCallback(
+    (map: google.maps.Map) => {
+      if (mapBusinesses.length === 0) return;
+
+      const bounds = new window.google.maps.LatLngBounds();
+
+      mapBusinesses.forEach((business) => {
+        bounds.extend(business.mapLocation);
+      });
+
+      map.fitBounds(bounds);
+
+      if (mapBusinesses.length === 1) {
+        map.setZoom(15);
+      }
+    },
+    [mapBusinesses]
+  );
+
+  const renderMap = (heightClassName: string) => {
+    if (!apiKey) {
+      return (
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 px-6 text-center">
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              Google Maps API key bulunamadı.
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              frontend/.env.local içine NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ekleyin.
+            </p>
+          </div>
+        </div>
+      );
     }
 
-    const lats = mapBusinesses.map((business) => business.location.lat);
-    const lngs = mapBusinesses.map((business) => business.location.lng);
+    if (loadError) {
+      return (
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-red-100 bg-red-50 px-6 text-center">
+          <div>
+            <p className="text-sm font-semibold text-red-700">
+              Google Maps yüklenemedi.
+            </p>
+            <p className="mt-1 text-xs text-red-600">
+              API key, Maps JavaScript API veya localhost restriction ayarlarını
+              kontrol edin.
+            </p>
+          </div>
+        </div>
+      );
+    }
 
-    return {
-      minLat: Math.min(...lats),
-      maxLat: Math.max(...lats),
-      minLng: Math.min(...lngs),
-      maxLng: Math.max(...lngs),
-    };
-  }, [mapBusinesses]);
+    if (!isLoaded) {
+      return (
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 text-sm text-slate-500">
+          Harita yükleniyor...
+        </div>
+      );
+    }
 
-  const previewBusinesses = mapBusinesses.slice(0, 30);
-
-  const mapContent = (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => setIsFullscreenOpen(true)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          setIsFullscreenOpen(true);
-        }
-      }}
-      className="relative h-full min-h-[220px] cursor-pointer overflow-hidden rounded-2xl border border-emerald-100 bg-[linear-gradient(135deg,#eefaf4_0%,#f8fbff_35%,#e8f4ff_70%,#f2fbf6_100%)]"
-    >
-      <div className="absolute inset-0 opacity-60">
-        <div className="absolute left-[-10%] top-[35%] h-16 w-[120%] rotate-[-8deg] rounded-full bg-sky-100" />
-        <div className="absolute left-[8%] top-[20%] h-1 w-[90%] rotate-[6deg] rounded-full bg-slate-200" />
-        <div className="absolute left-[0%] top-[62%] h-1 w-[100%] rotate-[-4deg] rounded-full bg-slate-200" />
-        <div className="absolute left-[28%] top-[-10%] h-[120%] w-1 rotate-[18deg] rounded-full bg-slate-200" />
-        <div className="absolute left-[62%] top-[-10%] h-[120%] w-1 rotate-[-14deg] rounded-full bg-slate-200" />
-      </div>
-
-      <div className="absolute left-4 top-4 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
-        Haritada sonuçlar
-      </div>
-
-      {previewBusinesses.length === 0 ? (
-        <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-          <div className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-700">
+    if (mapBusinesses.length === 0) {
+      return (
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 px-6 text-center">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">
               Harita için konum verisi bulunamadı.
             </p>
             <p className="mt-1 text-xs text-slate-400">
               Backend sonuçlarında lat/lng bilgisi geldiğinde işletmeler burada
-              pin olarak görünecek.
+              görünecek.
             </p>
           </div>
         </div>
-      ) : (
-        previewBusinesses.map((business) => {
-          const position = getPinPosition(business, bounds);
+      );
+    }
 
-          return (
-            <div
-              key={`${business.id || business.name}-${business.location.lat}-${business.location.lng}`}
-              className="group absolute z-10 -translate-x-1/2 -translate-y-full"
-              style={position}
-            >
-              <div className="relative">
-                <div className="h-8 w-8 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200 ring-4 ring-white transition group-hover:scale-110" />
+    return (
+      <GoogleMap
+        mapContainerClassName={`w-full rounded-2xl ${heightClassName}`}
+        center={center}
+        zoom={12}
+        onLoad={fitMapToMarkers}
+        options={{
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+        }}
+      >
+        {mapBusinesses.map((business) => (
+          <Marker
+            key={`${business.id || business.name}-${business.mapLocation.lat}-${business.mapLocation.lng}`}
+            position={business.mapLocation}
+            title={business.name}
+            onClick={() => setSelectedBusiness(business)}
+          />
+        ))}
 
-                <div className="absolute left-1/2 top-[27px] h-3 w-3 -translate-x-1/2 rotate-45 bg-emerald-500" />
+        {selectedBusiness && (
+          <InfoWindow
+            position={selectedBusiness.mapLocation}
+            onCloseClick={() => setSelectedBusiness(null)}
+          >
+            <div className="max-w-[240px] text-sm">
+              <p className="font-semibold text-slate-900">
+                {selectedBusiness.name}
+              </p>
 
-                <div className="pointer-events-none absolute bottom-10 left-1/2 hidden w-48 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block">
-                  <p className="font-semibold text-slate-900">
-                    {business.name}
-                  </p>
+              {selectedBusiness.address && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedBusiness.address}
+                </p>
+              )}
 
-                  {business.address && (
-                    <p className="mt-1 line-clamp-2 text-slate-400">
-                      {business.address}
-                    </p>
-                  )}
-                </div>
-              </div>
+              {selectedBusiness.phone && (
+                <p className="mt-2 text-xs font-medium text-slate-700">
+                  {selectedBusiness.phone}
+                </p>
+              )}
+
+              {selectedBusiness.googleMapsUrl && (
+                <a
+                  href={normalizeExternalUrl(selectedBusiness.googleMapsUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white"
+                >
+                  Google Maps’te Aç
+                </a>
+              )}
             </div>
-          );
-        })
-      )}
-
-      <div className="absolute bottom-4 right-4 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
-        Tıklayınca tam ekran açılır
-      </div>
-    </div>
-  );
+          </InfoWindow>
+        )}
+      </GoogleMap>
+    );
+  };
 
   return (
     <>
@@ -160,7 +257,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
             </CardTitle>
 
             <p className="mt-1 text-sm text-slate-500">
-              Bulunan işletmelerin konumlarını harita üzerinde görüntüleyin.
+              Bulunan işletmelerin konumlarını Google Maps üzerinde görüntüleyin.
             </p>
           </div>
 
@@ -174,7 +271,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
           </Button>
         </CardHeader>
 
-        <CardContent>{mapContent}</CardContent>
+        <CardContent>{renderMap("h-[320px]")}</CardContent>
       </Card>
 
       {isFullscreenOpen && (
@@ -187,7 +284,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
                 </h2>
 
                 <p className="text-sm text-slate-500">
-                  {previewBusinesses.length} konum gösteriliyor.
+                  {mapBusinesses.length} konum gösteriliyor.
                 </p>
               </div>
 
@@ -195,14 +292,13 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
                 type="button"
                 variant="outline"
                 onClick={() => setIsFullscreenOpen(false)}
-                className="rounded-xl"
               >
                 Kapat
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 p-6">
-              <div className="h-full">{mapContent}</div>
+            <div className="flex-1 p-6">
+              {renderMap("h-full min-h-[520px]")}
             </div>
           </div>
         </div>

@@ -3,6 +3,8 @@ import type {
   LeadStatus,
   SearchApiResponse,
   SearchParams,
+  WhatsAppStatus,
+  WhatsAppStatusFilter,
 } from "@/types/business";
 
 export const API_BASE_URL = "http://localhost:5000";
@@ -22,7 +24,30 @@ type BusinessesByStatusResponse = BackendErrorResponse & {
   count: number;
   businesses: Business[];
 };
+type BusinessesByWhatsAppStatusResponse = BackendErrorResponse & {
+  success: boolean;
+  whatsappStatus: WhatsAppStatusFilter;
+  count: number;
+  businesses: Business[];
+};
 
+type WhatsAppStatusUpdateResponse = BackendErrorResponse & {
+  success: boolean;
+  business: Business;
+};
+
+type SendWhatsAppTemplateResponse = BackendErrorResponse & {
+  success: boolean;
+  sentCount: number;
+  failedCount: number;
+  results: unknown[];
+};
+
+type SendWhatsAppMessageResponse = BackendErrorResponse & {
+  success: boolean;
+  result?: unknown;
+  business?: Business;
+};
 type WhatsAppTestMessageResponse = BackendErrorResponse & {
   success: boolean;
   result?: {
@@ -155,6 +180,118 @@ export async function sendWhatsAppTestMessage({
   if (!response.ok || !data.success) {
     throw new Error(
       data.message || data.error || "WhatsApp mesajı gönderilemedi."
+    );
+  }
+
+  return data;
+}
+export async function getBusinessesByWhatsAppStatus(
+  whatsappStatus: WhatsAppStatusFilter
+): Promise<BusinessesByWhatsAppStatusResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/businesses?whatsappStatus=${whatsappStatus}`
+  );
+
+  const data = await readJsonResponse<BusinessesByWhatsAppStatusResponse>(
+    response
+  );
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ||
+        data.error ||
+        "WhatsApp durumuna göre firmalar getirilemedi."
+    );
+  }
+
+  return data;
+}
+
+export async function updateBusinessWhatsAppStatus(
+  businessId: string | number,
+  whatsappStatus: WhatsAppStatus
+): Promise<WhatsAppStatusUpdateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/businesses/${businessId}/whatsapp-status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        whatsappStatus,
+      }),
+    }
+  );
+
+  const data = await readJsonResponse<WhatsAppStatusUpdateResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ||
+        data.error ||
+        "WhatsApp durumu güncellenirken hata oluştu."
+    );
+  }
+
+  return data;
+}
+
+export async function sendWhatsAppTemplate({
+  businessIds,
+  templateName,
+  languageCode = "en_US",
+}: {
+  businessIds: Array<string | number>;
+  templateName: string;
+  languageCode?: string;
+}): Promise<SendWhatsAppTemplateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/whatsapp/send-template`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      businessIds,
+      templateName,
+      languageCode,
+    }),
+  });
+
+  const data = await readJsonResponse<SendWhatsAppTemplateResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "WhatsApp template gönderilemedi."
+    );
+  }
+
+  return data;
+}
+
+export async function sendWhatsAppMessage({
+  businessId,
+  message,
+}: {
+  businessId: string | number;
+  message: string;
+}): Promise<SendWhatsAppMessageResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/whatsapp/send-message`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      businessId,
+      message,
+    }),
+  });
+
+  const data = await readJsonResponse<SendWhatsAppMessageResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "WhatsApp manuel mesaj gönderilemedi."
     );
   }
 

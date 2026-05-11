@@ -2,6 +2,7 @@ const { searchBusinessesWithGoogle } = require("./services/googlePlacesService")
 const {
   sendWhatsAppTextMessage,
   sendWhatsAppTemplateTest,
+  sendWhatsAppTemplateMessage,
 } = require("./services/whatsappService");
 const {
   initDatabase,
@@ -11,6 +12,12 @@ const {
   getSearchDetailsById,
   updateBusinessStatus,
   getBusinessesByStatus,
+
+  getBusinessById,
+  getBusinessesByWhatsAppStatus,
+  updateBusinessWhatsAppStatus,
+  markTemplateSent,
+  markIncomingWhatsAppReply,
 } = require("./db");
 
 const express = require("express");
@@ -33,6 +40,11 @@ app.use(express.json());
 
 function isValidStatus(status) {
   return ["approved", "pending", "rejected"].includes(status);
+}
+function isValidWhatsAppStatus(status) {
+  return ["not_sent", "template_sent", "waiting_reply", "replied"].includes(
+    status
+  );
 }
 
 app.get("/api/searches", async (req, res) => {
@@ -177,7 +189,332 @@ app.get("/api/businesses/status/:status", async (req, res) => {
     });
   }
 });
+app.get("/api/businesses", async (req, res) => {
+  try {
+    const whatsappStatus = String(req.query.whatsappStatus || "all")
+      .trim()
+      .toLowerCase();
 
+    if (whatsappStatus !== "all" && !isValidWhatsAppStatus(whatsappStatus)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "whatsappStatus sadece all, not_sent, template_sent, waiting_reply veya replied olabilir.",
+      });
+    }
+
+    const businesses = await getBusinessesByWhatsAppStatus(whatsappStatus);
+
+    return res.status(200).json({
+      success: true,
+      message: "İşletmeler başarıyla getirildi.",
+      whatsappStatus,
+      count: businesses.length,
+      businesses,
+    });
+  } catch (error) {
+    console.error("/api/businesses hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "İşletmeler getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.patch("/api/businesses/:id/whatsapp-status", async (req, res) => {
+  try {
+    const businessId = Number(req.params.id);
+    const whatsappStatus = String(req.body.whatsappStatus || "")
+      .trim()
+      .toLowerCase();
+
+    if (!Number.isInteger(businessId) || businessId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli bir işletme ID değeri gönderilmelidir.",
+      });
+    }
+
+    if (!whatsappStatus) {
+      return res.status(400).json({
+        success: false,
+        message: "whatsappStatus alanı zorunludur.",
+      });
+    }
+
+    if (!isValidWhatsAppStatus(whatsappStatus)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "whatsappStatus sadece not_sent, template_sent, waiting_reply veya replied olabilir.",
+      });
+    }
+
+    const updatedBusiness = await updateBusinessWhatsAppStatus(
+      businessId,
+      whatsappStatus
+    );
+
+    if (!updatedBusiness) {
+      return res.status(404).json({
+        success: false,
+        message: "İşletme bulunamadı.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "WhatsApp durumu başarıyla güncellendi.",
+      business: updatedBusiness,
+    });
+  } catch (error) {
+    console.error("/api/businesses/:id/whatsapp-status hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "WhatsApp durumu güncellenirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/whatsapp/send-template", async (req, res) => {
+  try {
+    const {
+      businessIds = [],
+      templateName = "hello_world",
+      languageCode = "en_US",
+    } = req.body;
+
+    if (!Array.isArray(businessIds) || businessIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "En az bir businessIds değeri gönderilmelidir.",
+      });
+    }
+
+    const results = [];
+
+    for (const rawBusinessId of businessIds) {
+      const businessId = Number(rawBusinessId);
+
+      if (!Number.isInteger(businessId) || businessId <= 0) {
+        results.push({
+          businessId: rawBusinessId,
+          success: false,
+          message: "Geçersiz işletme ID.",
+        });
+        continue;
+      }
+
+      const business = await getBusinessById(businessId);
+
+      if (!business) {
+        results.push({
+          businessId,
+          success: false,
+          message: "İşletme bulunamadı.",
+        });
+        continue;
+      }
+
+      if (!business.phone) {
+        results.push({
+          businessId,
+          success: false,
+          message: "İşletmenin telefon numarası yok.",
+        });
+        continue;
+      }
+
+      try {
+        const whatsappResult = await sendWhatsAppTemplateMessage({
+          to: business.phone,
+          templateName,
+          languageCode,
+        });
+
+        const updatedBusiness = await markTemplateSent({
+          businessId,
+          whatsappStatus: "waiting_reply",
+          messageId: whatsappResult.messageId,
+        });
+
+        results.push({
+          businessId,
+          success: true,
+          message: "Template gönderim isteği Meta tarafına iletildi.",
+          whatsapp: whatsappResult,
+          business: updatedBusiness,
+        });
+      } catch (error) {
+        results.push({
+          businessId,
+          success: false,
+          message: error.message || "Template gönderilemedi.",
+        });
+      }
+    }
+
+    const sentCount = results.filter((item) => item.success).length;
+    const failedCount = results.length - sentCount;
+
+    return res.status(200).json({
+      success: true,
+      message: "Template gönderim işlemi tamamlandı.",
+      sentCount,
+      failedCount,
+      results,
+    });
+  } catch (error) {
+    console.error("/api/whatsapp/send-template hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "WhatsApp template gönderilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/whatsapp/send-message", async (req, res) => {
+  try {
+    const businessId = Number(req.body.businessId);
+    const message = String(req.body.message || "").trim();
+
+    if (!Number.isInteger(businessId) || businessId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli bir businessId gönderilmelidir.",
+      });
+    }
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: "Mesaj içeriği zorunludur.",
+      });
+    }
+
+    const business = await getBusinessById(businessId);
+
+    if (!business) {
+      return res.status(404).json({
+        success: false,
+        message: "İşletme bulunamadı.",
+      });
+    }
+
+    if (!business.phone) {
+      return res.status(400).json({
+        success: false,
+        message: "İşletmenin telefon numarası yok.",
+      });
+    }
+
+    if (business.whatsappStatus !== "replied") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Bu işletmeye manuel mesaj göndermek için önce müşterinin cevap vermiş olması gerekir. İlk temas için template gönderin.",
+      });
+    }
+
+    const whatsappResult = await sendWhatsAppTextMessage({
+      to: business.phone,
+      message,
+    });
+
+    const updatedBusiness = await updateBusinessWhatsAppStatus(
+      businessId,
+      "replied"
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "WhatsApp manuel mesaj gönderim isteği Meta tarafına iletildi.",
+      result: whatsappResult,
+      business: updatedBusiness,
+    });
+  } catch (error) {
+    console.error("/api/whatsapp/send-message hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "WhatsApp manuel mesaj gönderilemedi.",
+    });
+  }
+});
+
+app.get("/api/whatsapp/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+
+  if (mode === "subscribe" && token === verifyToken) {
+    console.log("WhatsApp webhook doğrulandı.");
+    return res.status(200).send(challenge);
+  }
+
+  return res.sendStatus(403);
+});
+
+app.post("/api/whatsapp/webhook", async (req, res) => {
+  try {
+    const body = req.body;
+
+    const entry = body.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value;
+    const message = value?.messages?.[0];
+
+    if (!message) {
+      return res.sendStatus(200);
+    }
+
+    const from = message.from;
+    const messageId = message.id;
+
+    let messageText = "";
+
+    if (message.type === "text") {
+      messageText = message.text?.body || "";
+    }
+
+    if (message.type === "button") {
+      messageText = message.button?.text || "";
+    }
+
+    if (message.type === "interactive") {
+      messageText =
+        message.interactive?.button_reply?.title ||
+        message.interactive?.list_reply?.title ||
+        "";
+    }
+
+    const updatedBusiness = await markIncomingWhatsAppReply({
+      phone: from,
+      messageText,
+      messageId,
+    });
+
+    console.log("WhatsApp gelen mesaj:", {
+      from,
+      messageText,
+      updatedBusinessId: updatedBusiness?.id || null,
+    });
+
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error("/api/whatsapp/webhook POST hata:", error);
+
+    return res.sendStatus(200);
+  }
+});
 app.post("/api/search", async (req, res) => {
   const {
     category,
@@ -270,20 +607,58 @@ app.post("/api/search", async (req, res) => {
 
     const phones = businesses
       .filter((business) => business.phone)
-      .map((business) => ({
-        id: business.id,
-        value: business.phone,
-        businessName: business.name,
-        address: business.address,
-        source: business.source || "google_places",
-        url: business.googleMapsUrl,
-        website: business.website,
-        rating: business.rating,
-        status: business.status || "pending",
-      }));
+   .map((business) => ({
+  id: business.id,
+  businessId: business.id,
+  value: business.phone,
+  businessName: business.name,
+  address: business.address,
+  source: business.source || "google_places",
+  url: business.googleMapsUrl,
+  website: business.website,
+  rating: business.rating,
+  status: business.status || "pending",
+
+  whatsappStatus: business.whatsappStatus || "not_sent",
+  templateSentAt: business.templateSentAt || null,
+  lastIncomingAt: business.lastIncomingAt || null,
+  lastMessageText: business.lastMessageText || null,
+  lastWhatsappMessageId: business.lastWhatsappMessageId || null,
+
+  lat: business.lat || null,
+  lng: business.lng || null,
+}));
 
     const totalBusinesses = businesses.length;
     const phonesFound = phones.length;
+    if (totalBusinesses === 0) {
+  return res.status(200).json({
+    success: true,
+    provider: "google",
+    message:
+      "Google Places araması tamamlandı ancak bu kriterlerle işletme bulunamadı. Kategori, il, ilçe veya API bağlantısını kontrol edin.",
+    fromCache,
+    query: {
+      category: normalizedCategory,
+      city: normalizedCity,
+      district: normalizedDistrict,
+      limit,
+      searchQuery,
+    },
+    stats: {
+      totalBusinesses: 0,
+      phonesFound: 0,
+      emailsFound: 0,
+      instagramsFound: 0,
+    },
+    results: {
+      phones: [],
+      emails: [],
+      instagrams: [],
+    },
+    businesses: [],
+  });
+}
 
     return res.status(200).json({
       success: true,

@@ -39,6 +39,12 @@ export type LeadItem = {
   website?: string;
   status?: LeadStatus;
   whatsappStatus?: WhatsAppStatus;
+  lat?: number | null;
+lng?: number | null;
+templateSentAt?: string | null;
+lastIncomingAt?: string | null;
+lastMessageText?: string | null;
+lastWhatsappMessageId?: string | null;
 };
 
 export type Business = {
@@ -52,12 +58,22 @@ export type Business = {
   userRatingCount?: number;
   status?: LeadStatus;
   whatsappStatus?: WhatsAppStatus;
-  location?: {
-    lat?: number;
-    lng?: number;
-  };
-};
 
+  lat?: number | null;
+  lng?: number | null;
+
+  templateSentAt?: string | null;
+  lastIncomingAt?: string | null;
+  lastMessageText?: string | null;
+  lastWhatsappMessageId?: string | null;
+
+location?: {
+  lat?: number;
+  lng?: number;
+  latitude?: number;
+  longitude?: number;
+};
+};
 export type SearchResult = {
   searchId?: string;
   status?: "processing" | "completed" | "failed";

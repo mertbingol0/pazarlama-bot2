@@ -218,13 +218,24 @@ function normalizeGoogleBusiness(
     googleMapsUrl: place.googleMapsUri || "",
     rating: place.rating || null,
     userRatingCount: place.userRatingCount || null,
+
+    lat: place.location?.latitude || null,
+    lng: place.location?.longitude || null,
+
     location: place.location
       ? {
           latitude: place.location.latitude,
           longitude: place.location.longitude,
         }
       : null,
+
     status: "pending",
+    whatsappStatus: "not_sent",
+    templateSentAt: null,
+    lastIncomingAt: null,
+    lastMessageText: null,
+    lastWhatsappMessageId: null,
+
     source: "google_places",
     category: category || null,
     city: city || null,
@@ -396,8 +407,13 @@ async function searchBusinessesWithGoogle({
 
       businesses = mergeUniqueBusinesses(businesses, keywordBusinesses);
     } catch (error) {
-      console.error(`"${keyword}" araması başarısız oldu:`, error.message);
-    }
+  console.error(`"${keyword}" araması başarısız oldu:`, {
+    name: error.name,
+    message: error.message,
+    cause: error.cause?.message,
+    stack: error.stack,
+  });
+}
   }
 
   const limitedBusinesses = businesses.slice(0, safeLimit);
