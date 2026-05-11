@@ -24,7 +24,14 @@ type MapBusiness = Business & {
   };
 };
 
+type BusinessWithPossibleCoordinates = Business & {
+  lat?: number;
+  lng?: number;
+};
+
 function getBusinessLocation(business: Business) {
+  const businessWithCoordinates = business as BusinessWithPossibleCoordinates;
+
   const location = business.location as
     | {
         lat?: number;
@@ -34,8 +41,11 @@ function getBusinessLocation(business: Business) {
       }
     | undefined;
 
-  const lat = business.lat ?? location?.lat ?? location?.latitude ?? null;
-  const lng = business.lng ?? location?.lng ?? location?.longitude ?? null;
+  const lat =
+    businessWithCoordinates.lat ?? location?.lat ?? location?.latitude ?? null;
+
+  const lng =
+    businessWithCoordinates.lng ?? location?.lng ?? location?.longitude ?? null;
 
   if (typeof lat !== "number" || typeof lng !== "number") {
     return null;
@@ -139,6 +149,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
             <p className="text-sm font-semibold text-amber-800">
               Google Maps API key bulunamadı.
             </p>
+
             <p className="mt-1 text-xs text-amber-700">
               frontend/.env.local içine NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ekleyin.
             </p>
@@ -154,6 +165,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
             <p className="text-sm font-semibold text-red-700">
               Google Maps yüklenemedi.
             </p>
+
             <p className="mt-1 text-xs text-red-600">
               API key, Maps JavaScript API veya localhost restriction ayarlarını
               kontrol edin.
@@ -178,6 +190,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
             <p className="text-sm font-semibold text-slate-700">
               Harita için konum verisi bulunamadı.
             </p>
+
             <p className="mt-1 text-xs text-slate-400">
               Backend sonuçlarında lat/lng bilgisi geldiğinde işletmeler burada
               görünecek.
@@ -292,12 +305,13 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
                 type="button"
                 variant="outline"
                 onClick={() => setIsFullscreenOpen(false)}
+                className="rounded-xl"
               >
                 Kapat
               </Button>
             </div>
 
-            <div className="flex-1 p-6">
+            <div className="min-h-0 flex-1 p-6">
               {renderMap("h-full min-h-[520px]")}
             </div>
           </div>
