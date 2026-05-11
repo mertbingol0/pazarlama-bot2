@@ -11,9 +11,14 @@ type ResultsPanelProps = {
 };
 
 export function ResultsPanel({ results }: ResultsPanelProps) {
+  const businessesWithoutPhone = Math.max(
+    results.stats.totalBusinesses - results.stats.phonesFound,
+    0
+  );
+
   return (
     <>
-      <section className="mt-6 grid gap-4 md:grid-cols-4">
+      <section className="mt-6 grid gap-4 md:grid-cols-3">
         <StatCard
           title="Toplam İşletme"
           value={results.stats.totalBusinesses}
@@ -21,9 +26,7 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
 
         <StatCard title="Telefon" value={results.stats.phonesFound} />
 
-        <StatCard title="E-posta" value={results.stats.emailsFound} />
-
-        <StatCard title="Instagram" value={results.stats.instagramsFound} />
+        <StatCard title="Telefonsuz" value={businessesWithoutPhone} />
       </section>
 
       {results.fromCache && (
@@ -32,8 +35,8 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         </div>
       )}
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-3">
-        <div className="order-1 xl:order-3">
+      <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.9fr)]">
+        <div className="order-1 xl:order-2">
           <WhatsAppBusinessPanel />
         </div>
 
@@ -42,15 +45,6 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
             title="WhatsApp / Telefon"
             items={results.results.phones}
             type="phone"
-            businesses={results.businesses || []}
-          />
-        </div>
-
-        <div className="order-3 xl:order-2">
-          <ListColumn
-            title="E-Posta"
-            items={results.results.emails}
-            type="email"
             businesses={results.businesses || []}
           />
         </div>

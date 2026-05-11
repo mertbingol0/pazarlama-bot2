@@ -50,9 +50,22 @@ export default function Home() {
       setDistrict(parsedSearch.district || "");
       setLimit(parsedSearch.limit || "50");
       setResults(parsedSearch.results || null);
-    } catch {
+    } catch (error) {
+      console.error("Son arama okunamadı:", error);
       localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
     }
+  }, []);
+
+  useEffect(() => {
+    const clearLastSearchOnPageClose = () => {
+      localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
+    };
+
+    window.addEventListener("beforeunload", clearLastSearchOnPageClose);
+
+    return () => {
+      window.removeEventListener("beforeunload", clearLastSearchOnPageClose);
+    };
   }, []);
 
   const saveLastSearch = (searchState: SavedSearchState) => {
@@ -66,6 +79,7 @@ export default function Home() {
     setLimit("50");
     setResults(null);
     setErrorMessage(null);
+
     localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
   };
 
@@ -110,6 +124,7 @@ export default function Home() {
       });
     } catch (error) {
       console.error("Backend bağlantı hatası:", error);
+
       setErrorMessage(
         "Backend bağlantısı kurulamadı veya arama sonuçları alınamadı."
       );
@@ -137,9 +152,9 @@ export default function Home() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 md:text-lg">
-              Kategori, il, ilçe ve arama limiti seçerek işletmeleri arayın.
-              Telefon, e-posta ve Instagram sonuçlarını ayrı listelerde
-              görüntüleyin, kopyalayın ve CSV olarak dışa aktarın.
+              Kategori ve arama limiti seçerek işletmeleri arayın. İsterseniz
+              il ve ilçe bilgisiyle aramayı daraltın; telefon, web sitesi ve
+              Google Maps bilgilerini görüntüleyip CSV olarak dışa aktarın.
             </p>
           </div>
         </header>
@@ -153,8 +168,8 @@ export default function Home() {
                 </CardTitle>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Arama yapmak için kategori ve limit seçin.
-                  İsterseniz il ve ilçe bilgisiyle aramayı daraltabilirsiniz.
+                  Arama yapmak için kategori ve limit seçin. İsterseniz il ve
+                  ilçe bilgisiyle aramayı daraltabilirsiniz.
                 </p>
               </div>
 
