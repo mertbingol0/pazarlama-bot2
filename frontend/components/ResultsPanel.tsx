@@ -51,7 +51,7 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         </div>
 
         <div className="order-1 xl:order-2">
-          <WhatsAppBusinessPanel />
+        <WhatsAppBusinessPanel businesses={results.businesses || []} />
         </div>
       </section>
     </>
