@@ -18,6 +18,10 @@ const {
   updateBusinessWhatsAppStatus,
   markTemplateSent,
   markIncomingWhatsAppReply,
+
+  saveLiveSupportLead,
+  getLiveSupportLeads,
+  updateLiveSupportLeadNote,
 } = require("./db");
 
 const express = require("express");
@@ -218,6 +222,64 @@ app.get("/api/businesses", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "İşletmeler getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/live-support-leads", async (req, res) => {
+  try {
+    const leads = await getLiveSupportLeads();
+
+    return res.status(200).json({
+      success: true,
+      message: "Canlı destek talepleri başarıyla getirildi.",
+      count: leads.length,
+      leads,
+    });
+  } catch (error) {
+    console.error("/api/live-support-leads hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Canlı destek talepleri getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.patch("/api/live-support-leads/:id/note", async (req, res) => {
+  try {
+    const leadId = Number(req.params.id);
+    const note = String(req.body.note || "").trim();
+
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli bir canlı destek lead ID değeri gönderilmelidir.",
+      });
+    }
+
+    const updatedLead = await updateLiveSupportLeadNote(leadId, note);
+
+    if (!updatedLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Canlı destek kaydı bulunamadı.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Not başarıyla güncellendi.",
+      lead: updatedLead,
+    });
+  } catch (error) {
+    console.error("/api/live-support-leads/:id/note hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Canlı destek notu güncellenirken bir hata oluştu.",
       error: error.message,
     });
   }
@@ -496,17 +558,44 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
         "";
     }
 
+
+    
+
     const updatedBusiness = await markIncomingWhatsAppReply({
       phone: from,
       messageText,
       messageId,
     });
 
+    const normalizedIncomingText = String(messageText || "")
+      .trim()
+      .toLocaleLowerCase("tr-TR");
+
+    if (
+      normalizedIncomingText === "bilgi almak istiyorum" ||
+      normalizedIncomingText.includes("bilgi almak istiyorum")
+    ) {
+      const liveSupportLead = await saveLiveSupportLead({
+        phone: from,
+        buttonText: messageText || "Bilgi almak istiyorum",
+        messageId,
+      });
+
+      console.log("Canlı destek lead kaydedildi:", {
+        phone: from,
+        liveSupportLeadId: liveSupportLead?.id || null,
+      });
+    }
+
     console.log("WhatsApp gelen mesaj:", {
       from,
       messageText,
       updatedBusinessId: updatedBusiness?.id || null,
     });
+
+
+
+
 
     return res.sendStatus(200);
   } catch (error) {

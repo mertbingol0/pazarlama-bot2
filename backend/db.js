@@ -116,45 +116,55 @@ async function getDb() {
 async function initDatabase() {
   const database = await getDb();
 
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS searches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      search_key TEXT NOT NULL UNIQUE,
-      category TEXT NOT NULL,
-      city TEXT NOT NULL,
-      district TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
+await database.exec(`
+  CREATE TABLE IF NOT EXISTS searches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    search_key TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
+    city TEXT NOT NULL,
+    district TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
 
-    CREATE TABLE IF NOT EXISTS businesses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      search_id INTEGER NOT NULL,
-      external_id TEXT,
-      name TEXT,
-      phone TEXT,
-      address TEXT,
-      website TEXT,
-      google_maps_url TEXT,
-      rating REAL,
-      user_rating_count INTEGER DEFAULT 0,
-      source TEXT DEFAULT 'google_places',
-      status TEXT DEFAULT 'pending',
-      category TEXT,
-      city TEXT,
-      district TEXT,
-      lat REAL,
-      lng REAL,
-      whatsapp_status TEXT DEFAULT 'not_sent',
-      template_sent_at TEXT,
-      last_incoming_at TEXT,
-      last_message_text TEXT,
-      last_whatsapp_message_id TEXT,
+  CREATE TABLE IF NOT EXISTS businesses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    search_id INTEGER NOT NULL,
+    external_id TEXT,
+    name TEXT,
+    phone TEXT,
+    address TEXT,
+    website TEXT,
+    google_maps_url TEXT,
+    rating REAL,
+    user_rating_count INTEGER DEFAULT 0,
+    source TEXT DEFAULT 'google_places',
+    status TEXT DEFAULT 'pending',
+    category TEXT,
+    city TEXT,
+    district TEXT,
+    lat REAL,
+    lng REAL,
+    whatsapp_status TEXT DEFAULT 'not_sent',
+    template_sent_at TEXT,
+    last_incoming_at TEXT,
+    last_message_text TEXT,
+    last_whatsapp_message_id TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE CASCADE
+  );
 
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE CASCADE
-    );
-  `);
+  CREATE TABLE IF NOT EXISTS live_support_leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL UNIQUE,
+    button_text TEXT DEFAULT 'Bilgi almak istiyorum',
+    status TEXT DEFAULT 'info_requested',
+    note TEXT DEFAULT '',
+    message_id TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 
   const businessColumns = await database.all("PRAGMA table_info(businesses)");
   const businessColumnNames = businessColumns.map((column) => column.name);
@@ -219,10 +229,23 @@ if (!businessColumnNames.includes("last_whatsapp_message_id")) {
   `);
 
   await database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_businesses_status ON businesses(status);
-    CREATE INDEX IF NOT EXISTS idx_businesses_external_id ON businesses(external_id);
+    CREATE INDEX IF NOT EXISTS idx_businesses_status 
+    ON businesses(status);
+
+    CREATE INDEX IF NOT EXISTS idx_businesses_external_id 
+    ON businesses(external_id);
+
     CREATE INDEX IF NOT EXISTS idx_businesses_whatsapp_status 
     ON businesses(whatsapp_status);
+
+    CREATE INDEX IF NOT EXISTS idx_live_support_leads_phone 
+    ON live_support_leads(phone);
+
+    CREATE INDEX IF NOT EXISTS idx_live_support_leads_status 
+    ON live_support_leads(status);
+
+    CREATE INDEX IF NOT EXISTS idx_live_support_leads_updated_at 
+    ON live_support_leads(updated_at);
   `);
 
   console.log("SQLite database hazır.");
@@ -792,6 +815,135 @@ async function markIncomingWhatsAppReply({
 
   return getBusinessById(row.id);
 }
+
+async function saveLiveSupportLead({
+  phone,
+  buttonText = "Bilgi almak istiyorum",
+  messageId = null,
+}) {
+  const database = await getDb();
+
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+
+  if (!normalizedPhone) {
+    return null;
+  }
+
+  await database.run(
+    `
+    INSERT INTO live_support_leads (
+      phone,
+      button_text,
+      status,
+      message_id
+    )
+    VALUES (?, ?, 'info_requested', ?)
+    ON CONFLICT(phone) DO UPDATE SET
+      button_text = excluded.button_text,
+      status = 'info_requested',
+      message_id = excluded.message_id,
+      updated_at = CURRENT_TIMESTAMP
+    `,
+    normalizedPhone,
+    buttonText,
+    messageId
+  );
+
+  return database.get(
+    `
+    SELECT
+      id,
+      phone,
+      button_text,
+      status,
+      note,
+      message_id,
+      created_at,
+      updated_at
+    FROM live_support_leads
+    WHERE phone = ?
+    `,
+    normalizedPhone
+  );
+}
+
+async function getLiveSupportLeads() {
+  const database = await getDb();
+
+  const rows = await database.all(`
+    SELECT
+      id,
+      phone,
+      button_text,
+      status,
+      note,
+      message_id,
+      created_at,
+      updated_at
+    FROM live_support_leads
+    ORDER BY updated_at DESC, id DESC
+  `);
+
+  return rows.map((row) => ({
+    id: row.id,
+    phone: row.phone,
+    buttonText: row.button_text,
+    status: row.status || "info_requested",
+    note: row.note || "",
+    messageId: row.message_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function updateLiveSupportLeadNote(leadId, note) {
+  const database = await getDb();
+
+  const result = await database.run(
+    `
+    UPDATE live_support_leads
+    SET
+      note = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    `,
+    note,
+    leadId
+  );
+
+  if (result.changes === 0) {
+    return null;
+  }
+
+  const row = await database.get(
+    `
+    SELECT
+      id,
+      phone,
+      button_text,
+      status,
+      note,
+      message_id,
+      created_at,
+      updated_at
+    FROM live_support_leads
+    WHERE id = ?
+    `,
+    leadId
+  );
+
+  return {
+    id: row.id,
+    phone: row.phone,
+    buttonText: row.button_text,
+    status: row.status || "info_requested",
+    note: row.note || "",
+    messageId: row.message_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 module.exports = {
   initDatabase,
   getCachedSearchResults,
@@ -806,4 +958,8 @@ module.exports = {
   updateBusinessWhatsAppStatus,
   markTemplateSent,
   markIncomingWhatsAppReply,
+
+  saveLiveSupportLead,
+  getLiveSupportLeads,
+  updateLiveSupportLeadNote,
 };
