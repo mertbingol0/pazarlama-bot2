@@ -238,7 +238,7 @@ if (sendTarget === "approved") {
     }
   };
 
-  const handleSendTestTemplate = async () => {
+const handleSendTestTemplate = async () => {
   if (!to.trim()) {
     setErrorMessage("Lütfen test template göndermek için alıcı numara girin.");
     setSuccessMessage("");
@@ -282,49 +282,47 @@ if (sendTarget === "approved") {
   }
 };
 
-  const handleSendMessage = async () => {
-    if (!to.trim() || !message.trim()) {
-      setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
-      setSuccessMessage("");
+const handleSendMessage = async () => {
+  if (!to.trim() || !message.trim()) {
+    setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
+    setSuccessMessage("");
+    return;
+  }
+
+  try {
+    setIsSending(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const response = await sendWhatsAppTestMessage({
+      to: to.trim(),
+      message: message.trim(),
+      mode: "text",
+    });
+
+    const normalizedTo = response.result?.to || to.trim();
+    const messageStatus = response.result?.messageStatus;
+
+    if (messageStatus === "accepted") {
+      setSuccessMessage(
+        `Manuel mesaj isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
+      );
       return;
     }
 
-    try {
-      setIsSending(true);
-      setErrorMessage("");
-      setSuccessMessage("");
+    setSuccessMessage(`Manuel mesaj gönderildi (${normalizedTo}).`);
+  } catch (error) {
+    console.error("WhatsApp text send error:", error);
 
-      const response = await sendWhatsAppTestMessage({
-        to: to.trim(),
-        message: "jefedes_intro_v2",
-        mode: "template",
-        templateName: "jefedes_intro_v2",
-        languageCode: "tr",
-      });
-
-      const normalizedTo = response.result?.to || to.trim();
-      const messageStatus = response.result?.messageStatus;
-
-      if (messageStatus === "accepted") {
-        setSuccessMessage(
-          `İstek Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
-        );
-        return;
-      }
-
-      setSuccessMessage(`Mesaj isteği işlendi (${normalizedTo}).`);
-    } catch (error) {
-      console.error("WhatsApp send error:", error);
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "WhatsApp mesajı gönderilemedi."
-      );
-    } finally {
-      setIsSending(false);
-    }
-  };
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "WhatsApp manuel mesajı gönderilemedi."
+    );
+  } finally {
+    setIsSending(false);
+  }
+};
 
   return (
     <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -488,14 +486,14 @@ if (sendTarget === "approved") {
             Test Template Gönder
           </Button>
 
-            <Button
-              type="button"
-              onClick={handleSendMessage}
-              disabled={isSending}
-              className="h-10 rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-100 hover:bg-emerald-600 disabled:bg-emerald-300"
-            >
-              {isSending ? "Gönderiliyor..." : "Mesaj Gönder"}
-            </Button>
+          <Button
+            type="button"
+            onClick={handleSendMessage}
+            disabled={isSending}
+            className="h-10 rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-100 hover:bg-emerald-600 disabled:bg-emerald-300"
+          >
+            {isSending ? "Gönderiliyor..." : "Mesaj Gönder"}
+          </Button>
           </div>
         </section>
 
