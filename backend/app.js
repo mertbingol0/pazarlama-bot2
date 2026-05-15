@@ -527,6 +527,8 @@ app.get("/api/whatsapp/webhook", (req, res) => {
 
 app.post("/api/whatsapp/webhook", async (req, res) => {
   try {
+    console.log("WhatsApp webhook geldi:");
+    console.log(JSON.stringify(req.body, null, 2));
     const body = req.body;
 
     const entry = body.entry?.[0];
@@ -883,7 +885,169 @@ app.post("/api/whatsapp/send-test", async (req, res) => {
     });
   }
 });
+app.get("/webhooks/whatsapp/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
 
+  console.log("Webhook verify isteği geldi:", {
+    mode,
+    token,
+    expectedToken: process.env.WHATSAPP_VERIFY_TOKEN,
+  });
+
+  if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    console.log("WhatsApp webhook doğrulandı.");
+    return res.status(200).send(challenge);
+  }
+
+  console.warn("WhatsApp webhook doğrulama başarısız.");
+  return res.sendStatus(403);
+});
+
+function extractWhatsAppMessages(body) {
+  return (
+    body?.entry?.flatMap((entry) =>
+      entry.changes?.flatMap((change) => change.value?.messages || []) || []
+    ) || []
+  );
+}
+
+function getWhatsAppReplyText(message) {
+  return (
+    message?.button?.text ||
+    message?.interactive?.button_reply?.title ||
+    message?.interactive?.list_reply?.title ||
+    message?.text?.body ||
+    ""
+  ).trim();
+}
+
+function getWhatsAppReplyAction(replyText) {
+  if (replyText === "Bilgi almak istiyorum") {
+    return {
+      leadStatus: "approved",
+      whatsappStatus: "handoff_requested",
+      actionLabel: "Canlı destek gerekli",
+    };
+  }
+
+  if (replyText === "Daha sonra dönüş yapın") {
+    return {
+      leadStatus: "pending",
+      whatsappStatus: "follow_up_scheduled",
+      actionLabel: "Takip planlandı",
+    };
+  }
+
+  if (replyText === "İlgilenmiyorum") {
+    return {
+      leadStatus: "rejected",
+      whatsappStatus: "not_interested",
+      actionLabel: "Görüşme sonlandırıldı",
+    };
+  }
+
+  return null;
+}
+
+app.post("/webhooks/whatsapp/webhook", async (req, res) => {
+  try {
+    console.log("WhatsApp webhook geldi:");
+    console.log(JSON.stringify(req.body, null, 2));
+
+    const messages = extractWhatsAppMessages(req.body);
+
+    if (messages.length === 0) {
+      console.log("Webhook geldi ama messages alanı boş.");
+      return res.sendStatus(200);
+    }
+
+ for (const message of messages) {
+  const fromPhone = message.from;
+  const messageId = message.id;
+  const replyText = getWhatsAppReplyText(message);
+  const action = getWhatsAppReplyAction(replyText);
+
+  console.log("WhatsApp cevap analizi:", {
+    fromPhone,
+    messageId,
+    messageType: message.type,
+    replyText,
+    action,
+  });
+
+  if (!action) {
+    console.log("Tanımlı olmayan WhatsApp cevabı:", replyText);
+    continue;
+  }
+
+  const updatedBusiness = await markIncomingWhatsAppReply({
+    phone: fromPhone,
+    messageText: replyText,
+    messageId,
+  });
+
+  if (!updatedBusiness) {
+    console.warn("Telefon numarasına bağlı işletme bulunamadı:", {
+      fromPhone,
+      replyText,
+    });
+  }
+
+  if (replyText === "Bilgi almak istiyorum") {
+    if (updatedBusiness?.id) {
+      await updateBusinessStatus(updatedBusiness.id, "approved");
+      await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
+    }
+
+    const liveSupportLead = await saveLiveSupportLead({
+      phone: fromPhone,
+      buttonText: replyText || "Bilgi almak istiyorum",
+      messageId,
+    });
+
+    console.log("Firma bilgi almak istiyor. Canlı destek gerekli:", {
+      phone: fromPhone,
+      businessId: updatedBusiness?.id || null,
+      liveSupportLeadId: liveSupportLead?.id || null,
+    });
+  }
+
+  if (replyText === "Daha sonra dönüş yapın") {
+    if (updatedBusiness?.id) {
+      await updateBusinessStatus(updatedBusiness.id, "pending");
+      await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
+    }
+
+    const followUpDate = new Date();
+    followUpDate.setDate(followUpDate.getDate() + 1);
+
+    console.log("Firma daha sonra dönüş istedi. Takip planlandı:", {
+      phone: fromPhone,
+      businessId: updatedBusiness?.id || null,
+      followUpAt: followUpDate.toISOString(),
+    });
+  }
+
+  if (replyText === "İlgilenmiyorum") {
+    if (updatedBusiness?.id) {
+      await updateBusinessStatus(updatedBusiness.id, "rejected");
+      await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
+    }
+
+    console.log("Firma ilgilenmiyor. Görüşme sonlandırıldı:", {
+      phone: fromPhone,
+      businessId: updatedBusiness?.id || null,
+    });
+  }
+}
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error("WhatsApp webhook işleme hatası:", error);
+    return res.sendStatus(500);
+  }
+});
 initDatabase()
   .then(() => {
     app.listen(PORT, () => {
