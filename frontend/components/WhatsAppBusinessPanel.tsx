@@ -112,7 +112,7 @@ export function WhatsAppBusinessPanel({
   businesses = [],
 }: WhatsAppBusinessPanelProps) {
   const [to, setTo] = useState(TEST_PHONE_NUMBER);
-  const [templateName, setTemplateName] = useState("jefedes");
+ const [templateName, setTemplateName] = useState("jefedes_intro_v2");
   const [sendTarget, setSendTarget] = useState<SendTarget>("approved");
 
   const [message, setMessage] = useState(
@@ -372,7 +372,9 @@ if (sendTarget === "approved") {
               onChange={(event) => setTemplateName(event.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
-              <option value="jefedes">Jefedes Tanıtım Template&apos;i</option>
+            <option value="jefedes_intro_v2">
+              Jefedes Tanıtım Template&apos;i
+            </option>
               <option value="jefedes_info_template">
                 Bilgi Talebi Template&apos;i
               </option>
