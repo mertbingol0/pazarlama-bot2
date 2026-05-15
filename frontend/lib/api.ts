@@ -24,6 +24,7 @@ type BusinessesByStatusResponse = BackendErrorResponse & {
   count: number;
   businesses: Business[];
 };
+
 type BusinessesByWhatsAppStatusResponse = BackendErrorResponse & {
   success: boolean;
   whatsappStatus: WhatsAppStatusFilter;
@@ -48,8 +49,10 @@ type SendWhatsAppMessageResponse = BackendErrorResponse & {
   result?: unknown;
   business?: Business;
 };
+
 type WhatsAppTestMessageResponse = BackendErrorResponse & {
   success: boolean;
+  message?: string;
   result?: {
     requestAccepted?: boolean;
     to?: string;
@@ -156,12 +159,16 @@ export type SendWhatsAppTestMessageParams = {
   to: string;
   message: string;
   mode?: "template" | "text";
+  templateName?: string;
+  languageCode?: string;
 };
 
 export async function sendWhatsAppTestMessage({
   to,
   message,
   mode = "text",
+  templateName,
+  languageCode,
 }: SendWhatsAppTestMessageParams): Promise<WhatsAppTestMessageResponse> {
   const response = await fetch(`${API_BASE_URL}/api/whatsapp/send-test`, {
     method: "POST",
@@ -172,6 +179,8 @@ export async function sendWhatsAppTestMessage({
       to,
       message,
       mode,
+      templateName,
+      languageCode,
     }),
   });
 
@@ -185,6 +194,7 @@ export async function sendWhatsAppTestMessage({
 
   return data;
 }
+
 export async function getBusinessesByWhatsAppStatus(
   whatsappStatus: WhatsAppStatusFilter
 ): Promise<BusinessesByWhatsAppStatusResponse> {
@@ -240,7 +250,7 @@ export async function updateBusinessWhatsAppStatus(
 export async function sendWhatsAppTemplate({
   businessIds,
   templateName,
-  languageCode = "en_US",
+  languageCode = "tr",
 }: {
   businessIds: Array<string | number>;
   templateName: string;

@@ -238,6 +238,50 @@ if (sendTarget === "approved") {
     }
   };
 
+  const handleSendTestTemplate = async () => {
+  if (!to.trim()) {
+    setErrorMessage("Lütfen test template göndermek için alıcı numara girin.");
+    setSuccessMessage("");
+    return;
+  }
+
+  try {
+    setIsSending(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const response = await sendWhatsAppTestMessage({
+      to: to.trim(),
+      message: "jefedes_intro_v2",
+      mode: "template",
+      templateName: "jefedes_intro_v2",
+      languageCode: "tr",
+    });
+
+    const normalizedTo = response.result?.to || to.trim();
+    const messageStatus = response.result?.messageStatus;
+
+    if (messageStatus === "accepted") {
+      setSuccessMessage(
+        `Template test isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
+      );
+      return;
+    }
+
+    setSuccessMessage(`Template test mesajı gönderildi (${normalizedTo}).`);
+  } catch (error) {
+    console.error("WhatsApp template test error:", error);
+
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "WhatsApp template test mesajı gönderilemedi."
+    );
+  } finally {
+    setIsSending(false);
+  }
+};
+
   const handleSendMessage = async () => {
     if (!to.trim() || !message.trim()) {
       setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
@@ -252,8 +296,10 @@ if (sendTarget === "approved") {
 
       const response = await sendWhatsAppTestMessage({
         to: to.trim(),
-        message: message.trim(),
-        mode: "text",
+        message: "jefedes_intro_v2",
+        mode: "template",
+        templateName: "jefedes_intro_v2",
+        languageCode: "tr",
       });
 
       const normalizedTo = response.result?.to || to.trim();
@@ -430,13 +476,15 @@ if (sendTarget === "approved") {
           </div>
 
           <div className="grid gap-2 sm:grid-cols-[0.8fr_1fr]">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
-            >
-              Dosya Ekle
-            </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSendTestTemplate}
+            disabled={isSending}
+            className="h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Test Template Gönder
+          </Button>
 
             <Button
               type="button"
