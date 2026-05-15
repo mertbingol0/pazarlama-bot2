@@ -307,3 +307,68 @@ export async function sendWhatsAppMessage({
 
   return data;
 }
+
+export type LiveSupportLead = {
+  id: number;
+  phone: string;
+  buttonText?: string | null;
+  status?: string | null;
+  note?: string | null;
+  messageId?: string | null;
+  createdAt?: string | null;
+};
+
+type LiveSupportLeadsResponse = BackendErrorResponse & {
+  success: boolean;
+  count: number;
+  leads: LiveSupportLead[];
+};
+
+type UpdateLiveSupportLeadNoteResponse = BackendErrorResponse & {
+  success: boolean;
+  lead: LiveSupportLead;
+};
+
+export async function getLiveSupportLeads(): Promise<LiveSupportLeadsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/live-support-leads`);
+
+  const data = await readJsonResponse<LiveSupportLeadsResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Canlı destek kayıtları getirilemedi."
+    );
+  }
+
+  return data;
+}
+
+export async function updateLiveSupportLeadNote(
+  leadId: string | number,
+  note: string
+): Promise<UpdateLiveSupportLeadNoteResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-support-leads/${leadId}/note`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        note,
+      }),
+    }
+  );
+
+  const data = await readJsonResponse<UpdateLiveSupportLeadNoteResponse>(
+    response
+  );
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Canlı destek notu kaydedilemedi."
+    );
+  }
+
+  return data;
+}

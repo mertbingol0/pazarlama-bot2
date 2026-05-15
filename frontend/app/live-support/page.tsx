@@ -12,20 +12,30 @@ import { Badge } from "@/components/ui/badge";
 type LiveSupportLead = {
   id: string | number;
   phone: string;
-  buttonText?: string;
-  status?: "info_requested" | "called" | "pending";
-  createdAt?: string;
-  note?: string;
+  buttonText?: string | null;
+  status?: "info_requested" | "called" | "pending" | string | null;
+  createdAt?: string | null;
+  note?: string | null;
+  messageId?: string | null;
 };
 
-type LiveSupportResponse = {
+type BackendErrorResponse = {
+  message?: string;
+  error?: string;
+};
+
+type LiveSupportResponse = BackendErrorResponse & {
   success: boolean;
   count: number;
   leads: LiveSupportLead[];
-  message?: string;
 };
 
-function formatDate(value?: string) {
+type UpdateLiveSupportLeadNoteResponse = BackendErrorResponse & {
+  success: boolean;
+  lead: LiveSupportLead;
+};
+
+function formatDate(value?: string | null) {
   if (!value) return "-";
 
   try {
@@ -45,8 +55,9 @@ function normalizeWhatsAppPhone(phone: string) {
 function getStatusLabel(status?: LiveSupportLead["status"]) {
   if (status === "called") return "Arandı";
   if (status === "info_requested") return "Bilgi istiyor";
+  if (status === "pending") return "Beklemede";
 
-  return "Beklemede";
+  return "Bilgi istiyor";
 }
 
 function getStatusClassName(status?: LiveSupportLead["status"]) {
@@ -58,20 +69,29 @@ function getStatusClassName(status?: LiveSupportLead["status"]) {
     return "bg-blue-50 text-blue-700 hover:bg-blue-50";
   }
 
-  return "bg-slate-50 text-slate-600 hover:bg-slate-50";
+  if (status === "pending") {
+    return "bg-amber-50 text-amber-700 hover:bg-amber-50";
+  }
+
+  return "bg-blue-50 text-blue-700 hover:bg-blue-50";
 }
 
 export default function LiveSupportPage() {
   const [leads, setLeads] = useState<LiveSupportLead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [savingLeadId, setSavingLeadId] = useState<string | number | null>(
+    null
+  );
 
   useEffect(() => {
     const fetchLiveSupportLeads = async () => {
       try {
         setIsLoading(true);
         setErrorMessage("");
+        setSuccessMessage("");
 
         const response = await fetch(`${API_BASE_URL}/api/live-support-leads`);
 
@@ -83,26 +103,27 @@ export default function LiveSupportPage() {
           );
         }
 
-        setLeads(data.leads || []);
+        const liveSupportLeads = data.leads || [];
 
-        const initialNotes = (data.leads || {}).reduce?.(
-          (
-            acc: Record<string, string>,
-            lead: LiveSupportLead
-          ): Record<string, string> => {
+        setLeads(liveSupportLeads);
+
+        const initialNotes = liveSupportLeads.reduce<Record<string, string>>(
+          (acc, lead) => {
             acc[String(lead.id)] = lead.note || "";
             return acc;
           },
           {}
         );
 
-        setNotes(initialNotes || {});
+        setNotes(initialNotes);
       } catch (error) {
         console.error("Canlı destek talepleri alınamadı:", error);
 
         setLeads([]);
         setErrorMessage(
-          "Backend endpoint hazır olmadığında bu liste boş görünür. Endpoint bağlanınca bilgiler burada listelenecek."
+          error instanceof Error
+            ? error.message
+            : "Canlı destek talepleri yüklenirken hata oluştu."
         );
       } finally {
         setIsLoading(false);
@@ -113,8 +134,14 @@ export default function LiveSupportPage() {
   }, []);
 
   const handleCopyPhone = async (phone: string) => {
-    await navigator.clipboard.writeText(phone);
-    alert("Telefon numarası kopyalandı.");
+    try {
+      await navigator.clipboard.writeText(phone);
+      setSuccessMessage("Telefon numarası kopyalandı.");
+      setErrorMessage("");
+    } catch {
+      setErrorMessage("Telefon numarası kopyalanamadı.");
+      setSuccessMessage("");
+    }
   };
 
   const handleNoteChange = (leadId: string | number, value: string) => {
@@ -124,10 +151,58 @@ export default function LiveSupportPage() {
     }));
   };
 
-  const handleSaveNote = (leadId: string | number) => {
-    alert(
-      `Not kaydetme backend bağlanınca aktif olacak. Şimdilik not ekranda tutuluyor. ID: ${leadId}`
-    );
+  const handleSaveNote = async (leadId: string | number) => {
+    try {
+      setSavingLeadId(leadId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const note = notes[String(leadId)] || "";
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/live-support-leads/${leadId}/note`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            note,
+          }),
+        }
+      );
+
+      const data = await readJsonResponse<UpdateLiveSupportLeadNoteResponse>(
+        response
+      );
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Canlı destek notu kaydedilemedi.");
+      }
+
+      setLeads((currentLeads) =>
+        currentLeads.map((lead) =>
+          String(lead.id) === String(leadId) ? data.lead : lead
+        )
+      );
+
+      setNotes((currentNotes) => ({
+        ...currentNotes,
+        [String(leadId)]: data.lead.note || "",
+      }));
+
+      setSuccessMessage("Not başarıyla kaydedildi.");
+    } catch (error) {
+      console.error("Canlı destek notu kaydedilemedi:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Not kaydedilirken hata oluştu."
+      );
+    } finally {
+      setSavingLeadId(null);
+    }
   };
 
   return (
@@ -199,8 +274,14 @@ export default function LiveSupportPage() {
               </p>
             )}
 
+            {!isLoading && successMessage && (
+              <p className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
+                {successMessage}
+              </p>
+            )}
+
             {!isLoading && errorMessage && (
-              <p className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
+              <p className="mb-4 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
                 {errorMessage}
               </p>
             )}
@@ -311,9 +392,12 @@ export default function LiveSupportPage() {
                             type="button"
                             variant="outline"
                             onClick={() => handleSaveNote(lead.id)}
-                            className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
+                            disabled={savingLeadId === lead.id}
+                            className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                           >
-                            Notu Kaydet
+                            {savingLeadId === lead.id
+                              ? "Kaydediliyor..."
+                              : "Notu Kaydet"}
                           </Button>
                         </div>
                       </div>
