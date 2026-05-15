@@ -700,49 +700,97 @@ app.post("/api/search", async (req, res) => {
 
 app.post("/api/whatsapp/send-test", async (req, res) => {
   try {
-    const { to, message, mode = "template" } = req.body;
+    const {
+      to,
+      message,
+      mode = "text",
+      templateName = "jefedes_intro_v2",
+      languageCode = "tr",
+    } = req.body;
 
     if (!to) {
       return res.status(400).json({
         success: false,
-        message: "Mesaj gönderilecek telefon numarası zorunludur.",
+        message: "Alıcı numara zorunludur.",
       });
     }
 
-    let result;
+    let whatsappPayload;
 
-    if (mode === "text") {
-      if (!message || !String(message).trim()) {
+    if (mode === "template") {
+      whatsappPayload = {
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: {
+            code: languageCode,
+          },
+        },
+      };
+    } else {
+      if (!message) {
         return res.status(400).json({
           success: false,
-          message: "Text mesaj göndermek için mesaj içeriği zorunludur.",
+          message: "Mesaj içeriği zorunludur.",
         });
       }
 
-      result = await sendWhatsAppTextMessage({
+      whatsappPayload = {
+        messaging_product: "whatsapp",
         to,
-        message,
-      });
-    } else {
-      result = await sendWhatsAppTemplateTest({
-        to,
+        type: "text",
+        text: {
+          body: message,
+        },
+      };
+    }
+
+    const response = await fetch(
+      `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(whatsappPayload),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        message:
+          data.error?.message || "WhatsApp test mesajı gönderilemedi.",
+        error: data.error,
       });
     }
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message:
-        mode === "text"
-          ? "WhatsApp text mesaj isteği gönderildi."
-          : "WhatsApp template test mesajı gönderildi.",
-      result,
+        mode === "template"
+          ? "WhatsApp template test mesajı gönderildi."
+          : "WhatsApp test mesajı gönderildi.",
+      result: {
+        requestAccepted: true,
+        to,
+        messageId: data.messages?.[0]?.id || null,
+        messageStatus: data.messages?.[0]?.message_status,
+        raw: data,
+      },
     });
   } catch (error) {
-    console.error("WhatsApp send test error:", error);
+    console.error("WhatsApp send-test error:", error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "WhatsApp test mesajı gönderilemedi.",
+      message: "WhatsApp test mesajı gönderilirken sunucu hatası oluştu.",
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 });
