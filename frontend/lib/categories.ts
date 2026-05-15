@@ -7,4 +7,6 @@ export const categories = [
   { label: "Restoran", value: "restoran" },
   { label: "Otel", value: "otel" },
   { label: "Veteriner", value: "veteriner" },
+  { label: "Düğün Organizasyon", value: "dugun_organizasyon" },
+  { label: "Fotoğrafçılık", value: "fotografcilik" },
 ];
