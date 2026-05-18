@@ -9,7 +9,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Jefedes Lead Generation Tool",
+  title: "Jefedes Lead Flow",
   description: "Potansiyel müşteri arama ve iletişim listeleme paneli.",
   icons: {
     icon: "/favicon.svg",
