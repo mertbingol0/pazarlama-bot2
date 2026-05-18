@@ -275,7 +275,6 @@ app.get("/api/live-support-leads", async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 app.delete("/api/live-support-leads", async (req, res) => {
   try {
     const result = await clearLiveSupportLeads();
@@ -296,8 +295,6 @@ app.delete("/api/live-support-leads", async (req, res) => {
   }
 });
 
-=======
->>>>>>> c55edbc (feat: improve results map and WhatsApp panel UI)
 app.patch("/api/live-support-leads/mark-seen", async (req, res) => {
   try {
     const result = await markLiveSupportLeadsAsSeen();
