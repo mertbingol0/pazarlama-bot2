@@ -22,6 +22,9 @@ const {
   saveLiveSupportLead,
   getLiveSupportLeads,
   updateLiveSupportLeadNote,
+  clearLiveSupportLeads,
+  getLiveSupportUnseenCount,
+  markLiveSupportLeadsAsSeen,
 } = require("./db");
 
 const express = require("express");
@@ -34,8 +37,13 @@ const PORT = process.env.PORT || 5000;
 
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
-    methods: ["GET", "POST", "PATCH"],
+    origin: [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
+    ],
+    methods: ["GET", "POST", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type"],
   })
 );
@@ -227,6 +235,27 @@ app.get("/api/businesses", async (req, res) => {
   }
 });
 
+app.get("/api/live-support-leads/unseen-count", async (req, res) => {
+  try {
+    const count = await getLiveSupportUnseenCount();
+
+    return res.status(200).json({
+      success: true,
+      count,
+    });
+  } catch (error) {
+    console.error("/api/live-support-leads/unseen-count hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Canlı destek bildirim sayısı alınırken hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+
+
 app.get("/api/live-support-leads", async (req, res) => {
   try {
     const leads = await getLiveSupportLeads();
@@ -243,6 +272,46 @@ app.get("/api/live-support-leads", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Canlı destek talepleri getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.delete("/api/live-support-leads", async (req, res) => {
+  try {
+    const result = await clearLiveSupportLeads();
+
+    return res.status(200).json({
+      success: true,
+      message: "Canlı destek kayıtları başarıyla temizlendi.",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("DELETE /api/live-support-leads hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Canlı destek kayıtları temizlenirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.patch("/api/live-support-leads/mark-seen", async (req, res) => {
+  try {
+    const result = await markLiveSupportLeadsAsSeen();
+
+    return res.status(200).json({
+      success: true,
+      message: "Canlı destek bildirimleri görüldü olarak işaretlendi.",
+      updatedCount: result.updatedCount,
+    });
+  } catch (error) {
+    console.error("/api/live-support-leads/mark-seen hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Canlı destek bildirimleri güncellenirken hata oluştu.",
       error: error.message,
     });
   }

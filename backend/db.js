@@ -161,6 +161,7 @@ await database.exec(`
     status TEXT DEFAULT 'info_requested',
     note TEXT DEFAULT '',
     message_id TEXT,
+    seen_at TEXT DEFAULT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
@@ -222,6 +223,18 @@ if (!businessColumnNames.includes("last_whatsapp_message_id")) {
   );
 }
 
+const liveSupportColumns = await database.all(
+  "PRAGMA table_info(live_support_leads)"
+);
+
+const liveSupportColumnNames = liveSupportColumns.map((column) => column.name);
+
+if (!liveSupportColumnNames.includes("seen_at")) {
+  await database.exec(
+    "ALTER TABLE live_support_leads ADD COLUMN seen_at TEXT DEFAULT NULL;"
+  );
+}
+
   await database.run(`
     UPDATE businesses
     SET source = 'google_places'
@@ -246,6 +259,9 @@ if (!businessColumnNames.includes("last_whatsapp_message_id")) {
 
     CREATE INDEX IF NOT EXISTS idx_live_support_leads_updated_at 
     ON live_support_leads(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_live_support_leads_seen_at 
+    ON live_support_leads(seen_at);
   `);
 
   console.log("SQLite database hazır.");
@@ -835,13 +851,15 @@ async function saveLiveSupportLead({
       phone,
       button_text,
       status,
-      message_id
+      message_id,
+      seen_at
     )
-    VALUES (?, ?, 'info_requested', ?)
+    VALUES (?, ?, 'info_requested', ?, NULL)
     ON CONFLICT(phone) DO UPDATE SET
       button_text = excluded.button_text,
       status = 'info_requested',
       message_id = excluded.message_id,
+      seen_at = NULL,
       updated_at = CURRENT_TIMESTAMP
     `,
     normalizedPhone,
@@ -858,6 +876,7 @@ async function saveLiveSupportLead({
       status,
       note,
       message_id,
+      seen_at,
       created_at,
       updated_at
     FROM live_support_leads
@@ -878,6 +897,7 @@ async function getLiveSupportLeads() {
       status,
       note,
       message_id,
+      seen_at,
       created_at,
       updated_at
     FROM live_support_leads
@@ -891,6 +911,7 @@ async function getLiveSupportLeads() {
     status: row.status || "info_requested",
     note: row.note || "",
     messageId: row.message_id,
+    seenAt: row.seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -924,6 +945,7 @@ async function updateLiveSupportLeadNote(leadId, note) {
       status,
       note,
       message_id,
+      seen_at,
       created_at,
       updated_at
     FROM live_support_leads
@@ -939,8 +961,61 @@ async function updateLiveSupportLeadNote(leadId, note) {
     status: row.status || "info_requested",
     note: row.note || "",
     messageId: row.message_id,
+    seenAt: row.seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+async function clearLiveSupportLeads() {
+  const database = await getDb();
+
+  const result = await database.run(`
+    DELETE FROM live_support_leads
+  `);
+
+  return {
+    deletedCount: result.changes || 0,
+  };
+}
+
+async function getLiveSupportUnseenCount() {
+  const database = await getDb();
+
+  const row = await database.get(`
+    SELECT COUNT(*) AS count
+    FROM live_support_leads
+    WHERE seen_at IS NULL
+  `);
+
+  return Number(row?.count || 0);
+}
+
+async function markLiveSupportLeadsAsSeen() {
+  const database = await getDb();
+
+  const result = await database.run(`
+    UPDATE live_support_leads
+    SET
+      seen_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE seen_at IS NULL
+  `);
+
+  return {
+    updatedCount: result.changes || 0,
+  };
+}
+
+async function clearLiveSupportLeads() {
+  const database = await getDb();
+
+  const result = await database.run(`
+    DELETE FROM live_support_leads
+  `);
+
+  return {
+    deletedCount: result.changes || 0,
   };
 }
 
@@ -962,4 +1037,7 @@ module.exports = {
   saveLiveSupportLead,
   getLiveSupportLeads,
   updateLiveSupportLeadNote,
+  clearLiveSupportLeads,
+  getLiveSupportUnseenCount,
+  markLiveSupportLeadsAsSeen,
 };
