@@ -222,6 +222,17 @@ if (!businessColumnNames.includes("last_whatsapp_message_id")) {
     "ALTER TABLE businesses ADD COLUMN last_whatsapp_message_id TEXT;"
   );
 }
+const liveSupportColumns = await database.all(
+  "PRAGMA table_info(live_support_leads)"
+);
+
+const liveSupportColumnNames = liveSupportColumns.map((column) => column.name);
+
+if (!liveSupportColumnNames.includes("seen_at")) {
+  await database.exec(
+    "ALTER TABLE live_support_leads ADD COLUMN seen_at TEXT DEFAULT NULL;"
+  );
+}
 
 const liveSupportColumns = await database.all(
   "PRAGMA table_info(live_support_leads)"
