@@ -12,11 +12,12 @@ import { Badge } from "@/components/ui/badge";
 type LiveSupportLead = {
   id: string | number;
   phone: string;
-  buttonText?: string | null;
-  status?: "info_requested" | "called" | "pending" | string | null;
-  createdAt?: string | null;
-  note?: string | null;
-  messageId?: string | null;
+  buttonText?: string;
+  status?: "info_requested" | "called" | "pending";
+  createdAt?: string;
+  updatedAt?: string;
+  seenAt?: string | null;
+  note?: string;
 };
 
 type BackendErrorResponse = {
@@ -82,6 +83,7 @@ export default function LiveSupportPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [newLeadIds, setNewLeadIds] = useState<Set<string>>(new Set());
   const [savingLeadId, setSavingLeadId] = useState<string | number | null>(
     null
   );
@@ -98,17 +100,20 @@ export default function LiveSupportPage() {
         const data = await readJsonResponse<LiveSupportResponse>(response);
 
         if (!response.ok || !data.success) {
-          throw new Error(
-            data.message || "Canlı destek talepleri getirilemedi."
-          );
+          throw new Error(data.message || "Canlı destek talepleri getirilemedi.");
         }
 
-        const liveSupportLeads = data.leads || [];
+        const incomingLeads = data.leads || [];
 
-        setLeads(liveSupportLeads);
+        const unseenLeadIds = incomingLeads
+          .filter((lead) => !lead.seenAt)
+          .map((lead) => String(lead.id));
 
-        const initialNotes = liveSupportLeads.reduce<Record<string, string>>(
-          (acc, lead) => {
+        setNewLeadIds(new Set(unseenLeadIds));
+        setLeads(incomingLeads);
+
+        const initialNotes = incomingLeads.reduce(
+          (acc: Record<string, string>, lead: LiveSupportLead) => {
             acc[String(lead.id)] = lead.note || "";
             return acc;
           },
@@ -116,14 +121,26 @@ export default function LiveSupportPage() {
         );
 
         setNotes(initialNotes);
+
+        if (unseenLeadIds.length > 0) {
+          try {
+            await fetch(`${API_BASE_URL}/api/live-support-leads/mark-seen`, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            });
+          } catch (error) {
+            console.warn("Canlı destek bildirimleri görüldü yapılamadı:", error);
+          }
+        }
       } catch (error) {
         console.error("Canlı destek talepleri alınamadı:", error);
 
         setLeads([]);
+        setNewLeadIds(new Set());
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Canlı destek talepleri yüklenirken hata oluştu."
+          "Backend endpoint hazır olmadığında bu liste boş görünür. Endpoint bağlanınca bilgiler burada listelenecek."
         );
       } finally {
         setIsLoading(false);
@@ -205,6 +222,47 @@ export default function LiveSupportPage() {
     }
   };
 
+  const handleClearLiveSupportLeads = async () => {
+    const confirmed = window.confirm(
+      "Canlı destek kayıtlarını temizlemek istediğinize emin misiniz?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await fetch(`${API_BASE_URL}/api/live-support-leads`, {
+        method: "DELETE",
+      });
+
+      const data = await readJsonResponse<{
+        success: boolean;
+        message?: string;
+      }>(response);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Canlı destek kayıtları temizlenemedi.");
+      }
+
+      setLeads([]);
+      setNotes({});
+      setNewLeadIds(new Set());
+      setSuccessMessage("Canlı destek kayıtları temizlendi.");
+    } catch (error) {
+      console.error("Canlı destek kayıtları temizlenemedi:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Canlı destek kayıtları temizlenemedi."
+      );
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#f7fbf9] px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl">
@@ -241,9 +299,9 @@ export default function LiveSupportPage() {
 
           <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-sm">
             <CardContent className="p-6">
-              <p className="text-sm text-slate-500">Liste Durumu</p>
+              <p className="text-sm text-slate-500">Yeni / Görülmemiş</p>
               <p className="mt-3 text-3xl font-semibold text-slate-900">
-                {isLoading ? "Yükleniyor" : "Hazır"}
+                {newLeadIds.size}
               </p>
             </CardContent>
           </Card>
@@ -262,9 +320,21 @@ export default function LiveSupportPage() {
               </p>
             </div>
 
-            <Badge className="w-fit rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
-              {leads.length} kayıt
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClearLiveSupportLeads}
+                disabled={isLoading || leads.length === 0}
+                className="h-9 rounded-xl border-slate-200 px-4 text-sm text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Temizle
+              </Button>
+
+              <Badge className="w-fit rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                {leads.length} kayıt
+              </Badge>
+            </div>
           </CardHeader>
 
           <CardContent>
@@ -305,11 +375,16 @@ export default function LiveSupportPage() {
                 {leads.map((lead) => {
                   const leadId = String(lead.id);
                   const normalizedPhone = normalizeWhatsAppPhone(lead.phone);
+                  const isNewLead = newLeadIds.has(leadId);
 
                   return (
                     <div
                       key={leadId}
-                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+                      className={`rounded-2xl border p-4 shadow-sm transition hover:shadow-md ${
+                        isNewLead
+                          ? "border-amber-300 bg-amber-50/60 shadow-amber-100"
+                          : "border-slate-200 bg-white hover:border-emerald-100"
+                      }`}
                     >
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px_220px]">
                         <div>
