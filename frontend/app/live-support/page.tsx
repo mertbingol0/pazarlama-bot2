@@ -268,13 +268,18 @@ export default function LiveSupportPage() {
       <div className="mx-auto max-w-7xl">
         <header className="mb-6">
           <div className="flex items-center justify-between">
-            <div className="text-3xl font-semibold tracking-tight text-slate-700">
-              Jefedes<span className="text-emerald-500">.</span>
+            <div className="flex flex-col items-end leading-none">
+              <span className="text-3xl font-semibold tracking-tight text-slate-700">
+                Jefedes<span className="text-emerald-500">.</span>
+              </span>
+
+              <span className="mt-1 text-xs font-medium tracking-wide text-slate-400">
+                Lead Flow
+              </span>
             </div>
 
             <PageNavigation />
           </div>
-
           <div className="mx-auto mt-8 max-w-3xl text-center">
             <h1 className="text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-5xl">
               Canlı <span className="text-emerald-500">Destek</span>

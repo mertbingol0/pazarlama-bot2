@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { Footer } from "@/components/Footer";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -10,7 +11,8 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Jefedes Lead Flow",
-  description: "Potansiyel müşteri arama ve iletişim listeleme paneli.",
+  description:
+    "Potansiyel müşteri arama, iletişim ve lead takip yönetim paneli.",
   icons: {
     icon: "/favicon.svg",
   },
@@ -23,7 +25,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" className={`${plusJakartaSans.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        <div className="flex-1">{children}</div>
+        <Footer />
+      </body>
     </html>
   );
 }

@@ -138,8 +138,14 @@ export default function Home() {
       <div className="mx-auto max-w-7xl">
         <header className="mb-10">
           <div className="flex items-center justify-between">
-            <div className="text-3xl font-semibold tracking-tight text-slate-700">
-              Jefedes<span className="text-emerald-500">.</span>
+            <div className="flex flex-col items-end leading-none">
+              <span className="text-3xl font-semibold tracking-tight text-slate-700">
+                Jefedes<span className="text-emerald-500">.</span>
+              </span>
+
+              <span className="mt-1 text-xs font-medium tracking-wide text-slate-400">
+                Lead Flow
+              </span>
             </div>
 
             <PageNavigation />
