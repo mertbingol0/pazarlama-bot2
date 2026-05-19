@@ -59,7 +59,9 @@ function isValidWhatsAppStatus(status) {
     "not_interested",
   ].includes(status);
 }
-
+function isValidStatus(status) {
+  return ["approved", "pending", "rejected"].includes(status);
+}
 app.get("/api/searches", async (req, res) => {
   try {
     const searches = await getSearchHistory();
@@ -409,8 +411,18 @@ app.patch("/api/businesses/:id/whatsapp-status", async (req, res) => {
     });
   }
 });
-function canSendWhatsAppTemplate(whatsappStatus) {
-  return !whatsappStatus || whatsappStatus === "not_sent";
+function canSendWhatsAppTemplate(business) {
+  const whatsappStatus = business.whatsappStatus || "not_sent";
+  const leadStatus = business.status || "pending";
+
+  const hasFinalLeadOutcome =
+    leadStatus === "approved" || leadStatus === "rejected";
+
+  if (hasFinalLeadOutcome) {
+    return false;
+  }
+
+  return whatsappStatus === "not_sent";
 }
 app.post("/api/whatsapp/send-template", async (req, res) => {
   try {
@@ -464,17 +476,18 @@ app.post("/api/whatsapp/send-template", async (req, res) => {
         continue;
       }
 
-      if (!canSendWhatsAppTemplate(business.whatsappStatus)) {
-        results.push({
+      if (!canSendWhatsAppTemplate(business)) {
+       results.push({
           businessId,
           success: false,
           skipped: true,
           currentStatus: business.whatsappStatus,
+          currentLeadStatus: business.status,
           message:
-            "Bu firmaya daha önce template gönderilmiş veya firma ilgilenmiyor. Tekrar template gönderilmedi.",
+            "Bu firma template gönderimine uygun değil. Daha önce template gönderilmiş, firma ilgilenmiyor veya final durumdadır.",
         });
         continue;
-      }
+        }
 
       try {
         const whatsappResult = await sendWhatsAppTemplateMessage({
