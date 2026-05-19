@@ -27,6 +27,11 @@ type ListColumnProps = {
   items: LeadItem[];
   type: StoredLeadType;
   businesses?: Business[];
+  onCsvDownload?: () => void;
+
+  selectedBusinessIds?: Array<string | number>;
+  onToggleBusinessSelection?: (businessId: string | number) => void;
+  onSetSelectedBusinessIds?: (businessIds: Array<string | number>) => void;
 };
 
 type DisplayLeadItem = LeadItem & {
@@ -44,6 +49,10 @@ const whatsappStatusFilters: {
     value: "all",
   },
   {
+    label: "Gönderilmedi",
+    value: "not_sent",
+  },
+  {
     label: "Template gönderilenler",
     value: "template_sent",
   },
@@ -54,6 +63,10 @@ const whatsappStatusFilters: {
   {
     label: "Cevap verenler",
     value: "replied",
+  },
+  {
+    label: "İlgilenmiyor",
+    value: "not_interested",
   },
 ];
 
@@ -75,22 +88,18 @@ function getWhatsAppStatusClassName(status: WhatsAppStatus) {
   }
 
   if (status === "waiting_reply") {
-    return "border-slate-100 bg-slate-50 text-slate-600";
+    return "border-amber-100 bg-amber-50/80 text-amber-700";
   }
 
   if (status === "replied") {
     return "border-emerald-100 bg-emerald-50/80 text-emerald-700";
   }
 
+  if (status === "not_interested") {
+    return "border-red-100 bg-red-50/80 text-red-700";
+  }
+
   return "border-slate-100 bg-slate-50 text-slate-500";
-}
-
-function getWhatsAppStatusLabel(status: WhatsAppStatus) {
-  if (status === "template_sent") return "Template gönderildi";
-  if (status === "waiting_reply") return "Cevap bekleniyor";
-  if (status === "replied") return "Cevap verdi";
-
-  return "N/A";
 }
 
 function formatSource(source: string) {
@@ -116,25 +125,59 @@ function normalizeText(value?: string) {
   return (value || "").trim().toLocaleLowerCase("tr-TR");
 }
 
+function canSelectForTemplate(status: WhatsAppStatus, noPhone?: boolean) {
+  return !noPhone && status === "not_sent";
+}
+
+function isSelectedBusiness(
+  selectedBusinessIds: Array<string | number>,
+  businessId?: string | number
+) {
+  if (businessId === undefined) return false;
+
+  return selectedBusinessIds.some(
+    (selectedId) => String(selectedId) === String(businessId)
+  );
+}
+
+function uniqueBusinessIds(ids: Array<string | number>) {
+  const uniqueIds = new Map<string, string | number>();
+
+  ids.forEach((id) => {
+    uniqueIds.set(String(id), id);
+  });
+
+  return Array.from(uniqueIds.values());
+}
+
 export function ListColumn({
   title,
   items,
   type,
   businesses = [],
+  onCsvDownload,
+  selectedBusinessIds = [],
+  onToggleBusinessSelection,
+  onSetSelectedBusinessIds,
 }: ListColumnProps) {
   const [localStatuses, setLocalStatuses] = useState<Record<string, LeadStatus>>(
     {}
   );
+
   const [localWhatsAppStatuses, setLocalWhatsAppStatuses] = useState<
-  Record<string, WhatsAppStatus>
->({});
+    Record<string, WhatsAppStatus>
+  >({});
+
   const [showWithoutPhones, setShowWithoutPhones] = useState(false);
   const [updatingItemKey, setUpdatingItemKey] = useState<string | null>(null);
+
   const [updatingWhatsAppItemKey, setUpdatingWhatsAppItemKey] = useState<
-  string | null
->(null);
+    string | null
+  >(null);
+
   const [whatsappStatusFilter, setWhatsappStatusFilter] =
     useState<WhatsAppStatusFilter>("all");
+
   const [isWhatsappFilterOpen, setIsWhatsappFilterOpen] = useState(false);
 
   const missingPhoneItems = useMemo<DisplayLeadItem[]>(() => {
@@ -175,23 +218,66 @@ export function ListColumn({
     });
   };
 
+  const getItemBusinessId = (item: DisplayLeadItem) => {
+    const relatedBusiness = getRelatedBusiness(item);
+
+    return item.businessId || item.id || relatedBusiness?.id;
+  };
+
+  const getCurrentWhatsAppStatus = (item: DisplayLeadItem) => {
+    const relatedBusiness = getRelatedBusiness(item);
+    const itemKey = getLeadKey(item);
+
+    return (
+      localWhatsAppStatuses[itemKey] ||
+      item.whatsappStatus ||
+      relatedBusiness?.whatsappStatus ||
+      "not_sent"
+    );
+  };
+
   const displayItems = allDisplayItems.filter((item) => {
     if (whatsappStatusFilter === "all") {
       return true;
     }
 
-    const relatedBusiness = getRelatedBusiness(item);
-
-    const itemKey = getLeadKey(item);
-
-const currentWhatsAppStatus =
-  localWhatsAppStatuses[itemKey] ||
-  item.whatsappStatus ||
-  relatedBusiness?.whatsappStatus ||
-  "not_sent";
-
-    return currentWhatsAppStatus === whatsappStatusFilter;
+    return getCurrentWhatsAppStatus(item) === whatsappStatusFilter;
   });
+
+  const selectableBusinessIds = uniqueBusinessIds(
+    displayItems
+      .filter((item) =>
+        canSelectForTemplate(getCurrentWhatsAppStatus(item), item.noPhone)
+      )
+      .map((item) => getItemBusinessId(item))
+      .filter((id): id is string | number => id !== undefined && id !== null)
+  );
+
+  const allSelectableItemsSelected =
+    selectableBusinessIds.length > 0 &&
+    selectableBusinessIds.every((businessId) =>
+      isSelectedBusiness(selectedBusinessIds, businessId)
+    );
+
+  const handleSelectAllEligible = () => {
+    if (!onSetSelectedBusinessIds) return;
+
+    if (allSelectableItemsSelected) {
+      onSetSelectedBusinessIds(
+        selectedBusinessIds.filter(
+          (selectedId) =>
+            !selectableBusinessIds.some(
+              (businessId) => String(businessId) === String(selectedId)
+            )
+        )
+      );
+      return;
+    }
+
+    onSetSelectedBusinessIds(
+      uniqueBusinessIds([...selectedBusinessIds, ...selectableBusinessIds])
+    );
+  };
 
   const getHref = (value: string, url?: string) => {
     if (type === "phone") {
@@ -260,60 +346,93 @@ const currentWhatsAppStatus =
       setUpdatingItemKey(null);
     }
   };
-const handleWhatsAppStatusChange = async (
-  item: DisplayLeadItem,
-  itemKey: string,
-  currentWhatsAppStatus: WhatsAppStatus,
-  nextWhatsAppStatus: WhatsAppStatus
-) => {
-  if (currentWhatsAppStatus === nextWhatsAppStatus) return;
 
-  const businessId = item.businessId || item.id;
+  const handleWhatsAppStatusChange = async (
+    item: DisplayLeadItem,
+    itemKey: string,
+    currentWhatsAppStatus: WhatsAppStatus,
+    nextWhatsAppStatus: WhatsAppStatus
+  ) => {
+    if (currentWhatsAppStatus === nextWhatsAppStatus) return;
 
-  if (!businessId) {
-    alert("Business ID bulunamadı. WhatsApp durumu güncellenemedi.");
-    return;
-  }
+    const businessId = item.businessId || item.id;
 
-  setUpdatingWhatsAppItemKey(itemKey);
+    if (!businessId) {
+      alert("Business ID bulunamadı. WhatsApp durumu güncellenemedi.");
+      return;
+    }
 
-  setLocalWhatsAppStatuses((prev) => ({
-    ...prev,
-    [itemKey]: nextWhatsAppStatus,
-  }));
-
-  try {
-    await updateBusinessWhatsAppStatus(businessId, nextWhatsAppStatus);
-
-    console.log(
-      "Backend WhatsApp status güncellendi:",
-      businessId,
-      nextWhatsAppStatus
-    );
-  } catch (error) {
-    console.error("WhatsApp status güncelleme hatası:", error);
+    setUpdatingWhatsAppItemKey(itemKey);
 
     setLocalWhatsAppStatuses((prev) => ({
       ...prev,
-      [itemKey]: currentWhatsAppStatus,
+      [itemKey]: nextWhatsAppStatus,
     }));
 
-    alert(
-      "WhatsApp durumu güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin."
-    );
-  } finally {
-    setUpdatingWhatsAppItemKey(null);
-  }
-};
+    try {
+      await updateBusinessWhatsAppStatus(businessId, nextWhatsAppStatus);
+
+      console.log(
+        "Backend WhatsApp status güncellendi:",
+        businessId,
+        nextWhatsAppStatus
+      );
+    } catch (error) {
+      console.error("WhatsApp status güncelleme hatası:", error);
+
+      setLocalWhatsAppStatuses((prev) => ({
+        ...prev,
+        [itemKey]: currentWhatsAppStatus,
+      }));
+
+      alert(
+        "WhatsApp durumu güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin."
+      );
+    } finally {
+      setUpdatingWhatsAppItemKey(null);
+    }
+  };
+
   return (
     <Card className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
       <CardHeader className="space-y-4 overflow-visible">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <CardTitle className="text-base font-semibold text-slate-800">
-            {title}
-          </CardTitle>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="text-base font-semibold text-slate-800">
+              {title}
+            </CardTitle>
 
-          <div className="flex items-center gap-2">
+            {type === "phone" && (
+              <p className="mt-1 text-xs text-slate-400">
+                Template göndermek için uygun firmaları seçebilirsiniz.
+              </p>
+            )}
+
+            {type === "phone" && onCsvDownload && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onCsvDownload}
+                className="mt-4"
+              >
+                CSV İndir
+              </Button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {type === "phone" && onSetSelectedBusinessIds && (
+              <button
+                type="button"
+                onClick={handleSelectAllEligible}
+                disabled={selectableBusinessIds.length === 0}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {allSelectableItemsSelected ? "Seçimleri kaldır" : "Tümünü seç"}
+              </button>
+            )}
+
             {type === "phone" && missingPhoneItems.length > 0 && (
               <button
                 type="button"
@@ -397,32 +516,66 @@ const handleWhatsAppStatusChange = async (
           <div className="space-y-4">
             {displayItems.map((item) => {
               const itemKey = getLeadKey(item);
+
               const currentStatus =
                 localStatuses[itemKey] || item.status || "pending";
 
               const isNoPhoneItem = item.noPhone === true;
-
               const relatedBusiness = getRelatedBusiness(item);
+
+              const businessId =
+                item.businessId || item.id || relatedBusiness?.id;
 
               const websiteUrl = normalizeExternalUrl(
                 item.website || relatedBusiness?.website
               );
 
-             const currentWhatsAppStatus =
-  localWhatsAppStatuses[itemKey] ||
-  item.whatsappStatus ||
-  relatedBusiness?.whatsappStatus ||
-  "not_sent";
+              const currentWhatsAppStatus =
+                localWhatsAppStatuses[itemKey] ||
+                item.whatsappStatus ||
+                relatedBusiness?.whatsappStatus ||
+                "not_sent";
 
-const isUpdating = updatingItemKey === itemKey;
-const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
+              const isUpdating = updatingItemKey === itemKey;
+              const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
+
+              const canSelect =
+                type === "phone" &&
+                businessId !== undefined &&
+                canSelectForTemplate(currentWhatsAppStatus, isNoPhoneItem);
+
+              const isSelected = isSelectedBusiness(
+                selectedBusinessIds,
+                businessId
+              );
 
               return (
                 <div
                   key={itemKey}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+                  className={`rounded-2xl border p-4 shadow-sm transition hover:shadow-md ${
+                    isSelected
+                      ? "border-emerald-300 bg-emerald-50/40"
+                      : "border-slate-200 bg-white hover:border-emerald-100"
+                  }`}
                 >
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_160px_180px]">
+                  <div className="grid gap-4 xl:grid-cols-[32px_minmax(0,1fr)_160px_180px]">
+                    {type === "phone" && (
+                      <div className="pt-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={!canSelect}
+                          onChange={() => {
+                            if (businessId !== undefined) {
+                              onToggleBusinessSelection?.(businessId);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 accent-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`${item.businessName} seç`}
+                        />
+                      </div>
+                    )}
+
                     <div className="min-w-0">
                       <p className="break-words text-base font-semibold text-slate-900">
                         {item.businessName}
@@ -450,6 +603,12 @@ const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
                         {isNoPhoneItem && (
                           <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
                             Telefon kaydı yok
+                          </Badge>
+                        )}
+
+                        {type === "phone" && !canSelect && !isNoPhoneItem && (
+                          <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
+                            Template tekrar gönderilemez.
                           </Badge>
                         )}
 
@@ -509,37 +668,56 @@ const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
                         WhatsApp Durumu
                       </p>
 
-                     <select
-  value={currentWhatsAppStatus}
-  disabled={isWhatsAppUpdating}
-  onChange={(event) =>
-    void handleWhatsAppStatusChange(
-      item,
-      itemKey,
-      currentWhatsAppStatus,
-      event.target.value as WhatsAppStatus
-    )
-  }
-  className={`h-9 w-full rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getWhatsAppStatusClassName(
-    currentWhatsAppStatus
-  )}`}
->
-  <option className="bg-white text-slate-700" value="not_sent">
-    N/A
-  </option>
+                      <select
+                        value={currentWhatsAppStatus}
+                        disabled={isWhatsAppUpdating}
+                        onChange={(event) =>
+                          void handleWhatsAppStatusChange(
+                            item,
+                            itemKey,
+                            currentWhatsAppStatus,
+                            event.target.value as WhatsAppStatus
+                          )
+                        }
+                        className={`h-9 w-full rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getWhatsAppStatusClassName(
+                          currentWhatsAppStatus
+                        )}`}
+                      >
+                        <option
+                          className="bg-white text-slate-700"
+                          value="not_sent"
+                        >
+                          N/A
+                        </option>
 
-  <option className="bg-white text-slate-700" value="template_sent">
-    Template gönderildi
-  </option>
+                        <option
+                          className="bg-white text-slate-700"
+                          value="template_sent"
+                        >
+                          Template gönderildi
+                        </option>
 
-  <option className="bg-white text-slate-700" value="waiting_reply">
-    Cevap bekleniyor
-  </option>
+                        <option
+                          className="bg-white text-slate-700"
+                          value="waiting_reply"
+                        >
+                          Cevap bekleniyor
+                        </option>
 
-  <option className="bg-white text-slate-700" value="replied">
-    Cevap verdi
-  </option>
-</select>
+                        <option
+                          className="bg-white text-slate-700"
+                          value="replied"
+                        >
+                          Cevap verdi
+                        </option>
+
+                        <option
+                          className="bg-white text-slate-700"
+                          value="not_interested"
+                        >
+                          İlgilenmiyor
+                        </option>
+                      </select>
                     </div>
                   </div>
 

@@ -1,12 +1,8 @@
 "use client";
-import { getStoredLeadsByStatus } from "@/lib/lead-status-storage";
-import { useState } from "react";
+
+import { useMemo, useState } from "react";
 import type { Business } from "@/types/business";
-import {
-  getBusinessesByStatus,
-  sendWhatsAppTemplate,
-  sendWhatsAppTestMessage,
-} from "@/lib/api";
+import { sendWhatsAppTemplate, sendWhatsAppTestMessage } from "@/lib/api";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,18 +11,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const TEST_PHONE_NUMBER = "905313439734";
 const TEMPLATE_LANGUAGE_CODE = "tr";
 
-type SendTarget = "all_phone" | "approved";
+type TemplateTargetMode = "all_eligible" | "selected_only";
 
 type WhatsAppBusinessPanelProps = {
   businesses?: Business[];
+  selectedBusinesses?: Business[];
+  selectedPhoneCount?: number;
+  onClearSelections?: () => void;
 };
 
 type BusinessForWhatsApp = Business & {
-  id?: string | number;
   businessId?: string | number;
   phone?: string | null;
   name?: string | null;
-  status?: string | null;
 };
 
 function getBusinessId(business: BusinessForWhatsApp) {
@@ -41,54 +38,34 @@ function hasUsableId(business: BusinessForWhatsApp) {
   const businessId = getBusinessId(business);
   return businessId !== undefined && businessId !== null;
 }
-function normalizePhone(value?: string | null) {
-  return String(value || "").replace(/\D/g, "");
+
+function hasTemplateAlreadySent(business: BusinessForWhatsApp) {
+  const whatsappStatus = business.whatsappStatus || "not_sent";
+
+  return (
+    Boolean(business.templateSentAt) ||
+    whatsappStatus === "template_sent" ||
+    whatsappStatus === "waiting_reply" ||
+    whatsappStatus === "replied" ||
+    whatsappStatus === "not_interested"
+  );
 }
 
-function getApprovedBusinessesFromLocalStorage(
-  currentBusinesses: BusinessForWhatsApp[]
-) {
-  const approvedLeads = getStoredLeadsByStatus("approved");
+function hasFinalOutcome(business: BusinessForWhatsApp) {
+  return business.status === "approved" || business.status === "rejected";
+}
 
-  const approvedIds = new Set(
-    approvedLeads
-      .map((lead) => lead.businessId || lead.id)
-      .filter((id): id is string | number => id !== undefined && id !== null)
-      .map((id) => String(id))
+function isTemplateEligible(business: BusinessForWhatsApp) {
+  return (
+    hasUsableId(business) &&
+    hasUsablePhone(business) &&
+    !hasTemplateAlreadySent(business) &&
+    !hasFinalOutcome(business)
   );
+}
 
-  const approvedPhones = new Set(
-    approvedLeads
-      .map((lead) => normalizePhone(lead.value))
-      .filter(Boolean)
-  );
-
-  const approvedNames = new Set(
-    approvedLeads
-      .map((lead) =>
-        String(lead.businessName || "")
-          .trim()
-          .toLocaleLowerCase("tr-TR")
-      )
-      .filter(Boolean)
-  );
-
-  return currentBusinesses.filter((business) => {
-    const businessId = getBusinessId(business);
-    const normalizedPhone = normalizePhone(business.phone);
-    const normalizedName = String(business.name || "")
-      .trim()
-      .toLocaleLowerCase("tr-TR");
-
-    const isApproved =
-      (businessId !== undefined &&
-        businessId !== null &&
-        approvedIds.has(String(businessId))) ||
-      (normalizedPhone && approvedPhones.has(normalizedPhone)) ||
-      (normalizedName && approvedNames.has(normalizedName));
-
-    return isApproved && hasUsableId(business) && hasUsablePhone(business);
-  });
+function getEligibleBusinesses(businesses: BusinessForWhatsApp[]) {
+  return businesses.filter(isTemplateEligible);
 }
 
 function mergeUniqueBusinessesById(businesses: BusinessForWhatsApp[]) {
@@ -97,23 +74,24 @@ function mergeUniqueBusinessesById(businesses: BusinessForWhatsApp[]) {
   businesses.forEach((business) => {
     const businessId = getBusinessId(business);
 
-    if (
-      businessId !== undefined &&
-      businessId !== null &&
-      hasUsablePhone(business)
-    ) {
+    if (businessId !== undefined && businessId !== null) {
       uniqueBusinesses.set(String(businessId), business);
     }
   });
 
   return Array.from(uniqueBusinesses.values());
 }
+
 export function WhatsAppBusinessPanel({
   businesses = [],
+  selectedBusinesses = [],
+  selectedPhoneCount = 0,
+  onClearSelections,
 }: WhatsAppBusinessPanelProps) {
   const [to, setTo] = useState(TEST_PHONE_NUMBER);
- const [templateName, setTemplateName] = useState("jefedes_intro_v2");
-  const [sendTarget, setSendTarget] = useState<SendTarget>("approved");
+  const [templateName, setTemplateName] = useState("jefedes_intro_v2");
+  const [targetMode, setTargetMode] =
+    useState<TemplateTargetMode>("selected_only");
 
   const [message, setMessage] = useState(
     "Merhaba, işletmenizle iletişime geçmek istiyoruz."
@@ -123,65 +101,34 @@ export function WhatsAppBusinessPanel({
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const currentBusinesses = businesses as BusinessForWhatsApp[];
+  const currentSelectedBusinesses = selectedBusinesses as BusinessForWhatsApp[];
+
+  const eligibleBusinesses = useMemo(() => {
+    return getEligibleBusinesses(currentBusinesses);
+  }, [currentBusinesses]);
+
+  const eligibleSelectedBusinesses = useMemo(() => {
+    return getEligibleBusinesses(currentSelectedBusinesses);
+  }, [currentSelectedBusinesses]);
+
+  const templateTargetBusinesses = useMemo(() => {
+    if (targetMode === "all_eligible") {
+      return eligibleBusinesses;
+    }
+
+    return eligibleSelectedBusinesses;
+  }, [eligibleBusinesses, eligibleSelectedBusinesses, targetMode]);
+
+  const sendableCount = templateTargetBusinesses.length;
+
   const handleSendTemplate = async () => {
     try {
       setIsSending(true);
       setErrorMessage("");
       setSuccessMessage("");
 
-      const currentBusinesses = businesses as BusinessForWhatsApp[];
-      let targetBusinesses: BusinessForWhatsApp[] = [];
-
-      if (sendTarget === "all_phone") {
-        targetBusinesses = currentBusinesses.filter(
-          (business) => hasUsableId(business) && hasUsablePhone(business)
-        );
-      }
-
-if (sendTarget === "approved") {
-  const localApprovedBusinesses =
-    getApprovedBusinessesFromLocalStorage(currentBusinesses);
-
-  try {
-    const approvedResponse = await getBusinessesByStatus("approved");
-
-    const currentBusinessIds = new Set(
-      currentBusinesses
-        .filter(hasUsableId)
-        .map((business) => String(getBusinessId(business)))
-    );
-
-    const backendApprovedBusinesses = (
-      approvedResponse.businesses as BusinessForWhatsApp[]
-    )
-      .filter((business) =>
-        currentBusinessIds.has(String(getBusinessId(business)))
-      )
-      .filter(
-        (business) => hasUsableId(business) && hasUsablePhone(business)
-      );
-
-    targetBusinesses = mergeUniqueBusinessesById([
-      ...localApprovedBusinesses,
-      ...backendApprovedBusinesses,
-    ]);
-  } catch (error) {
-    console.warn(
-      "Approved businesses could not be loaded from backend:",
-      error
-    );
-
-    targetBusinesses =
-      localApprovedBusinesses.length > 0
-        ? localApprovedBusinesses
-        : currentBusinesses.filter(
-            (business) =>
-              hasUsableId(business) &&
-              hasUsablePhone(business) &&
-              business.status === "approved"
-          );
-  }
-}
+      const targetBusinesses = mergeUniqueBusinessesById(templateTargetBusinesses);
 
       const businessIds = targetBusinesses
         .map((business) => getBusinessId(business))
@@ -192,9 +139,9 @@ if (sendTarget === "approved") {
 
       if (businessIds.length === 0) {
         setErrorMessage(
-          sendTarget === "approved"
-            ? "Bu arama içinde onaylı ve telefonlu firma bulunamadı. Test etmek istediğiniz firmaları önce Onaylandı yapın."
-            : "Bu arama içinde telefonlu firma bulunamadı."
+          targetMode === "selected_only"
+            ? "Template göndermek için uygun durumda seçili firma bulunamadı."
+            : "Bu arama içinde template gönderimine uygun firma bulunamadı."
         );
         return;
       }
@@ -205,9 +152,14 @@ if (sendTarget === "approved") {
         .filter(Boolean)
         .join(", ");
 
+      const targetText =
+        targetMode === "all_eligible"
+          ? "tüm uygun firmaya"
+          : "seçili uygun firmaya";
+
       const confirmed = window.confirm(
-        `${businessIds.length} firmaya "${templateName}" template mesajı gönderilecek.\n\n` +
-          "Not: Meta'daki onaylı template içeriği hâlâ Rezzgo/Jefedes metniyle kontrol edilmelidir.\n\n" +
+        `${businessIds.length} ${targetText} "${templateName}" template mesajı gönderilecek.\n\n` +
+          "Daha önce template gönderilmiş, cevap bekleyen, cevap veren, ilgilenmiyor durumunda olan veya final sonucu belirlenmiş firmalar otomatik atlanır.\n\n" +
           "Devam etmek istiyor musunuz?" +
           (previewNames ? `\n\nİlk firmalar: ${previewNames}` : "")
       );
@@ -222,8 +174,11 @@ if (sendTarget === "approved") {
         languageCode: TEMPLATE_LANGUAGE_CODE,
       });
 
+      const skippedCount =
+        "skippedCount" in response ? Number(response.skippedCount || 0) : 0;
+
       setSuccessMessage(
-        `Template gönderimi tamamlandı. Başarılı: ${response.sentCount}, Başarısız: ${response.failedCount}.`
+        `Template gönderimi tamamlandı. Başarılı: ${response.sentCount}, Atlanan: ${skippedCount}, Başarısız: ${response.failedCount}.`
       );
     } catch (error) {
       console.error("WhatsApp template send error:", error);
@@ -238,91 +193,91 @@ if (sendTarget === "approved") {
     }
   };
 
-const handleSendTestTemplate = async () => {
-  if (!to.trim()) {
-    setErrorMessage("Lütfen test template göndermek için alıcı numara girin.");
-    setSuccessMessage("");
-    return;
-  }
-
-  try {
-    setIsSending(true);
-    setErrorMessage("");
-    setSuccessMessage("");
-
-    const response = await sendWhatsAppTestMessage({
-      to: to.trim(),
-      message: "jefedes_intro_v2",
-      mode: "template",
-      templateName: "jefedes_intro_v2",
-      languageCode: "tr",
-    });
-
-    const normalizedTo = response.result?.to || to.trim();
-    const messageStatus = response.result?.messageStatus;
-
-    if (messageStatus === "accepted") {
-      setSuccessMessage(
-        `Template test isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
-      );
+  const handleSendTestTemplate = async () => {
+    if (!to.trim()) {
+      setErrorMessage("Lütfen test template göndermek için alıcı numara girin.");
+      setSuccessMessage("");
       return;
     }
 
-    setSuccessMessage(`Template test mesajı gönderildi (${normalizedTo}).`);
-  } catch (error) {
-    console.error("WhatsApp template test error:", error);
+    try {
+      setIsSending(true);
+      setErrorMessage("");
+      setSuccessMessage("");
 
-    setErrorMessage(
-      error instanceof Error
-        ? error.message
-        : "WhatsApp template test mesajı gönderilemedi."
-    );
-  } finally {
-    setIsSending(false);
-  }
-};
+      const response = await sendWhatsAppTestMessage({
+        to: to.trim(),
+        message: "jefedes_intro_v2",
+        mode: "template",
+        templateName: "jefedes_intro_v2",
+        languageCode: "tr",
+      });
 
-const handleSendMessage = async () => {
-  if (!to.trim() || !message.trim()) {
-    setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
-    setSuccessMessage("");
-    return;
-  }
+      const normalizedTo = response.result?.to || to.trim();
+      const messageStatus = response.result?.messageStatus;
 
-  try {
-    setIsSending(true);
-    setErrorMessage("");
-    setSuccessMessage("");
+      if (messageStatus === "accepted") {
+        setSuccessMessage(
+          `Template test isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
+        );
+        return;
+      }
 
-    const response = await sendWhatsAppTestMessage({
-      to: to.trim(),
-      message: message.trim(),
-      mode: "text",
-    });
+      setSuccessMessage(`Template test mesajı gönderildi (${normalizedTo}).`);
+    } catch (error) {
+      console.error("WhatsApp template test error:", error);
 
-    const normalizedTo = response.result?.to || to.trim();
-    const messageStatus = response.result?.messageStatus;
-
-    if (messageStatus === "accepted") {
-      setSuccessMessage(
-        `Manuel mesaj isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "WhatsApp template test mesajı gönderilemedi."
       );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!to.trim() || !message.trim()) {
+      setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
+      setSuccessMessage("");
       return;
     }
 
-    setSuccessMessage(`Manuel mesaj gönderildi (${normalizedTo}).`);
-  } catch (error) {
-    console.error("WhatsApp text send error:", error);
+    try {
+      setIsSending(true);
+      setErrorMessage("");
+      setSuccessMessage("");
 
-    setErrorMessage(
-      error instanceof Error
-        ? error.message
-        : "WhatsApp manuel mesajı gönderilemedi."
-    );
-  } finally {
-    setIsSending(false);
-  }
-};
+      const response = await sendWhatsAppTestMessage({
+        to: to.trim(),
+        message: message.trim(),
+        mode: "text",
+      });
+
+      const normalizedTo = response.result?.to || to.trim();
+      const messageStatus = response.result?.messageStatus;
+
+      if (messageStatus === "accepted") {
+        setSuccessMessage(
+          `Manuel mesaj isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
+        );
+        return;
+      }
+
+      setSuccessMessage(`Manuel mesaj gönderildi (${normalizedTo}).`);
+    } catch (error) {
+      console.error("WhatsApp text send error:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "WhatsApp manuel mesajı gönderilemedi."
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -370,14 +325,8 @@ const handleSendMessage = async () => {
               onChange={(event) => setTemplateName(event.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
-            <option value="jefedes_intro_v2">
-              Jefedes Tanıtım Template&apos;i
-            </option>
-              <option value="jefedes_info_template">
-                Bilgi Talebi Template&apos;i
-              </option>
-              <option value="jefedes_followup_template">
-                Takip Mesajı Template&apos;i
+              <option value="jefedes_intro_v2">
+                Jefedes Tanıtım Template&apos;i
               </option>
             </select>
           </div>
@@ -391,34 +340,59 @@ const handleSendMessage = async () => {
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50">
                 <input
                   type="radio"
-                  name="send-target"
-                  checked={sendTarget === "all_phone"}
-                  onChange={() => setSendTarget("all_phone")}
+                  name="template-target-mode"
+                  checked={targetMode === "all_eligible"}
+                  onChange={() => setTargetMode("all_eligible")}
                   className="h-4 w-4 accent-emerald-500"
                 />
-                Tüm telefonlu firmalar
+                Tüm uygun firmalara
               </label>
 
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50">
                 <input
                   type="radio"
-                  name="send-target"
-                  checked={sendTarget === "approved"}
-                  onChange={() => setSendTarget("approved")}
+                  name="template-target-mode"
+                  checked={targetMode === "selected_only"}
+                  onChange={() => setTargetMode("selected_only")}
                   className="h-4 w-4 accent-emerald-500"
                 />
-                Sadece onaylananlar
+                Sadece seçili firmalara
               </label>
             </div>
           </div>
 
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-xs leading-5 text-blue-700">
+            {targetMode === "all_eligible"
+              ? `Bu arama içinde ${eligibleBusinesses.length} uygun firmaya template gönderilebilir.`
+              : `Seçili ${selectedPhoneCount} firmadan ${eligibleSelectedBusinesses.length} tanesi template için uygun.`}
+            <br />
+            Daha önce template gönderilen veya final sonucu belirlenen firmalar
+            otomatik atlanır.
+          </div>
+
+          {targetMode === "selected_only" && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClearSelections}
+              disabled={selectedPhoneCount === 0}
+              className="h-10 w-full rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Seçimleri Temizle
+            </Button>
+          )}
+
           <Button
             type="button"
             onClick={handleSendTemplate}
-            disabled={isSending}
+            disabled={isSending || sendableCount === 0}
             className="h-10 w-full rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-100 hover:bg-emerald-600 disabled:bg-emerald-300"
           >
-            {isSending ? "Gönderiliyor..." : "Template Gönder"}
+            {isSending
+              ? "Gönderiliyor..."
+              : targetMode === "all_eligible"
+              ? "Tüm Uygunlara Gönder"
+              : "Seçilenlere Gönder"}
           </Button>
         </section>
 
@@ -476,24 +450,24 @@ const handleSendMessage = async () => {
           </div>
 
           <div className="grid gap-2 sm:grid-cols-[0.8fr_1fr]">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleSendTestTemplate}
-            disabled={isSending}
-            className="h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-          >
-            Test Template Gönder
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSendTestTemplate}
+              disabled={isSending}
+              className="h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Test Template Gönder
+            </Button>
 
-          <Button
-            type="button"
-            onClick={handleSendMessage}
-            disabled={isSending}
-            className="h-10 rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-100 hover:bg-emerald-600 disabled:bg-emerald-300"
-          >
-            {isSending ? "Gönderiliyor..." : "Mesaj Gönder"}
-          </Button>
+            <Button
+              type="button"
+              onClick={handleSendMessage}
+              disabled={isSending}
+              className="h-10 rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-100 hover:bg-emerald-600 disabled:bg-emerald-300"
+            >
+              {isSending ? "Gönderiliyor..." : "Mesaj Gönder"}
+            </Button>
           </div>
         </section>
 

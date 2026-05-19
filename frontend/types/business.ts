@@ -6,7 +6,8 @@ export type WhatsAppStatus =
   | "not_sent"
   | "template_sent"
   | "waiting_reply"
-  | "replied";
+  | "replied"
+  | "not_interested";
 
 export type WhatsAppStatusFilter = "all" | WhatsAppStatus;
 
@@ -39,12 +40,14 @@ export type LeadItem = {
   website?: string;
   status?: LeadStatus;
   whatsappStatus?: WhatsAppStatus;
+
   lat?: number | null;
-lng?: number | null;
-templateSentAt?: string | null;
-lastIncomingAt?: string | null;
-lastMessageText?: string | null;
-lastWhatsappMessageId?: string | null;
+  lng?: number | null;
+
+  templateSentAt?: string | null;
+  lastIncomingAt?: string | null;
+  lastMessageText?: string | null;
+  lastWhatsappMessageId?: string | null;
 };
 
 export type Business = {
@@ -67,13 +70,14 @@ export type Business = {
   lastMessageText?: string | null;
   lastWhatsappMessageId?: string | null;
 
-location?: {
-  lat?: number;
-  lng?: number;
-  latitude?: number;
-  longitude?: number;
+  location?: {
+    lat?: number;
+    lng?: number;
+    latitude?: number;
+    longitude?: number;
+  };
 };
-};
+
 export type SearchResult = {
   searchId?: string;
   status?: "processing" | "completed" | "failed";
