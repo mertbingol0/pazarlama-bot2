@@ -84,16 +84,17 @@ function validateBusinessStatus(status) {
 }
 function validateWhatsAppStatus(status) {
   const allowedStatuses = [
-    "not_sent",
-    "template_sent",
-    "waiting_reply",
-    "replied",
-  ];
+  "not_sent",
+  "template_sent",
+  "waiting_reply",
+  "replied",
+  "not_interested",
+];
 
   if (!allowedStatuses.includes(status)) {
-    throw new Error(
-      "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply veya replied olabilir."
-    );
+   throw new Error(
+  "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply, replied veya not_interested olabilir."
+);
   }
 }
 async function getDb() {
@@ -234,17 +235,6 @@ if (!liveSupportColumnNames.includes("seen_at")) {
   );
 }
 
-const liveSupportColumns = await database.all(
-  "PRAGMA table_info(live_support_leads)"
-);
-
-const liveSupportColumnNames = liveSupportColumns.map((column) => column.name);
-
-if (!liveSupportColumnNames.includes("seen_at")) {
-  await database.exec(
-    "ALTER TABLE live_support_leads ADD COLUMN seen_at TEXT DEFAULT NULL;"
-  );
-}
 
   await database.run(`
     UPDATE businesses
