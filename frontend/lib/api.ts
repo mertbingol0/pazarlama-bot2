@@ -40,6 +40,7 @@ type WhatsAppStatusUpdateResponse = BackendErrorResponse & {
 type SendWhatsAppTemplateResponse = BackendErrorResponse & {
   success: boolean;
   sentCount: number;
+  skippedCount?: number;
   failedCount: number;
   results: unknown[];
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { LeadStatus } from "@/types/business";
 import {
   clearStoredLeadsByStatus,
@@ -216,32 +216,38 @@ export function StoredLeadsPage({
   const [errorMessage, setErrorMessage] = useState("");
   const [usesBackend, setUsesBackend] = useState(true);
 
-  const refreshLeads = async () => {
-    try {
-      setIsLoading(true);
-      setErrorMessage("");
+const refreshLeads = useCallback(async () => {
+  try {
+    setIsLoading(true);
+    setErrorMessage("");
 
-      const data = await getBusinessesByStatus(status);
+    const data = await getBusinessesByStatus(status);
 
-      const backendLeads: StoredLeadItem[] = (data.businesses || []).map(
-        (business: BackendBusiness) => mapBusinessToStoredLead(business, status)
-      );
+    const backendLeads: StoredLeadItem[] = (data.businesses || []).map(
+      (business: BackendBusiness) => mapBusinessToStoredLead(business, status)
+    );
 
-      setUsesBackend(true);
-      setLeads(backendLeads);
-    } catch (error) {
-      console.error("Backend kayıtları alınamadı, localStorage kullanılıyor:", error);
+    setUsesBackend(true);
+    setLeads(backendLeads);
+  } catch (error) {
+    console.error("Backend kayıtları alınamadı, localStorage kullanılıyor:", error);
 
-      setUsesBackend(false);
-      setLeads(getStoredLeadsByStatus(status));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    setUsesBackend(false);
+    setLeads(getStoredLeadsByStatus(status));
+  } finally {
+    setIsLoading(false);
+  }
+}, [status]);
 
-  useEffect(() => {
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
     void refreshLeads();
-  }, [status]);
+  }, 0);
+
+  return () => {
+    window.clearTimeout(timeoutId);
+  };
+}, [refreshLeads]);
 
   const handleCopy = async (value: string) => {
     await navigator.clipboard.writeText(value);

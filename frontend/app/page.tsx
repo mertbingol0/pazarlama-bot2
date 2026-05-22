@@ -35,7 +35,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
     const savedSearch = localStorage.getItem(LAST_SEARCH_STORAGE_KEY);
 
     if (!savedSearch) {
@@ -54,7 +55,12 @@ export default function Home() {
       console.error("Son arama okunamadı:", error);
       localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
     }
-  }, []);
+  }, 0);
+
+  return () => {
+    window.clearTimeout(timeoutId);
+  };
+}, []);
 
   useEffect(() => {
     const clearLastSearchOnPageClose = () => {

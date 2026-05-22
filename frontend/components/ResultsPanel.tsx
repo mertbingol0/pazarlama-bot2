@@ -15,8 +15,17 @@ type ResultsPanelProps = {
 
 function isTemplateEligibleBusiness(business: Business) {
   const whatsappStatus = business.whatsappStatus || "not_sent";
+  const leadStatus = business.status || "pending";
 
-  return Boolean(business.phone?.trim()) && whatsappStatus === "not_sent";
+  const hasFinalLeadOutcome =
+    leadStatus === "approved" || leadStatus === "rejected";
+
+  return (
+    Boolean(business.phone?.trim()) &&
+    !business.templateSentAt &&
+    !hasFinalLeadOutcome &&
+    whatsappStatus === "not_sent"
+  );
 }
 
 function isSameId(firstId?: string | number, secondId?: string | number) {
@@ -40,7 +49,9 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
     Array<string | number>
   >([]);
 
-  const businesses = results.businesses || [];
+  const businesses = useMemo(() => {
+  return results.businesses || [];
+}, [results.businesses]);
 
   const eligibleBusinesses = useMemo(() => {
     return businesses.filter(isTemplateEligibleBusiness);

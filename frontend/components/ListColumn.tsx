@@ -49,26 +49,43 @@ const whatsappStatusFilters: {
     value: "all",
   },
   {
-    label: "Gönderilmedi",
+    label: "N/A",
     value: "not_sent",
   },
   {
-    label: "Template gönderilenler",
+    label: "Template gönderildi",
     value: "template_sent",
   },
   {
-    label: "Cevap bekleyenler",
-    value: "waiting_reply",
+    label: "Bilgi isteniyor",
+    value: "replied",
   },
   {
-    label: "Cevap verenler",
-    value: "replied",
+    label: "Daha sonra aranacak",
+    value: "follow_up",
   },
   {
     label: "İlgilenmiyor",
     value: "not_interested",
   },
 ];
+
+function normalizeWhatsAppStatus(status?: string | null): WhatsAppStatus {
+  if (status === "waiting_reply") {
+    return "template_sent";
+  }
+
+  if (
+    status === "template_sent" ||
+    status === "replied" ||
+    status === "follow_up" ||
+    status === "not_interested"
+  ) {
+    return status;
+  }
+
+  return "not_sent";
+}
 
 function getStatusClassName(status: LeadStatus) {
   if (status === "approved") {
@@ -87,12 +104,12 @@ function getWhatsAppStatusClassName(status: WhatsAppStatus) {
     return "border-blue-100 bg-blue-50/80 text-blue-700";
   }
 
-  if (status === "waiting_reply") {
-    return "border-amber-100 bg-amber-50/80 text-amber-700";
-  }
-
   if (status === "replied") {
     return "border-emerald-100 bg-emerald-50/80 text-emerald-700";
+  }
+
+  if (status === "follow_up") {
+    return "border-amber-100 bg-amber-50/80 text-amber-700";
   }
 
   if (status === "not_interested") {
@@ -125,8 +142,26 @@ function normalizeText(value?: string) {
   return (value || "").trim().toLocaleLowerCase("tr-TR");
 }
 
-function canSelectForTemplate(status: WhatsAppStatus, noPhone?: boolean) {
-  return !noPhone && status === "not_sent";
+function canSelectForTemplate({
+  status,
+  noPhone,
+  templateSentAt,
+  leadStatus,
+}: {
+  status: WhatsAppStatus;
+  noPhone?: boolean;
+  templateSentAt?: string | null;
+  leadStatus?: LeadStatus;
+}) {
+  const hasFinalLeadOutcome =
+    leadStatus === "approved" || leadStatus === "rejected";
+
+  return (
+    !noPhone &&
+    !templateSentAt &&
+    !hasFinalLeadOutcome &&
+    status === "not_sent"
+  );
 }
 
 function isSelectedBusiness(
@@ -196,7 +231,11 @@ export function ListColumn({
         noPhone: true,
         website: business.website,
         status: business.status || "pending",
-        whatsappStatus: business.whatsappStatus || "not_sent",
+        whatsappStatus: normalizeWhatsAppStatus(business.whatsappStatus),
+        templateSentAt: business.templateSentAt || null,
+        lastIncomingAt: business.lastIncomingAt || null,
+        lastMessageText: business.lastMessageText || null,
+        lastWhatsappMessageId: business.lastWhatsappMessageId || null,
       }));
   }, [businesses, type]);
 
@@ -224,15 +263,33 @@ export function ListColumn({
     return item.businessId || item.id || relatedBusiness?.id;
   };
 
-  const getCurrentWhatsAppStatus = (item: DisplayLeadItem) => {
+  const getCurrentLeadStatus = (item: DisplayLeadItem) => {
     const relatedBusiness = getRelatedBusiness(item);
     const itemKey = getLeadKey(item);
 
     return (
+      localStatuses[itemKey] ||
+      item.status ||
+      relatedBusiness?.status ||
+      "pending"
+    );
+  };
+
+  const getCurrentTemplateSentAt = (item: DisplayLeadItem) => {
+    const relatedBusiness = getRelatedBusiness(item);
+
+    return item.templateSentAt || relatedBusiness?.templateSentAt || null;
+  };
+
+  const getCurrentWhatsAppStatus = (item: DisplayLeadItem) => {
+    const relatedBusiness = getRelatedBusiness(item);
+    const itemKey = getLeadKey(item);
+
+    return normalizeWhatsAppStatus(
       localWhatsAppStatuses[itemKey] ||
-      item.whatsappStatus ||
-      relatedBusiness?.whatsappStatus ||
-      "not_sent"
+        item.whatsappStatus ||
+        relatedBusiness?.whatsappStatus ||
+        "not_sent"
     );
   };
 
@@ -247,7 +304,12 @@ export function ListColumn({
   const selectableBusinessIds = uniqueBusinessIds(
     displayItems
       .filter((item) =>
-        canSelectForTemplate(getCurrentWhatsAppStatus(item), item.noPhone)
+        canSelectForTemplate({
+          status: getCurrentWhatsAppStatus(item),
+          noPhone: item.noPhone,
+          templateSentAt: getCurrentTemplateSentAt(item),
+          leadStatus: getCurrentLeadStatus(item),
+        })
       )
       .map((item) => getItemBusinessId(item))
       .filter((id): id is string | number => id !== undefined && id !== null)
@@ -404,7 +466,7 @@ export function ListColumn({
 
             {type === "phone" && (
               <p className="mt-1 text-xs text-slate-400">
-                Template göndermek için uygun firmaları seçebilirsiniz.
+                Template göndermek için firmaları seçebilirsiniz.
               </p>
             )}
 
@@ -517,8 +579,7 @@ export function ListColumn({
             {displayItems.map((item) => {
               const itemKey = getLeadKey(item);
 
-              const currentStatus =
-                localStatuses[itemKey] || item.status || "pending";
+              const currentStatus = getCurrentLeadStatus(item);
 
               const isNoPhoneItem = item.noPhone === true;
               const relatedBusiness = getRelatedBusiness(item);
@@ -530,11 +591,8 @@ export function ListColumn({
                 item.website || relatedBusiness?.website
               );
 
-              const currentWhatsAppStatus =
-                localWhatsAppStatuses[itemKey] ||
-                item.whatsappStatus ||
-                relatedBusiness?.whatsappStatus ||
-                "not_sent";
+              const currentWhatsAppStatus = getCurrentWhatsAppStatus(item);
+              const currentTemplateSentAt = getCurrentTemplateSentAt(item);
 
               const isUpdating = updatingItemKey === itemKey;
               const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
@@ -542,7 +600,12 @@ export function ListColumn({
               const canSelect =
                 type === "phone" &&
                 businessId !== undefined &&
-                canSelectForTemplate(currentWhatsAppStatus, isNoPhoneItem);
+                canSelectForTemplate({
+                  status: currentWhatsAppStatus,
+                  noPhone: isNoPhoneItem,
+                  templateSentAt: currentTemplateSentAt,
+                  leadStatus: currentStatus,
+                });
 
               const isSelected = isSelectedBusiness(
                 selectedBusinessIds,
@@ -670,7 +733,10 @@ export function ListColumn({
 
                       <select
                         value={currentWhatsAppStatus}
-                        disabled={isWhatsAppUpdating}
+                        disabled={
+                          isWhatsAppUpdating ||
+                          currentWhatsAppStatus === "not_interested"
+                        }
                         onChange={(event) =>
                           void handleWhatsAppStatusChange(
                             item,
@@ -686,6 +752,10 @@ export function ListColumn({
                         <option
                           className="bg-white text-slate-700"
                           value="not_sent"
+                          disabled={
+                            currentWhatsAppStatus !== "not_sent" ||
+                            Boolean(currentTemplateSentAt)
+                          }
                         >
                           N/A
                         </option>
@@ -699,16 +769,16 @@ export function ListColumn({
 
                         <option
                           className="bg-white text-slate-700"
-                          value="waiting_reply"
+                          value="replied"
                         >
-                          Cevap bekleniyor
+                          Bilgi isteniyor
                         </option>
 
                         <option
                           className="bg-white text-slate-700"
-                          value="replied"
+                          value="follow_up"
                         >
-                          Cevap verdi
+                          Daha sonra aranacak
                         </option>
 
                         <option

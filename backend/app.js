@@ -56,6 +56,7 @@ function isValidWhatsAppStatus(status) {
     "template_sent",
     "waiting_reply",
     "replied",
+    "follow_up",
     "not_interested",
   ].includes(status);
 }
@@ -214,7 +215,7 @@ app.get("/api/businesses", async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-  "whatsappStatus sadece all, not_sent, template_sent, waiting_reply, replied veya not_interested olabilir.",
+          "whatsappStatus sadece all, not_sent, template_sent, waiting_reply, replied, follow_up veya not_interested olabilir.",
       });
     }
 
@@ -358,9 +359,13 @@ app.patch("/api/live-support-leads/:id/note", async (req, res) => {
 app.patch("/api/businesses/:id/whatsapp-status", async (req, res) => {
   try {
     const businessId = Number(req.params.id);
-    const whatsappStatus = String(req.body.whatsappStatus || "")
+    const requestedWhatsAppStatus = String(req.body.whatsappStatus || "")
       .trim()
       .toLowerCase();
+    const whatsappStatus =
+      requestedWhatsAppStatus === "waiting_reply"
+        ? "template_sent"
+        : requestedWhatsAppStatus;
 
     if (!Number.isInteger(businessId) || businessId <= 0) {
       return res.status(400).json({
@@ -369,20 +374,58 @@ app.patch("/api/businesses/:id/whatsapp-status", async (req, res) => {
       });
     }
 
-    if (!whatsappStatus) {
+    if (!requestedWhatsAppStatus) {
       return res.status(400).json({
         success: false,
         message: "whatsappStatus alanı zorunludur.",
       });
     }
 
-  if (!isValidWhatsAppStatus(whatsappStatus)) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "whatsappStatus sadece not_sent, template_sent, waiting_reply, replied veya not_interested olabilir.",
-  });
-}
+    if (!isValidWhatsAppStatus(whatsappStatus)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "whatsappStatus sadece not_sent, template_sent, waiting_reply, replied, follow_up veya not_interested olabilir.",
+      });
+    }
+
+    const business = await getBusinessById(businessId);
+
+    if (!business) {
+      return res.status(404).json({
+        success: false,
+        message: "Isletme bulunamadi.",
+      });
+    }
+
+    const currentWhatsAppStatus = business.whatsappStatus || "not_sent";
+    const hasTemplateBeenSent = Boolean(business.templateSentAt);
+
+    if (
+      currentWhatsAppStatus === "not_interested" &&
+      whatsappStatus !== "not_interested"
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Bu isletme not_interested durumunda oldugu icin baska bir aktif WhatsApp durumuna alinamaz.",
+        currentStatus: currentWhatsAppStatus,
+        templateSentAt: business.templateSentAt || null,
+      });
+    }
+
+    if (
+      whatsappStatus === "not_sent" &&
+      (hasTemplateBeenSent || currentWhatsAppStatus !== "not_sent")
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Bu isletme tekrar not_sent durumuna alinamaz. Template daha once gonderilmis veya WhatsApp akisi baslatilmis.",
+        currentStatus: currentWhatsAppStatus,
+        templateSentAt: business.templateSentAt || null,
+      });
+    }
 
     const updatedBusiness = await updateBusinessWhatsAppStatus(
       businessId,
@@ -411,7 +454,7 @@ app.patch("/api/businesses/:id/whatsapp-status", async (req, res) => {
     });
   }
 });
-function canSendWhatsAppTemplate(business) {
+function getWhatsAppTemplateSkipReason(business) {
   const whatsappStatus = business.whatsappStatus || "not_sent";
   const leadStatus = business.status || "pending";
 
@@ -419,18 +462,37 @@ function canSendWhatsAppTemplate(business) {
     leadStatus === "approved" || leadStatus === "rejected";
 
   if (hasFinalLeadOutcome) {
-    return false;
+    return "final_lead_outcome";
   }
 
-  return whatsappStatus === "not_sent";
+  if (whatsappStatus === "not_interested") {
+    return "not_interested";
+  }
+
+  if (business.templateSentAt) {
+    return "template_already_sent";
+  }
+
+  if (whatsappStatus !== "not_sent") {
+    return "whatsapp_status_not_eligible";
+  }
+
+  return null;
+}
+
+function canSendWhatsAppTemplate(business) {
+  return getWhatsAppTemplateSkipReason(business) === null;
 }
 app.post("/api/whatsapp/send-template", async (req, res) => {
   try {
     const {
       businessIds = [],
-      templateName = "hello_world",
-      languageCode = "en_US",
+      templateName: rawTemplateName = "jefedes_intro_v2",
+      languageCode: rawLanguageCode = "tr",
     } = req.body;
+    const templateName =
+      String(rawTemplateName || "").trim() || "jefedes_intro_v2";
+    const languageCode = String(rawLanguageCode || "").trim() || "tr";
 
     if (!Array.isArray(businessIds) || businessIds.length === 0) {
       return res.status(400).json({
@@ -477,17 +539,19 @@ app.post("/api/whatsapp/send-template", async (req, res) => {
       }
 
       if (!canSendWhatsAppTemplate(business)) {
-       results.push({
+        results.push({
           businessId,
           success: false,
           skipped: true,
-          currentStatus: business.whatsappStatus,
-          currentLeadStatus: business.status,
+          currentStatus: business.whatsappStatus || "not_sent",
+          currentLeadStatus: business.status || "pending",
+          templateSentAt: business.templateSentAt || null,
+          skipReason: getWhatsAppTemplateSkipReason(business),
           message:
-            "Bu firma template gönderimine uygun değil. Daha önce template gönderilmiş, firma ilgilenmiyor veya final durumdadır.",
+            "Bu firma template gonderimine uygun degil. currentStatus, currentLeadStatus, templateSentAt ve skipReason alanlarini kontrol edin.",
         });
         continue;
-        }
+      }
 
       try {
         const whatsappResult = await sendWhatsAppTemplateMessage({
@@ -496,11 +560,11 @@ app.post("/api/whatsapp/send-template", async (req, res) => {
           languageCode,
         });
 
-        const updatedBusiness = await markTemplateSent({
-          businessId,
-          whatsappStatus: "waiting_reply",
-          messageId: whatsappResult.messageId,
-        });
+      const updatedBusiness = await markTemplateSent({
+        businessId,
+        whatsappStatus: "template_sent",
+        messageId: whatsappResult.messageId,
+      });
 
         results.push({
           businessId,
@@ -579,14 +643,21 @@ app.post("/api/whatsapp/send-message", async (req, res) => {
         message: "İşletmenin telefon numarası yok.",
       });
     }
+if (business.whatsappStatus === "not_interested") {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Bu işletme ilgilenmiyor durumunda olduğu için manuel mesaj gönderilemez.",
+  });
+}
 
-    if (business.whatsappStatus !== "replied") {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Bu işletmeye manuel mesaj göndermek için önce müşterinin cevap vermiş olması gerekir. İlk temas için template gönderin.",
-      });
-    }
+if (!["replied", "follow_up"].includes(business.whatsappStatus)) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Bu işletmeye manuel mesaj göndermek için önce müşterinin cevap vermiş veya daha sonra aranacak durumunda olması gerekir. İlk temas için template gönderin.",
+  });
+}
 
     const whatsappResult = await sendWhatsAppTextMessage({
       to: business.phone,
@@ -1030,17 +1101,17 @@ function getWhatsAppReplyText(message) {
 function getWhatsAppReplyAction(replyText) {
   if (replyText === "Bilgi almak istiyorum") {
     return {
-      leadStatus: "approved",
-      whatsappStatus: "handoff_requested",
-      actionLabel: "Canlı destek gerekli",
+      leadStatus: "pending",
+      whatsappStatus: "replied",
+      actionLabel: "Bilgi isteniyor",
     };
   }
 
   if (replyText === "Daha sonra dönüş yapın") {
     return {
       leadStatus: "pending",
-      whatsappStatus: "follow_up_scheduled",
-      actionLabel: "Takip planlandı",
+      whatsappStatus: "follow_up",
+      actionLabel: "Daha sonra aranacak",
     };
   }
 
@@ -1099,11 +1170,11 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
     });
   }
 
-  if (replyText === "Bilgi almak istiyorum") {
-    if (updatedBusiness?.id) {
-      await updateBusinessStatus(updatedBusiness.id, "approved");
-      await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
-    }
+if (replyText === "Bilgi almak istiyorum") {
+  if (updatedBusiness?.id) {
+    await updateBusinessStatus(updatedBusiness.id, "pending");
+    await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
+  }
 
     const liveSupportLead = await saveLiveSupportLead({
       phone: fromPhone,
@@ -1118,11 +1189,11 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
     });
   }
 
-  if (replyText === "Daha sonra dönüş yapın") {
-    if (updatedBusiness?.id) {
-      await updateBusinessStatus(updatedBusiness.id, "pending");
-      await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
-    }
+if (replyText === "Daha sonra dönüş yapın") {
+  if (updatedBusiness?.id) {
+    await updateBusinessStatus(updatedBusiness.id, "pending");
+    await updateBusinessWhatsAppStatus(updatedBusiness.id, "follow_up");
+  }
 
     const followUpDate = new Date();
     followUpDate.setDate(followUpDate.getDate() + 1);

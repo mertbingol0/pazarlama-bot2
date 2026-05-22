@@ -14,6 +14,9 @@ function normalizeText(value) {
     .toLocaleLowerCase("tr-TR");
 }
 
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
 function createSearchKey({ category, city, district }) {
   return `${normalizeText(category)}|${normalizeText(city)}|${normalizeText(
     district
@@ -21,6 +24,12 @@ function createSearchKey({ category, city, district }) {
 }
 
 function createBusinessIdentityKey(business) {
+  const normalizedPhone = normalizePhone(business.phone);
+
+  if (normalizedPhone) {
+    return `phone:${normalizedPhone}`;
+  }
+
   const externalId =
     business.externalId ||
     business.external_id ||
@@ -30,19 +39,49 @@ function createBusinessIdentityKey(business) {
     return `external:${externalId}`;
   }
 
-  if (business.googleMapsUrl || business.google_maps_url) {
-    return `maps:${business.googleMapsUrl || business.google_maps_url}`;
-  }
+  const googleMapsUrl = business.googleMapsUrl || business.google_maps_url;
 
-  if (business.phone) {
-    return `phone:${normalizeText(business.phone)}`;
+  if (googleMapsUrl) {
+    return `maps:${googleMapsUrl}`;
   }
 
   return `name-address:${normalizeText(business.name)}|${normalizeText(
     business.address
   )}`;
 }
+function getBusinessStatePriority(state) {
+  let priority = 0;
 
+  if (!state) {
+    return priority;
+  }
+
+  if (state.status === "approved" || state.status === "rejected") {
+    priority += 50;
+  }
+
+  if (state.whatsappStatus && state.whatsappStatus !== "not_sent") {
+    priority += 30;
+  }
+
+  if (state.templateSentAt) {
+    priority += 20;
+  }
+
+  if (state.lastIncomingAt) {
+    priority += 15;
+  }
+
+  if (state.lastMessageText) {
+    priority += 10;
+  }
+
+  if (state.lastWhatsappMessageId) {
+    priority += 10;
+  }
+
+  return priority;
+}
 function mapBusinessRow(row) {
   return {
     id: row.id,
@@ -88,12 +127,13 @@ function validateWhatsAppStatus(status) {
   "template_sent",
   "waiting_reply",
   "replied",
+  "follow_up",
   "not_interested",
 ];
 
   if (!allowedStatuses.includes(status)) {
-   throw new Error(
-  "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply, replied veya not_interested olabilir."
+ throw new Error(
+  "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply, replied, follow_up veya not_interested olabilir."
 );
   }
 }
@@ -362,26 +402,32 @@ async function saveSearchResults({ category, city, district, businesses }) {
       last_message_text,
       last_whatsapp_message_id
     FROM businesses
-    WHERE search_id = ?
-    `,
-    search.id
+    `
   );
 
   const existingBusinessStateMap = new Map();
 
-  for (const existingBusiness of existingBusinesses) {
-    const key = createBusinessIdentityKey(existingBusiness);
+for (const existingBusiness of existingBusinesses) {
+  const key = createBusinessIdentityKey(existingBusiness);
 
-    existingBusinessStateMap.set(key, {
-      status: existingBusiness.status || "pending",
-      whatsappStatus: existingBusiness.whatsapp_status || "not_sent",
-      templateSentAt: existingBusiness.template_sent_at || null,
-      lastIncomingAt: existingBusiness.last_incoming_at || null,
-      lastMessageText: existingBusiness.last_message_text || null,
-      lastWhatsappMessageId: existingBusiness.last_whatsapp_message_id || null,
-    });
+  const nextState = {
+    status: existingBusiness.status || "pending",
+    whatsappStatus: existingBusiness.whatsapp_status || "not_sent",
+    templateSentAt: existingBusiness.template_sent_at || null,
+    lastIncomingAt: existingBusiness.last_incoming_at || null,
+    lastMessageText: existingBusiness.last_message_text || null,
+    lastWhatsappMessageId: existingBusiness.last_whatsapp_message_id || null,
+  };
+
+  const currentState = existingBusinessStateMap.get(key);
+
+  if (
+    !currentState ||
+    getBusinessStatePriority(nextState) > getBusinessStatePriority(currentState)
+  ) {
+    existingBusinessStateMap.set(key, nextState);
   }
-
+}
   await database.run("DELETE FROM businesses WHERE search_id = ?", search.id);
 
   for (const business of businesses) {
@@ -759,7 +805,7 @@ async function updateBusinessWhatsAppStatus(businessId, whatsappStatus) {
 
 async function markTemplateSent({
   businessId,
-  whatsappStatus = "waiting_reply",
+  whatsappStatus = "template_sent",
   messageId = null,
 }) {
   validateWhatsAppStatus(whatsappStatus);
@@ -965,18 +1011,6 @@ async function updateLiveSupportLeadNote(leadId, note) {
     seenAt: row.seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-}
-
-async function clearLiveSupportLeads() {
-  const database = await getDb();
-
-  const result = await database.run(`
-    DELETE FROM live_support_leads
-  `);
-
-  return {
-    deletedCount: result.changes || 0,
   };
 }
 

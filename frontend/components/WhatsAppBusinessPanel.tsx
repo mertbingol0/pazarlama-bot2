@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 import type { Business } from "@/types/business";
-import { sendWhatsAppTemplate, sendWhatsAppTestMessage } from "@/lib/api";
+import {
+  sendWhatsAppMessage,
+  sendWhatsAppTemplate,
+  sendWhatsAppTestMessage,
+} from "@/lib/api";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,12 +49,20 @@ function hasTemplateAlreadySent(business: BusinessForWhatsApp) {
   return (
     Boolean(business.templateSentAt) ||
     whatsappStatus === "template_sent" ||
-    whatsappStatus === "waiting_reply" ||
     whatsappStatus === "replied" ||
+    whatsappStatus === "follow_up" ||
     whatsappStatus === "not_interested"
   );
 }
+function canSendManualMessageToBusiness(business: BusinessForWhatsApp) {
+  const whatsappStatus = business.whatsappStatus || "not_sent";
 
+  return (
+    hasUsableId(business) &&
+    hasUsablePhone(business) &&
+    (whatsappStatus === "replied" || whatsappStatus === "follow_up")
+  );
+}
 function hasFinalOutcome(business: BusinessForWhatsApp) {
   return business.status === "approved" || business.status === "rejected";
 }
@@ -111,6 +123,11 @@ export function WhatsAppBusinessPanel({
   const eligibleSelectedBusinesses = useMemo(() => {
     return getEligibleBusinesses(currentSelectedBusinesses);
   }, [currentSelectedBusinesses]);
+  const manualMessageBusinesses = useMemo(() => {
+  return currentSelectedBusinesses.filter(canSendManualMessageToBusiness);
+}, [currentSelectedBusinesses]);
+
+const manualTargetBusiness = manualMessageBusinesses[0];
 
   const templateTargetBusinesses = useMemo(() => {
     if (targetMode === "all_eligible") {
@@ -237,47 +254,65 @@ export function WhatsAppBusinessPanel({
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!to.trim() || !message.trim()) {
-      setErrorMessage("Lütfen alıcı numara ve mesaj içeriğini doldurun.");
-      setSuccessMessage("");
-      return;
-    }
+const handleSendMessage = async () => {
+  if (!message.trim()) {
+    setErrorMessage("Lütfen mesaj içeriğini doldurun.");
+    setSuccessMessage("");
+    return;
+  }
 
-    try {
-      setIsSending(true);
-      setErrorMessage("");
-      setSuccessMessage("");
+  if (manualMessageBusinesses.length === 0) {
+    setErrorMessage(
+      "Manuel mesaj göndermek için listeden WhatsApp durumu 'Bilgi isteniyor' veya 'Daha sonra aranacak' olan bir firma seçin."
+    );
+    setSuccessMessage("");
+    return;
+  }
 
-      const response = await sendWhatsAppTestMessage({
-        to: to.trim(),
-        message: message.trim(),
-        mode: "text",
-      });
+  if (manualMessageBusinesses.length > 1) {
+    setErrorMessage(
+      "Manuel mesaj göndermek için lütfen sadece bir firma seçin."
+    );
+    setSuccessMessage("");
+    return;
+  }
 
-      const normalizedTo = response.result?.to || to.trim();
-      const messageStatus = response.result?.messageStatus;
+  const businessId = getBusinessId(manualTargetBusiness);
 
-      if (messageStatus === "accepted") {
-        setSuccessMessage(
-          `Manuel mesaj isteği Meta tarafından kabul edildi (${normalizedTo}). Bu, mesajın henüz WhatsApp'a teslim edildiği anlamına gelmez.`
-        );
-        return;
-      }
+  if (!businessId) {
+    setErrorMessage("Seçili firmanın businessId bilgisi bulunamadı.");
+    setSuccessMessage("");
+    return;
+  }
 
-      setSuccessMessage(`Manuel mesaj gönderildi (${normalizedTo}).`);
-    } catch (error) {
-      console.error("WhatsApp text send error:", error);
+  try {
+    setIsSending(true);
+    setErrorMessage("");
+    setSuccessMessage("");
 
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "WhatsApp manuel mesajı gönderilemedi."
-      );
-    } finally {
-      setIsSending(false);
-    }
-  };
+    const response = await sendWhatsAppMessage({
+      businessId,
+      message: message.trim(),
+    });
+
+    const businessName =
+      response.business?.name || manualTargetBusiness.name || "Seçili firma";
+
+    setSuccessMessage(
+      `Manuel mesaj gönderim isteği Meta tarafına iletildi: ${businessName}.`
+    );
+  } catch (error) {
+    console.error("WhatsApp text send error:", error);
+
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "WhatsApp manuel mesajı gönderilemedi."
+    );
+  } finally {
+    setIsSending(false);
+  }
+};
 
   return (
     <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">

@@ -5,8 +5,8 @@ export type LeadStatusFilter = "all" | LeadStatus;
 export type WhatsAppStatus =
   | "not_sent"
   | "template_sent"
-  | "waiting_reply"
   | "replied"
+  | "follow_up"
   | "not_interested";
 
 export type WhatsAppStatusFilter = "all" | WhatsAppStatus;

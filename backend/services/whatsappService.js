@@ -123,8 +123,27 @@ async function sendWhatsAppTemplateTest({ to }) {
 
   return sendWhatsAppPayload(payload);
 }
+async function sendWhatsAppTemplateMessage({
+  to,
+  templateName = "jefedes_intro_v2",
+  languageCode = "tr",
+}) {
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: {
+      name: templateName,
+      language: {
+        code: languageCode,
+      },
+    },
+  };
 
+  return sendWhatsAppPayload(payload);
+}
 module.exports = {
   sendWhatsAppTextMessage,
   sendWhatsAppTemplateTest,
+  sendWhatsAppTemplateMessage,
 };
