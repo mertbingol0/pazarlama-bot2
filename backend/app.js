@@ -39,9 +39,12 @@ const PORT = process.env.PORT || 4000;
 app.use(
   cors({
     origin: [
-      "http://localhost:4002",
-      "http://127.0.0.1:4002",
-    ],
+  "http://187.124.184.222:4002",
+  "http://lf.jefedes.com",
+  "https://lf.jefedes.com",
+  "http://lf-api.jefedes.com",
+  "https://lf-api.jefedes.com",
+],
     methods: ["GET", "POST", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type"],
   })
