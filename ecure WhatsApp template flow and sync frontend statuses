@@ -1,0 +1,11 @@
+ backend/app.js                                | 167 [32m++++++++++++++++++[m[31m--------[m
+ backend/db.js                                 | 102 [32m++++++++++[m[31m------[m
+ backend/services/whatsappService.js           |  19 [32m+++[m
+ frontend/app/page.tsx                         |  10 [32m+[m[31m-[m
+ frontend/components/ListColumn.tsx            | 134 [32m++++++++++++++++[m[31m-----[m
+ frontend/components/ResultsPanel.tsx          |  15 [32m++[m[31m-[m
+ frontend/components/StoredLeadsPage.tsx       |  48 [32m++++[m[31m----[m
+ frontend/components/WhatsAppBusinessPanel.tsx | 121 [32m++++++++++++[m[31m-------[m
+ frontend/lib/api.ts                           |   1 [32m+[m
+ frontend/types/business.ts                    |   2 [32m+[m[31m-[m
+ 10 files changed, 436 insertions(+), 183 deletions(-)
