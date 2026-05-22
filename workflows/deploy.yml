@@ -18,12 +18,7 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            cd /home/pazarlama/pazarlama-bot2          # ← kendi proje klasörüne göre değiştir
-
-            git pull origin main
-
-            npm ci                     # package-lock.json'dan temiz kurulum
-
-            npm run build              # dist/ klasörünü üretir
-
-            pm2 restart myapp || pm2 start ecosystem.config.js
+            cd /home/pazarlama/pazarlama-bot2/backend
+            git -C /home/pazarlama/pazarlama-bot2 pull origin main
+            npm install
+            pm2 restart pazarlamabot
