@@ -25,6 +25,7 @@ const {
   clearLiveSupportLeads,
   getLiveSupportUnseenCount,
   markLiveSupportLeadsAsSeen,
+  upsertManualMessageTestBusiness,
 } = require("./db");
 
 const express = require("express");
@@ -63,6 +64,36 @@ function isValidWhatsAppStatus(status) {
 function isValidStatus(status) {
   return ["approved", "pending", "rejected"].includes(status);
 }
+
+function normalizeDemoSearchValue(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ı", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c");
+}
+
+function shouldInjectManualMessageTestBusiness({
+  category,
+  city,
+  district,
+}) {
+  const normalizedCategory = normalizeDemoSearchValue(category);
+  const normalizedCity = normalizeDemoSearchValue(city);
+  const normalizedDistrict = normalizeDemoSearchValue(district);
+
+  return (
+    process.env.NODE_ENV !== "production" &&
+    ["kuafor", "guzellik"].includes(normalizedCategory) &&
+    normalizedCity === "istanbul" &&
+    normalizedDistrict === "kadikoy"
+  );
+}
+
 app.get("/api/searches", async (req, res) => {
   try {
     const searches = await getSearchHistory();
@@ -869,6 +900,37 @@ app.post("/api/search", async (req, res) => {
       console.log(
         "Google Places hata verdiği için sonuçlar SQLite yedeğinden getirildi."
       );
+    }
+
+    if (
+      shouldInjectManualMessageTestBusiness({
+        category: normalizedCategory,
+        city: normalizedCity,
+        district: normalizedDistrict,
+      })
+    ) {
+      try {
+        const testBusiness = await upsertManualMessageTestBusiness({
+          category: normalizedCategory,
+          city: normalizedCity,
+          district: normalizedDistrict,
+          phone: "905300448478",
+        });
+
+        if (testBusiness) {
+          businesses = [
+            testBusiness,
+            ...businesses.filter(
+              (business) => String(business.id) !== String(testBusiness.id)
+            ),
+          ];
+        }
+      } catch (manualTestBusinessError) {
+        console.warn(
+          "Manual message test business local arama sonucuna eklenemedi:",
+          manualTestBusinessError
+        );
+      }
     }
 
     const phones = businesses

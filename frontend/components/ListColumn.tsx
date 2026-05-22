@@ -163,7 +163,9 @@ function canSelectForTemplate({
     status === "not_sent"
   );
 }
-
+function canSelectForManualMessage(status: WhatsAppStatus, noPhone?: boolean) {
+  return !noPhone && (status === "replied" || status === "follow_up");
+}
 function isSelectedBusiness(
   selectedBusinessIds: Array<string | number>,
   businessId?: string | number
@@ -598,15 +600,15 @@ export function ListColumn({
               const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
 
               const canSelect =
-                type === "phone" &&
-                businessId !== undefined &&
-                canSelectForTemplate({
-                  status: currentWhatsAppStatus,
-                  noPhone: isNoPhoneItem,
-                  templateSentAt: currentTemplateSentAt,
-                  leadStatus: currentStatus,
-                });
-
+              type === "phone" &&
+              businessId !== undefined &&
+              (canSelectForTemplate({
+                status: currentWhatsAppStatus,
+                noPhone: isNoPhoneItem,
+                templateSentAt: currentTemplateSentAt,
+                leadStatus: currentStatus,
+              }) ||
+              canSelectForManualMessage(currentWhatsAppStatus, isNoPhoneItem));
               const isSelected = isSelectedBusiness(
                 selectedBusinessIds,
                 businessId

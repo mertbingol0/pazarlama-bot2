@@ -1054,6 +1054,186 @@ async function clearLiveSupportLeads() {
   };
 }
 
+async function upsertManualMessageTestBusiness({
+  category,
+  city,
+  district,
+  phone = "905300448478",
+}) {
+  const database = await getDb();
+
+  const normalizedCategory = String(category || "").trim();
+  const normalizedCity = String(city || "").trim();
+  const normalizedDistrict = String(district || "").trim();
+  const normalizedPhone = normalizePhone(phone || "905300448478");
+  const searchKey = createSearchKey({
+    category: normalizedCategory,
+    city: normalizedCity,
+    district: normalizedDistrict,
+  });
+
+  if (!normalizedPhone) {
+    throw new Error("Manual message test business icin gecerli bir telefon gerekli.");
+  }
+
+  await database.run(
+    `
+    INSERT INTO searches (search_key, category, city, district)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(search_key) DO UPDATE SET
+      category = excluded.category,
+      city = excluded.city,
+      district = excluded.district,
+      updated_at = CURRENT_TIMESTAMP
+    `,
+    searchKey,
+    normalizedCategory,
+    normalizedCity,
+    normalizedDistrict
+  );
+
+  const search = await database.get(
+    "SELECT id FROM searches WHERE search_key = ?",
+    searchKey
+  );
+
+  if (!search?.id) {
+    throw new Error("Manual message test business icin search kaydi olusturulamadi.");
+  }
+
+  const externalId = `manual-test-${normalizedPhone}`;
+  const businessName = "Jefedes Manuel Mesaj Test Firması";
+  const address = "Kadıköy / İstanbul - Manuel mesaj test kaydı";
+  const lastMessageText = "Bilgi almak istiyorum";
+
+  const existingBusiness = await database.get(
+    `
+    SELECT id
+    FROM businesses
+    WHERE external_id = ?
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    externalId
+  );
+
+  let businessId = existingBusiness?.id || null;
+
+  if (businessId) {
+    await database.run(
+      `
+      UPDATE businesses
+      SET
+        search_id = ?,
+        external_id = ?,
+        name = ?,
+        phone = ?,
+        address = ?,
+        website = NULL,
+        google_maps_url = NULL,
+        rating = NULL,
+        user_rating_count = 0,
+        source = 'manual',
+        status = 'pending',
+        category = ?,
+        city = ?,
+        district = ?,
+        lat = NULL,
+        lng = NULL,
+        whatsapp_status = 'replied',
+        template_sent_at = NULL,
+        last_incoming_at = CURRENT_TIMESTAMP,
+        last_message_text = ?,
+        last_whatsapp_message_id = NULL
+      WHERE id = ?
+      `,
+      search.id,
+      externalId,
+      businessName,
+      normalizedPhone,
+      address,
+      normalizedCategory,
+      normalizedCity,
+      normalizedDistrict,
+      lastMessageText,
+      businessId
+    );
+  } else {
+    const insertResult = await database.run(
+      `
+      INSERT INTO businesses (
+        search_id,
+        external_id,
+        name,
+        phone,
+        address,
+        website,
+        google_maps_url,
+        rating,
+        user_rating_count,
+        source,
+        status,
+        category,
+        city,
+        district,
+        lat,
+        lng,
+        whatsapp_status,
+        template_sent_at,
+        last_incoming_at,
+        last_message_text,
+        last_whatsapp_message_id
+      )
+      VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 'manual', 'pending', ?, ?, ?, NULL, NULL, 'replied', NULL, CURRENT_TIMESTAMP, ?, NULL)
+      `,
+      search.id,
+      externalId,
+      businessName,
+      normalizedPhone,
+      address,
+      normalizedCategory,
+      normalizedCity,
+      normalizedDistrict,
+      lastMessageText
+    );
+
+    businessId = insertResult.lastID;
+  }
+
+  const row = await database.get(
+    `
+    SELECT
+      id,
+      external_id,
+      name,
+      phone,
+      address,
+      website,
+      google_maps_url,
+      rating,
+      user_rating_count,
+      source,
+      status,
+      category,
+      city,
+      district,
+      lat,
+      lng,
+      whatsapp_status,
+      template_sent_at,
+      last_incoming_at,
+      last_message_text,
+      last_whatsapp_message_id,
+      created_at
+    FROM businesses
+    WHERE id = ?
+    `,
+    businessId
+  );
+
+  return row ? mapBusinessRow(row) : null;
+}
+
 module.exports = {
   initDatabase,
   getCachedSearchResults,
@@ -1075,4 +1255,5 @@ module.exports = {
   clearLiveSupportLeads,
   getLiveSupportUnseenCount,
   markLiveSupportLeadsAsSeen,
+  upsertManualMessageTestBusiness,
 };
