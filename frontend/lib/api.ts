@@ -63,6 +63,44 @@ type WhatsAppTestMessageResponse = BackendErrorResponse & {
   };
 };
 
+export type LoginUser = {
+  id: number;
+  username: string;
+  role: string;
+};
+
+type LoginResponse = BackendErrorResponse & {
+  success: boolean;
+  token: string;
+  user: LoginUser;
+};
+
+export async function loginUser({
+  username,
+  password,
+}: {
+  username: string;
+  password: string;
+}): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ username, password }),
+  });
+
+  const data = await readJsonResponse<LoginResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Giriş yapılırken bir hata oluştu."
+    );
+  }
+
+  return data;
+}
+
 export async function readJsonResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") || "";
 

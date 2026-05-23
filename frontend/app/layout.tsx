@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { AuthGuard } from "@/components/AuthGuard";
 import { Footer } from "@/components/Footer";
 import "./globals.css";
 
@@ -26,8 +27,10 @@ export default function RootLayout({
   return (
     <html lang="tr" className={`${plusJakartaSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
-        <div className="flex-1">{children}</div>
-        <Footer />
+        <AuthGuard>
+          <div className="flex-1">{children}</div>
+          <Footer />
+        </AuthGuard>
       </body>
     </html>
   );

@@ -26,6 +26,8 @@ const {
   getLiveSupportUnseenCount,
   markLiveSupportLeadsAsSeen,
   upsertManualMessageTestBusiness,
+
+  authenticateUser,
 } = require("./db");
 
 const express = require("express");
@@ -1286,6 +1288,50 @@ return res.sendStatus(200);
     return res.sendStatus(500);
   }
 });
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const username = String(req.body.username || "").trim();
+    const password = String(req.body.password || "");
+
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Kullanıcı adı ve şifre zorunludur.",
+      });
+    }
+
+    const user = await authenticateUser({ username, password });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Kullanıcı adı veya şifre hatalı.",
+      });
+    }
+
+    const token = require("crypto").randomBytes(32).toString("hex");
+
+    return res.status(200).json({
+      success: true,
+      message: "Giriş başarılı.",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("/api/auth/login hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Giriş yapılırken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
 initDatabase()
   .then(() => {
     app.listen(PORT, () => {

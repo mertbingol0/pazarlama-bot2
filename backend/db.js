@@ -1,7 +1,11 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
+
+const DEFAULT_ADMIN_USERNAME = "admin";
+const DEFAULT_ADMIN_PASSWORD = "jefedes1212";
 
 const dataDir = path.join(__dirname, "data");
 const dbPath = path.join(dataDir, "database.sqlite");
@@ -206,6 +210,16 @@ await database.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    role TEXT DEFAULT 'admin',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
   const businessColumns = await database.all("PRAGMA table_info(businesses)");
@@ -301,11 +315,109 @@ if (!liveSupportColumnNames.includes("seen_at")) {
     CREATE INDEX IF NOT EXISTS idx_live_support_leads_updated_at 
     ON live_support_leads(updated_at);
 
-    CREATE INDEX IF NOT EXISTS idx_live_support_leads_seen_at 
+    CREATE INDEX IF NOT EXISTS idx_live_support_leads_seen_at
     ON live_support_leads(seen_at);
+
+    CREATE INDEX IF NOT EXISTS idx_users_username
+    ON users(username);
   `);
 
+  await seedDefaultAdminUser();
+
   console.log("SQLite database hazır.");
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const derived = crypto.scryptSync(String(password), salt, 64).toString("hex");
+
+  return {
+    salt,
+    hash: derived,
+  };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  if (!password || !salt || !expectedHash) {
+    return false;
+  }
+
+  const derived = crypto.scryptSync(String(password), salt, 64);
+  const expected = Buffer.from(String(expectedHash), "hex");
+
+  if (derived.length !== expected.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(derived, expected);
+}
+
+async function seedDefaultAdminUser() {
+  const database = await getDb();
+
+  const existing = await database.get(
+    "SELECT id FROM users WHERE username = ?",
+    DEFAULT_ADMIN_USERNAME
+  );
+
+  if (existing) {
+    return;
+  }
+
+  const { salt, hash } = hashPassword(DEFAULT_ADMIN_PASSWORD);
+
+  await database.run(
+    `
+    INSERT INTO users (username, password_hash, password_salt, role)
+    VALUES (?, ?, ?, 'admin')
+    `,
+    DEFAULT_ADMIN_USERNAME,
+    hash,
+    salt
+  );
+
+  console.log(`Varsayilan admin kullanicisi olusturuldu: ${DEFAULT_ADMIN_USERNAME}`);
+}
+
+async function findUserByUsername(username) {
+  const database = await getDb();
+
+  const row = await database.get(
+    `
+    SELECT id, username, password_hash, password_salt, role, created_at, updated_at
+    FROM users
+    WHERE username = ?
+    `,
+    String(username || "").trim()
+  );
+
+  return row || null;
+}
+
+async function authenticateUser({ username, password }) {
+  const normalizedUsername = String(username || "").trim();
+
+  if (!normalizedUsername || !password) {
+    return null;
+  }
+
+  const user = await findUserByUsername(normalizedUsername);
+
+  if (!user) {
+    return null;
+  }
+
+  const isValid = verifyPassword(password, user.password_salt, user.password_hash);
+
+  if (!isValid) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role || "admin",
+    createdAt: user.created_at,
+  };
 }
 
 async function getCachedSearchResults({ category, city, district }) {
@@ -1256,4 +1368,7 @@ module.exports = {
   getLiveSupportUnseenCount,
   markLiveSupportLeadsAsSeen,
   upsertManualMessageTestBusiness,
+
+  authenticateUser,
+  findUserByUsername,
 };
