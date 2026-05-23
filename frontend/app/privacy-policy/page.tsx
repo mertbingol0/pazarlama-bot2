@@ -210,19 +210,15 @@ export default function PrivacyPolicyPage() {
                 >
                   Veri Silme Talebi
                 </Link>{" "}
-                sayfasını ziyaret edebilir ya da Meta / Facebook hesabınız
-                üzerinden Settings &amp; Privacy → Settings → Apps and Websites
-                bölümünden ilgili uygulamayı kaldırıp “Send Request” seçeneğini
-                kullanabilirsiniz. Meta üzerinden gelen talepler için sistemimiz
-                otomatik olarak bir onay kodu üretir ve durumunu Veri Silme
-                sayfasından sorgulayabilirsiniz. Manuel talepleri{" "}
+                sayfasındaki yönergeleri takip edebilir veya{" "}
                 <a
                   href="mailto:contact@jefedejefes.com.tr"
                   className="font-medium text-emerald-600 underline-offset-4 hover:underline"
                 >
                   contact@jefedejefes.com.tr
                 </a>{" "}
-                adresine de iletebilirsiniz.
+                adresine talebinizi iletebilirsiniz. Talepler en geç 30 gün
+                içinde sonuçlandırılır.
               </p>
             </section>
 
