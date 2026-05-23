@@ -201,6 +201,29 @@ export default function PrivacyPolicyPage() {
                 talep etme ve belirli iletişim faaliyetlerinden çıkma talebinde
                 bulunma haklarına sahip olabilir.
               </p>
+
+              <p className="mt-3">
+                Verilerinizin silinmesini talep etmek için{" "}
+                <Link
+                  href="/data-deletion"
+                  className="font-medium text-emerald-600 underline-offset-4 hover:underline"
+                >
+                  Veri Silme Talebi
+                </Link>{" "}
+                sayfasını ziyaret edebilir ya da Meta / Facebook hesabınız
+                üzerinden Settings &amp; Privacy → Settings → Apps and Websites
+                bölümünden ilgili uygulamayı kaldırıp “Send Request” seçeneğini
+                kullanabilirsiniz. Meta üzerinden gelen talepler için sistemimiz
+                otomatik olarak bir onay kodu üretir ve durumunu Veri Silme
+                sayfasından sorgulayabilirsiniz. Manuel talepleri{" "}
+                <a
+                  href="mailto:contact@jefedejefes.com.tr"
+                  className="font-medium text-emerald-600 underline-offset-4 hover:underline"
+                >
+                  contact@jefedejefes.com.tr
+                </a>{" "}
+                adresine de iletebilirsiniz.
+              </p>
             </section>
 
             <section>

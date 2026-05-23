@@ -5,7 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { isAuthenticated } from "@/lib/auth-storage";
 
-const PUBLIC_PATHS = ["/login", "/privacy-policy", "/terms-of-service"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/privacy-policy",
+  "/terms-of-service",
+  "/data-deletion",
+];
 
 function isPublicPath(pathname: string | null) {
   if (!pathname) return false;

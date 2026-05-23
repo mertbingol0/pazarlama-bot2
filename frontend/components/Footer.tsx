@@ -20,6 +20,13 @@ export function Footer() {
           >
             Hizmet Şartları
           </Link>
+
+          <Link
+            href="/data-deletion"
+            className="font-medium text-emerald-600 transition hover:text-emerald-700"
+          >
+            Veri Silme
+          </Link>
         </div>
       </div>
     </footer>

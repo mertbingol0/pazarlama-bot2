@@ -220,6 +220,17 @@ await database.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS data_deletion_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    confirmation_code TEXT NOT NULL UNIQUE,
+    facebook_user_id TEXT,
+    status TEXT DEFAULT 'received',
+    notes TEXT DEFAULT '',
+    raw_payload TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT
+  );
 `);
 
   const businessColumns = await database.all("PRAGMA table_info(businesses)");
@@ -320,6 +331,12 @@ if (!liveSupportColumnNames.includes("seen_at")) {
 
     CREATE INDEX IF NOT EXISTS idx_users_username
     ON users(username);
+
+    CREATE INDEX IF NOT EXISTS idx_data_deletion_requests_code
+    ON data_deletion_requests(confirmation_code);
+
+    CREATE INDEX IF NOT EXISTS idx_data_deletion_requests_user
+    ON data_deletion_requests(facebook_user_id);
   `);
 
   await seedDefaultAdminUser();
@@ -388,6 +405,71 @@ async function findUserByUsername(username) {
     WHERE username = ?
     `,
     String(username || "").trim()
+  );
+
+  return row || null;
+}
+
+function generateConfirmationCode() {
+  return crypto.randomBytes(12).toString("hex");
+}
+
+async function createDataDeletionRequest({
+  facebookUserId = null,
+  rawPayload = null,
+}) {
+  const database = await getDb();
+  const confirmationCode = generateConfirmationCode();
+
+  const insertResult = await database.run(
+    `
+    INSERT INTO data_deletion_requests (
+      confirmation_code,
+      facebook_user_id,
+      status,
+      raw_payload
+    )
+    VALUES (?, ?, 'received', ?)
+    `,
+    confirmationCode,
+    facebookUserId,
+    rawPayload ? JSON.stringify(rawPayload) : null
+  );
+
+  return database.get(
+    `
+    SELECT
+      id,
+      confirmation_code,
+      facebook_user_id,
+      status,
+      notes,
+      created_at,
+      completed_at
+    FROM data_deletion_requests
+    WHERE id = ?
+    `,
+    insertResult.lastID
+  );
+}
+
+async function getDataDeletionRequest(confirmationCode) {
+  const database = await getDb();
+
+  const row = await database.get(
+    `
+    SELECT
+      id,
+      confirmation_code,
+      facebook_user_id,
+      status,
+      notes,
+      created_at,
+      completed_at
+    FROM data_deletion_requests
+    WHERE confirmation_code = ?
+    `,
+    String(confirmationCode || "").trim()
   );
 
   return row || null;
@@ -1371,4 +1453,7 @@ module.exports = {
 
   authenticateUser,
   findUserByUsername,
+
+  createDataDeletionRequest,
+  getDataDeletionRequest,
 };

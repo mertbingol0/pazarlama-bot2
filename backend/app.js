@@ -28,7 +28,12 @@ const {
   upsertManualMessageTestBusiness,
 
   authenticateUser,
+
+  createDataDeletionRequest,
+  getDataDeletionRequest,
 } = require("./db");
+
+const crypto = require("crypto");
 
 const express = require("express");
 const cors = require("cors");
@@ -53,6 +58,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 function isValidWhatsAppStatus(status) {
   return [
@@ -1288,6 +1294,165 @@ return res.sendStatus(200);
     return res.sendStatus(500);
   }
 });
+function base64UrlDecode(input) {
+  const normalized = String(input || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return Buffer.from(padded, "base64");
+}
+
+function parseSignedRequest(signedRequest, appSecret) {
+  if (!signedRequest || typeof signedRequest !== "string") {
+    return null;
+  }
+
+  const [encodedSig, payload] = signedRequest.split(".");
+
+  if (!encodedSig || !payload) {
+    return null;
+  }
+
+  const signature = base64UrlDecode(encodedSig);
+
+  let data;
+
+  try {
+    data = JSON.parse(base64UrlDecode(payload).toString("utf8"));
+  } catch (error) {
+    console.error("signed_request payload parse hatasi:", error);
+    return null;
+  }
+
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  if (data.algorithm && String(data.algorithm).toUpperCase() !== "HMAC-SHA256") {
+    console.warn("signed_request bilinmeyen algoritma:", data.algorithm);
+    return null;
+  }
+
+  if (!appSecret) {
+    console.warn(
+      "META_APP_SECRET tanimli degil. Signed request imzasi dogrulanamiyor."
+    );
+    return data;
+  }
+
+  const expected = crypto
+    .createHmac("sha256", appSecret)
+    .update(payload)
+    .digest();
+
+  if (
+    expected.length !== signature.length ||
+    !crypto.timingSafeEqual(expected, signature)
+  ) {
+    console.warn("signed_request imza dogrulamasi basarisiz.");
+    return null;
+  }
+
+  return data;
+}
+
+function buildDataDeletionStatusUrl(confirmationCode) {
+  const base = (
+    process.env.PUBLIC_APP_URL ||
+    process.env.FRONTEND_URL ||
+    "https://lf.jefedes.com"
+  ).replace(/\/$/, "");
+
+  return `${base}/data-deletion?code=${encodeURIComponent(confirmationCode)}`;
+}
+
+app.post("/api/data-deletion", async (req, res) => {
+  try {
+    const signedRequest = req.body?.signed_request;
+
+    const parsed = parseSignedRequest(
+      signedRequest,
+      process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET || null
+    );
+
+    if (!parsed) {
+      return res.status(400).json({
+        success: false,
+        message: "Gecerli bir signed_request gonderilmelidir.",
+      });
+    }
+
+    const facebookUserId =
+      parsed.user_id || parsed.user?.id || parsed.app_scoped_user_id || null;
+
+    const requestRecord = await createDataDeletionRequest({
+      facebookUserId,
+      rawPayload: parsed,
+    });
+
+    console.log("Meta veri silme talebi alindi:", {
+      facebookUserId,
+      confirmationCode: requestRecord.confirmation_code,
+    });
+
+    return res.status(200).json({
+      url: buildDataDeletionStatusUrl(requestRecord.confirmation_code),
+      confirmation_code: requestRecord.confirmation_code,
+    });
+  } catch (error) {
+    console.error("/api/data-deletion hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Veri silme talebi alinirken bir hata olustu.",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/data-deletion/:code", async (req, res) => {
+  try {
+    const code = String(req.params.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: "Gecerli bir confirmation_code gonderilmelidir.",
+      });
+    }
+
+    const record = await getDataDeletionRequest(code);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: "Bu onay kodu ile bir veri silme talebi bulunamadi.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      request: {
+        confirmationCode: record.confirmation_code,
+        status: record.status,
+        notes: record.notes || "",
+        createdAt: record.created_at,
+        completedAt: record.completed_at,
+      },
+    });
+  } catch (error) {
+    console.error("/api/data-deletion/:code hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Veri silme talebi durumu alinirken bir hata olustu.",
+      error: error.message,
+    });
+  }
+});
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const username = String(req.body.username || "").trim();
@@ -1309,7 +1474,7 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    const token = require("crypto").randomBytes(32).toString("hex");
+    const token = crypto.randomBytes(32).toString("hex");
 
     return res.status(200).json({
       success: true,
