@@ -101,7 +101,7 @@ export function WhatsAppBusinessPanel({
   onClearSelections,
 }: WhatsAppBusinessPanelProps) {
   const [to, setTo] = useState(TEST_PHONE_NUMBER);
-  const [templateName, setTemplateName] = useState("jefedes_intro_v2");
+  const [templateName, setTemplateName] = useState("jefedes_merhaba");
   const [targetMode, setTargetMode] =
     useState<TemplateTargetMode>("selected_only");
 
@@ -224,9 +224,9 @@ const manualTargetBusiness = manualMessageBusinesses[0];
 
       const response = await sendWhatsAppTestMessage({
         to: to.trim(),
-        message: "jefedes_intro_v2",
+        message: "jefedes_merhaba",
         mode: "template",
-        templateName: "jefedes_intro_v2",
+        templateName: "jefedes_merhaba",
         languageCode: "tr",
       });
 
@@ -360,7 +360,7 @@ const handleSendMessage = async () => {
               onChange={(event) => setTemplateName(event.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
-              <option value="jefedes_intro_v2">
+              <option value="jefedes_merhaba">
                 Jefedes Tanıtım Template&apos;i
               </option>
             </select>

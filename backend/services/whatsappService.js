@@ -125,7 +125,7 @@ async function sendWhatsAppTemplateTest({ to }) {
 }
 async function sendWhatsAppTemplateMessage({
   to,
-  templateName = "jefedes_intro_v2",
+  templateName = "jefedes_merhaba",
   languageCode = "tr",
 }) {
   const payload = {

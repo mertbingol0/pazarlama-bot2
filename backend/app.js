@@ -523,11 +523,11 @@ app.post("/api/whatsapp/send-template", async (req, res) => {
   try {
     const {
       businessIds = [],
-      templateName: rawTemplateName = "jefedes_intro_v2",
+      templateName: rawTemplateName = "jefedes_merhaba",
       languageCode: rawLanguageCode = "tr",
     } = req.body;
     const templateName =
-      String(rawTemplateName || "").trim() || "jefedes_intro_v2";
+      String(rawTemplateName || "").trim() || "jefedes_merhaba";
     const languageCode = String(rawLanguageCode || "").trim() || "tr";
 
     if (!Array.isArray(businessIds) || businessIds.length === 0) {
@@ -1037,7 +1037,7 @@ app.post("/api/whatsapp/send-test", async (req, res) => {
       to,
       message,
       mode = "text",
-      templateName = "jefedes_intro_v2",
+      templateName = "jefedes_merhaba",
       languageCode = "tr",
     } = req.body;
 
