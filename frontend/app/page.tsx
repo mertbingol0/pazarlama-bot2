@@ -22,7 +22,7 @@ type SavedSearchState = {
   city: string;
   district: string;
   limit: SearchLimit;
-  results: SearchResult;
+  results?: SearchResult | null;
 };
 
 export default function Home() {
@@ -34,6 +34,38 @@ export default function Home() {
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fetchSearchResults = async ({
+    category,
+    city,
+    district,
+    limit,
+  }: {
+    category: string;
+    city: string;
+    district: string;
+    limit: SearchLimit;
+  }) => {
+    const backendResponse = await searchBusinesses({
+      category,
+      city,
+      district,
+      limit,
+    });
+
+    return {
+      query: {
+        category: backendResponse.query.category,
+        city: backendResponse.query.city,
+        district: backendResponse.query.district,
+        limit,
+      },
+      stats: backendResponse.stats,
+      results: backendResponse.results,
+      businesses: backendResponse.businesses || [],
+      fromCache: backendResponse.fromCache,
+    } satisfies SearchResult;
+  };
 
 useEffect(() => {
   const timeoutId = window.setTimeout(() => {
@@ -51,6 +83,30 @@ useEffect(() => {
       setDistrict(parsedSearch.district || "");
       setLimit(parsedSearch.limit || "50");
       setResults(parsedSearch.results || null);
+
+      if (!parsedSearch.category) {
+        return;
+      }
+
+      void fetchSearchResults({
+        category: parsedSearch.category,
+        city: parsedSearch.city || "",
+        district: parsedSearch.district || "",
+        limit: parsedSearch.limit || "50",
+      })
+        .then((nextResults) => {
+          setResults(nextResults);
+          saveLastSearch({
+            category: parsedSearch.category,
+            city: parsedSearch.city || "",
+            district: parsedSearch.district || "",
+            limit: parsedSearch.limit || "50",
+            results: nextResults,
+          });
+        })
+        .catch((error) => {
+          console.warn("Son arama güncellenemedi, kayıtlı sonuç korunuyor:", error);
+        });
     } catch (error) {
       console.error("Son arama okunamadı:", error);
       localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
@@ -99,25 +155,12 @@ useEffect(() => {
     setErrorMessage(null);
 
     try {
-      const backendResponse = await searchBusinesses({
+      const nextResults = await fetchSearchResults({
         category,
         city,
         district,
         limit,
       });
-
-      const nextResults: SearchResult = {
-        query: {
-          category: backendResponse.query.category,
-          city: backendResponse.query.city,
-          district: backendResponse.query.district,
-          limit,
-        },
-        stats: backendResponse.stats,
-        results: backendResponse.results,
-        businesses: backendResponse.businesses || [],
-        fromCache: backendResponse.fromCache,
-      };
 
       setResults(nextResults);
 
