@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const TEST_PHONE_NUMBER = "905313439734";
+const BUTTON_WEBHOOK_TEST_PHONE = "905300448478";
 const TEMPLATE_LANGUAGE_CODE = "tr";
 
 type TemplateTargetMode = "all_eligible" | "selected_only";
@@ -248,6 +249,39 @@ const manualTargetBusiness = manualMessageBusinesses[0];
         error instanceof Error
           ? error.message
           : "WhatsApp template test mesajı gönderilemedi."
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendButtonTestTemplate = async () => {
+    try {
+      setIsSending(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await sendWhatsAppTestMessage({
+        to: BUTTON_WEBHOOK_TEST_PHONE,
+        message: "jefedes_merhaba",
+        mode: "template",
+        templateName: "jefedes_merhaba",
+        languageCode: TEMPLATE_LANGUAGE_CODE,
+      });
+
+      const normalizedTo =
+        response.result?.to || BUTTON_WEBHOOK_TEST_PHONE;
+
+      setSuccessMessage(
+        `Buton webhook testi için template ${normalizedTo} numarasına gönderildi. Telefondan "Bilgi almak istiyorum" butonuna basıp backend log'larını izleyin.`
+      );
+    } catch (error) {
+      console.error("WhatsApp button-test template send error:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Buton webhook test template'i gönderilemedi."
       );
     } finally {
       setIsSending(false);
@@ -522,6 +556,38 @@ const handleSendMessage = async () => {
           İlk temas için template mesajı kullanılır. Firma cevap verdikten sonra
           manuel mesaj alanından serbest text gönderilebilir.
         </p>
+
+        <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <div className="flex items-start gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-semibold text-white">
+              ⚡
+            </span>
+
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">
+                Buton Webhook Testi
+              </h3>
+
+              <p className="text-xs text-slate-500">
+                <span className="font-mono">{BUTTON_WEBHOOK_TEST_PHONE}</span>{" "}
+                numarasına <span className="font-mono">jefedes_merhaba</span>{" "}
+                template&apos;i gönderir. Telefondan butona basıp backend
+                log&apos;larında button reply payload&apos;unu doğrulamak için.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            onClick={handleSendButtonTestTemplate}
+            disabled={isSending}
+            className="h-10 w-full rounded-xl bg-amber-500 text-white shadow-md shadow-amber-100 hover:bg-amber-600 disabled:bg-amber-300"
+          >
+            {isSending
+              ? "Gönderiliyor..."
+              : `Test Template Gönder (${BUTTON_WEBHOOK_TEST_PHONE})`}
+          </Button>
+        </section>
       </CardContent>
     </Card>
   );

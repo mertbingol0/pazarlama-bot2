@@ -1165,25 +1165,40 @@ function getWhatsAppReplyText(message) {
   ).trim();
 }
 
+function normalizeReplyText(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("tr-TR");
+}
+
 function getWhatsAppReplyAction(replyText) {
-  if (replyText === "Bilgi almak istiyorum") {
+  const normalized = normalizeReplyText(replyText);
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.includes("bilgi almak istiyorum")) {
     return {
+      type: "info_requested",
       leadStatus: "pending",
       whatsappStatus: "replied",
       actionLabel: "Bilgi isteniyor",
     };
   }
 
-  if (replyText === "Daha sonra dönüş yapın") {
+  if (normalized.includes("daha sonra")) {
     return {
+      type: "follow_up",
       leadStatus: "pending",
       whatsappStatus: "follow_up",
       actionLabel: "Daha sonra aranacak",
     };
   }
 
-  if (replyText === "İlgilenmiyorum") {
+  if (normalized.includes("ilgilenmiyorum")) {
     return {
+      type: "not_interested",
       leadStatus: "rejected",
       whatsappStatus: "not_interested",
       actionLabel: "Görüşme sonlandırıldı",
@@ -1237,11 +1252,11 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
     });
   }
 
-if (replyText === "Bilgi almak istiyorum") {
-  if (updatedBusiness?.id) {
-    await updateBusinessStatus(updatedBusiness.id, "pending");
-    await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
-  }
+  if (action.type === "info_requested") {
+    if (updatedBusiness?.id) {
+      await updateBusinessStatus(updatedBusiness.id, "pending");
+      await updateBusinessWhatsAppStatus(updatedBusiness.id, "replied");
+    }
 
     const liveSupportLead = await saveLiveSupportLead({
       phone: fromPhone,
@@ -1256,11 +1271,11 @@ if (replyText === "Bilgi almak istiyorum") {
     });
   }
 
-if (replyText === "Daha sonra dönüş yapın") {
-  if (updatedBusiness?.id) {
-    await updateBusinessStatus(updatedBusiness.id, "pending");
-    await updateBusinessWhatsAppStatus(updatedBusiness.id, "follow_up");
-  }
+  if (action.type === "follow_up") {
+    if (updatedBusiness?.id) {
+      await updateBusinessStatus(updatedBusiness.id, "pending");
+      await updateBusinessWhatsAppStatus(updatedBusiness.id, "follow_up");
+    }
 
     const followUpDate = new Date();
     followUpDate.setDate(followUpDate.getDate() + 1);
@@ -1271,17 +1286,18 @@ if (replyText === "Daha sonra dönüş yapın") {
       followUpAt: followUpDate.toISOString(),
     });
   }
-if (replyText === "İlgilenmiyorum") {
-  if (updatedBusiness?.id) {
-    await updateBusinessStatus(updatedBusiness.id, "rejected");
-    await updateBusinessWhatsAppStatus(updatedBusiness.id, "not_interested");
-  }
 
-  console.log("Firma ilgilenmiyor. Görüşme sonlandırıldı:", {
-    phone: fromPhone,
-    businessId: updatedBusiness?.id || null,
-  });
-}
+  if (action.type === "not_interested") {
+    if (updatedBusiness?.id) {
+      await updateBusinessStatus(updatedBusiness.id, "rejected");
+      await updateBusinessWhatsAppStatus(updatedBusiness.id, "not_interested");
+    }
+
+    console.log("Firma ilgilenmiyor. Görüşme sonlandırıldı:", {
+      phone: fromPhone,
+      businessId: updatedBusiness?.id || null,
+    });
+  }
 }
 
 return res.sendStatus(200);
