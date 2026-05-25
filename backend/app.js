@@ -1051,16 +1051,39 @@ app.post("/api/whatsapp/send-test", async (req, res) => {
     let whatsappPayload;
 
     if (mode === "template") {
+      const headerImageUrl =
+        String(req.body.headerImageUrl || "").trim() ||
+        process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL ||
+        "";
+
+      const template = {
+        name: templateName,
+        language: {
+          code: languageCode,
+        },
+      };
+
+      if (headerImageUrl) {
+        template.components = [
+          {
+            type: "header",
+            parameters: [
+              {
+                type: "image",
+                image: {
+                  link: headerImageUrl,
+                },
+              },
+            ],
+          },
+        ];
+      }
+
       whatsappPayload = {
         messaging_product: "whatsapp",
         to,
         type: "template",
-        template: {
-          name: templateName,
-          language: {
-            code: languageCode,
-          },
-        },
+        template,
       };
     } else {
       if (!message) {

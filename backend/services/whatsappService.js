@@ -127,17 +127,39 @@ async function sendWhatsAppTemplateMessage({
   to,
   templateName = "jefedes_merhaba",
   languageCode = "tr",
+  headerImageUrl,
 }) {
+  const resolvedHeaderImageUrl =
+    headerImageUrl || process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL || "";
+
+  const template = {
+    name: templateName,
+    language: {
+      code: languageCode,
+    },
+  };
+
+  if (resolvedHeaderImageUrl) {
+    template.components = [
+      {
+        type: "header",
+        parameters: [
+          {
+            type: "image",
+            image: {
+              link: resolvedHeaderImageUrl,
+            },
+          },
+        ],
+      },
+    ];
+  }
+
   const payload = {
     messaging_product: "whatsapp",
     to,
     type: "template",
-    template: {
-      name: templateName,
-      language: {
-        code: languageCode,
-      },
-    },
+    template,
   };
 
   return sendWhatsAppPayload(payload);
