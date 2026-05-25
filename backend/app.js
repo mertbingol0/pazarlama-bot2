@@ -43,6 +43,9 @@ const PORT = process.env.PORT || 4000;
 app.use(
   cors({
     origin: [
+  "http://localhost:4002",
+  "http://127.0.0.1:4002",
+  "http://192.168.1.121:4002",
   "http://187.124.184.222:4002",
   "http://lf.jefedes.com",
   "https://lf.jefedes.com",
