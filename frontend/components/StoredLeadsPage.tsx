@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type { LeadStatus } from "@/types/business";
 import {
   clearStoredLeadsByStatus,
@@ -353,7 +354,11 @@ useEffect(() => {
       <div className="mx-auto max-w-7xl">
         <header className="mb-6">
           <div className="flex items-center justify-between">
-            <div className="flex flex-col items-end leading-none">
+            <Link
+              href="/"
+              aria-label="Ana sayfaya git"
+              className="flex flex-col items-end leading-none"
+            >
               <span className="text-3xl font-semibold tracking-tight text-slate-700">
                 Jefedes<span className="text-emerald-500">.</span>
               </span>
@@ -361,7 +366,7 @@ useEffect(() => {
               <span className="-mt-0.5 -translate-x-1 text-xs font-medium tracking-wide text-slate-400">
                 Lead Flow
               </span>
-            </div>
+            </Link>
 
             <div className="flex items-center gap-3">
               <Badge

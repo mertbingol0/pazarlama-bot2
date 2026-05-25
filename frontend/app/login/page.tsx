@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { loginUser } from "@/lib/api";
@@ -62,14 +63,18 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#f7fbf9] px-6 py-12 text-slate-900">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="inline-flex flex-col items-center leading-none">
+          <Link
+            href="/"
+            aria-label="Ana sayfaya git"
+            className="inline-flex flex-col items-center leading-none"
+          >
             <span className="text-3xl font-semibold tracking-tight text-slate-700">
               Jefedes<span className="text-emerald-500">.</span>
             </span>
             <span className="mt-1 text-xs font-medium tracking-wide text-slate-400">
               Lead Flow
             </span>
-          </div>
+          </Link>
 
           <h1 className="mt-6 text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
             Yönetim Paneli <span className="text-emerald-500">Girişi</span>

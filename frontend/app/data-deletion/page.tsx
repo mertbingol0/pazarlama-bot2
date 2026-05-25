@@ -14,14 +14,18 @@ export default function DataDeletionPage() {
               ←
             </Link>
 
-            <div className="flex flex-col items-end leading-none">
+            <Link
+              href="/"
+              aria-label="Ana sayfaya git"
+              className="flex flex-col items-end leading-none"
+            >
               <span className="text-2xl font-semibold tracking-tight text-slate-700 md:text-3xl">
                 Jefedes<span className="text-emerald-500">.</span>
               </span>
               <span className="mt-1 text-xs font-medium tracking-wide text-slate-400 md:text-sm">
                 Lead Flow
               </span>
-            </div>
+            </Link>
           </div>
 
           <div className="mx-auto mt-8 max-w-3xl text-center">

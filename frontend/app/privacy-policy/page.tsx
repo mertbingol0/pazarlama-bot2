@@ -14,7 +14,11 @@ export default function PrivacyPolicyPage() {
               ← 
             </Link>
 
-            <div className="flex flex-col items-end leading-none">
+            <Link
+              href="/"
+              aria-label="Ana sayfaya git"
+              className="flex flex-col items-end leading-none"
+            >
               <span className="text-3xl font-semibold tracking-tight text-slate-700">
                 Jefedes<span className="text-emerald-500">.</span>
               </span>
@@ -22,7 +26,7 @@ export default function PrivacyPolicyPage() {
               <span className="-mt-0.5 -translate-x-1 text-xs font-medium tracking-wide text-slate-400">
                 Lead Flow
               </span>
-            </div>
+            </Link>
             
           </div>
 
