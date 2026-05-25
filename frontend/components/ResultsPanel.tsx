@@ -124,14 +124,14 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           />
         </div>
 
-        <div className="order-1 xl:order-2">
-          <WhatsAppBusinessPanel
-            businesses={businesses}
-            selectedBusinesses={selectedBusinesses}
-            selectedPhoneCount={selectedPhoneCount}
-            onClearSelections={handleClearSelections}
-          />
-        </div>
+      <div className="order-1 xl:order-2 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+        <WhatsAppBusinessPanel
+          businesses={businesses}
+          selectedBusinesses={selectedBusinesses}
+          selectedPhoneCount={selectedPhoneCount}
+          onClearSelections={handleClearSelections}
+        />
+      </div>
       </section>
     </>
   );

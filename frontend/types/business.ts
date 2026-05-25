@@ -9,7 +9,9 @@ export type WhatsAppStatus =
   | "follow_up"
   | "not_interested";
 
-export type WhatsAppStatusFilter = "all" | WhatsAppStatus;
+export type WhatsAppStatusFilter =
+  | "all"
+  | Exclude<WhatsAppStatus, "waiting_reply">;
 
 export type SearchLimit = "10" | "50" | "100" | "250" | "500" | "all";
 

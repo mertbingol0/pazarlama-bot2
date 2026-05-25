@@ -15,14 +15,15 @@ export default function PrivacyPolicyPage() {
             </Link>
 
             <div className="flex flex-col items-end leading-none">
-            <span className="text-2xl font-semibold tracking-tight text-slate-700 md:text-3xl">
+              <span className="text-3xl font-semibold tracking-tight text-slate-700">
                 Jefedes<span className="text-emerald-500">.</span>
-            </span>
+              </span>
 
-            <span className="mt-1 text-xs font-medium tracking-wide text-slate-400 md:text-sm">
+              <span className="-mt-0.5 -translate-x-1 text-xs font-medium tracking-wide text-slate-400">
                 Lead Flow
-            </span>
+              </span>
             </div>
+            
           </div>
 
           <div className="mx-auto mt-8 max-w-3xl text-center">

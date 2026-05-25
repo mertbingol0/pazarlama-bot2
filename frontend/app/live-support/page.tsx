@@ -273,7 +273,7 @@ export default function LiveSupportPage() {
                 Jefedes<span className="text-emerald-500">.</span>
               </span>
 
-              <span className="mt-1 text-xs font-medium tracking-wide text-slate-400">
+              <span className="-mt-0.5 -translate-x-1 text-xs font-medium tracking-wide text-slate-400">
                 Lead Flow
               </span>
             </div>

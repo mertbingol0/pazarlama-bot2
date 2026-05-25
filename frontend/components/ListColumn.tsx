@@ -142,6 +142,16 @@ function normalizeText(value?: string) {
   return (value || "").trim().toLocaleLowerCase("tr-TR");
 }
 
+function uniqueBusinessIds(ids: Array<string | number>) {
+  const uniqueIds = new Map<string, string | number>();
+
+  ids.forEach((id) => {
+    uniqueIds.set(String(id), id);
+  });
+
+  return Array.from(uniqueIds.values());
+}
+
 function canSelectForTemplate({
   status,
   noPhone,
@@ -163,9 +173,11 @@ function canSelectForTemplate({
     status === "not_sent"
   );
 }
+
 function canSelectForManualMessage(status: WhatsAppStatus, noPhone?: boolean) {
   return !noPhone && (status === "replied" || status === "follow_up");
 }
+
 function isSelectedBusiness(
   selectedBusinessIds: Array<string | number>,
   businessId?: string | number
@@ -175,16 +187,6 @@ function isSelectedBusiness(
   return selectedBusinessIds.some(
     (selectedId) => String(selectedId) === String(businessId)
   );
-}
-
-function uniqueBusinessIds(ids: Array<string | number>) {
-  const uniqueIds = new Map<string, string | number>();
-
-  ids.forEach((id) => {
-    uniqueIds.set(String(id), id);
-  });
-
-  return Array.from(uniqueIds.values());
 }
 
 export function ListColumn({
@@ -265,7 +267,7 @@ export function ListColumn({
     return item.businessId || item.id || relatedBusiness?.id;
   };
 
-  const getCurrentLeadStatus = (item: DisplayLeadItem) => {
+  const getCurrentLeadStatus = (item: DisplayLeadItem): LeadStatus => {
     const relatedBusiness = getRelatedBusiness(item);
     const itemKey = getLeadKey(item);
 
@@ -283,7 +285,7 @@ export function ListColumn({
     return item.templateSentAt || relatedBusiness?.templateSentAt || null;
   };
 
-  const getCurrentWhatsAppStatus = (item: DisplayLeadItem) => {
+  const getCurrentWhatsAppStatus = (item: DisplayLeadItem): WhatsAppStatus => {
     const relatedBusiness = getRelatedBusiness(item);
     const itemKey = getLeadKey(item);
 
@@ -317,30 +319,40 @@ export function ListColumn({
       .filter((id): id is string | number => id !== undefined && id !== null)
   );
 
-  const allSelectableItemsSelected =
+  const isAllSelectableSelected =
     selectableBusinessIds.length > 0 &&
     selectableBusinessIds.every((businessId) =>
       isSelectedBusiness(selectedBusinessIds, businessId)
     );
 
-  const handleSelectAllEligible = () => {
-    if (!onSetSelectedBusinessIds) return;
-
-    if (allSelectableItemsSelected) {
-      onSetSelectedBusinessIds(
-        selectedBusinessIds.filter(
-          (selectedId) =>
-            !selectableBusinessIds.some(
-              (businessId) => String(businessId) === String(selectedId)
-            )
-        )
-      );
+  const handleToggleSelectAll = () => {
+    if (!onSetSelectedBusinessIds || selectableBusinessIds.length === 0) {
       return;
     }
 
-    onSetSelectedBusinessIds(
-      uniqueBusinessIds([...selectedBusinessIds, ...selectableBusinessIds])
-    );
+    if (isAllSelectableSelected) {
+      const nextSelectedBusinessIds = selectedBusinessIds.filter(
+        (selectedId) =>
+          !selectableBusinessIds.some(
+            (businessId) => String(businessId) === String(selectedId)
+          )
+      );
+
+      onSetSelectedBusinessIds(nextSelectedBusinessIds);
+      return;
+    }
+
+    const mergedSelectedBusinessIds = new Map<string, string | number>();
+
+    selectedBusinessIds.forEach((businessId) => {
+      mergedSelectedBusinessIds.set(String(businessId), businessId);
+    });
+
+    selectableBusinessIds.forEach((businessId) => {
+      mergedSelectedBusinessIds.set(String(businessId), businessId);
+    });
+
+    onSetSelectedBusinessIds(Array.from(mergedSelectedBusinessIds.values()));
   };
 
   const getHref = (value: string, url?: string) => {
@@ -374,7 +386,7 @@ export function ListColumn({
   ) => {
     if (currentStatus === nextStatus) return;
 
-    const businessId = item.businessId || item.id;
+    const businessId = getItemBusinessId(item);
 
     setUpdatingItemKey(itemKey);
 
@@ -419,7 +431,7 @@ export function ListColumn({
   ) => {
     if (currentWhatsAppStatus === nextWhatsAppStatus) return;
 
-    const businessId = item.businessId || item.id;
+    const businessId = getItemBusinessId(item);
 
     if (!businessId) {
       alert("Business ID bulunamadı. WhatsApp durumu güncellenemedi.");
@@ -486,15 +498,19 @@ export function ListColumn({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {type === "phone" && onSetSelectedBusinessIds && (
-              <button
+            {type === "phone" && (
+              <Button
                 type="button"
-                onClick={handleSelectAllEligible}
-                disabled={selectableBusinessIds.length === 0}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                variant="outline"
+                size="sm"
+                onClick={handleToggleSelectAll}
+                disabled={
+                  selectableBusinessIds.length === 0 || !onSetSelectedBusinessIds
+                }
+                className="rounded-full"
               >
-                {allSelectableItemsSelected ? "Seçimleri kaldır" : "Tümünü seç"}
-              </button>
+                {isAllSelectableSelected ? "Seçimi Kaldır" : "Tümünü Seç"}
+              </Button>
             )}
 
             {type === "phone" && missingPhoneItems.length > 0 && (
@@ -586,8 +602,7 @@ export function ListColumn({
               const isNoPhoneItem = item.noPhone === true;
               const relatedBusiness = getRelatedBusiness(item);
 
-              const businessId =
-                item.businessId || item.id || relatedBusiness?.id;
+              const businessId = getItemBusinessId(item);
 
               const websiteUrl = normalizeExternalUrl(
                 item.website || relatedBusiness?.website
@@ -600,15 +615,19 @@ export function ListColumn({
               const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
 
               const canSelect =
-              type === "phone" &&
-              businessId !== undefined &&
-              (canSelectForTemplate({
-                status: currentWhatsAppStatus,
-                noPhone: isNoPhoneItem,
-                templateSentAt: currentTemplateSentAt,
-                leadStatus: currentStatus,
-              }) ||
-              canSelectForManualMessage(currentWhatsAppStatus, isNoPhoneItem));
+                type === "phone" &&
+                businessId !== undefined &&
+                (canSelectForTemplate({
+                  status: currentWhatsAppStatus,
+                  noPhone: isNoPhoneItem,
+                  templateSentAt: currentTemplateSentAt,
+                  leadStatus: currentStatus,
+                }) ||
+                  canSelectForManualMessage(
+                    currentWhatsAppStatus,
+                    isNoPhoneItem
+                  ));
+
               const isSelected = isSelectedBusiness(
                 selectedBusinessIds,
                 businessId
@@ -777,9 +796,7 @@ export function ListColumn({
                         </option>
 
                         <option
-                          className="bg-white text-slate-700"
-                          value="follow_up"
-                        >
+                          className="bg-white text-slate-700" value="follow_up">
                           Daha sonra aranacak
                         </option>
 
@@ -855,5 +872,3 @@ export function ListColumn({
     </Card>
   );
 }
-//dfhgfghhjhjjjrewrwer
-//jdfkjkjxfjkxjgdffjfd
