@@ -7,6 +7,7 @@ import { ListColumn } from "@/components/ListColumn";
 import { StatCard } from "@/components/StatCard";
 import { ResultsMap } from "@/components/ResultsMap";
 import { downloadSearchResultsAsCsv } from "@/lib/export";
+import { classifyPhoneType } from "@/lib/phone";
 import { WhatsAppBusinessPanel } from "@/components/WhatsAppBusinessPanel";
 
 type ResultsPanelProps = {
@@ -52,6 +53,22 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
   const businesses = useMemo(() => {
   return results.businesses || [];
 }, [results.businesses]);
+
+  const whatsappPhones = useMemo(() => {
+    return results.results.phones.filter(
+      (phone) => classifyPhoneType(phone.value) === "whatsapp"
+    );
+  }, [results.results.phones]);
+
+  const landlinePhones = useMemo(() => {
+    return results.results.phones.filter(
+      (phone) => classifyPhoneType(phone.value) === "landline"
+    );
+  }, [results.results.phones]);
+
+  const socialItems = useMemo(() => {
+    return results.results.instagrams || [];
+  }, [results.results.instagrams]);
 
   const eligibleBusinesses = useMemo(() => {
     return businesses.filter(isTemplateEligibleBusiness);
@@ -113,14 +130,30 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           <ResultsMap businesses={businesses} />
 
           <ListColumn
-            title="WhatsApp / Telefon"
-            items={results.results.phones}
+            title="WhatsApp Numaraları"
+            items={whatsappPhones}
             type="phone"
+            variant="whatsapp"
             businesses={businesses}
             onCsvDownload={() => downloadSearchResultsAsCsv(results)}
             selectedBusinessIds={selectedBusinessIds}
             onToggleBusinessSelection={handleToggleBusinessSelection}
             onSetSelectedBusinessIds={handleSetSelectedBusinessIds}
+          />
+
+          <ListColumn
+            title="Sabit Hatlar"
+            items={landlinePhones}
+            type="phone"
+            variant="landline"
+            businesses={businesses}
+          />
+
+          <ListColumn
+            title="Sosyal Mecralar"
+            items={socialItems}
+            type="instagram"
+            businesses={businesses}
           />
         </div>
 

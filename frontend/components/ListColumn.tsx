@@ -29,6 +29,12 @@ type ListColumnProps = {
   businesses?: Business[];
   onCsvDownload?: () => void;
 
+  /**
+   * type === "phone" için telefon türünü belirler. "whatsapp" WhatsApp'a uygun
+   * cep hatları, "landline" ise WhatsApp ile ulaşılamayan sabit hatlar içindir.
+   */
+  variant?: "whatsapp" | "landline";
+
   selectedBusinessIds?: Array<string | number>;
   onToggleBusinessSelection?: (businessId: string | number) => void;
   onSetSelectedBusinessIds?: (businessIds: Array<string | number>) => void;
@@ -195,10 +201,16 @@ export function ListColumn({
   type,
   businesses = [],
   onCsvDownload,
+  variant = "whatsapp",
   selectedBusinessIds = [],
   onToggleBusinessSelection,
   onSetSelectedBusinessIds,
 }: ListColumnProps) {
+  const isLandline = type === "phone" && variant === "landline";
+
+  // Sabit hatlar ve sosyal mecralar için WhatsApp'a özgü alanlar (seçim,
+  // template gönderimi, WhatsApp durumu) gizlenir.
+  const showWhatsAppFeatures = type === "phone" && !isLandline;
   const [localStatuses, setLocalStatuses] = useState<Record<string, LeadStatus>>(
     {}
   );
@@ -220,7 +232,7 @@ export function ListColumn({
   const [isWhatsappFilterOpen, setIsWhatsappFilterOpen] = useState(false);
 
   const missingPhoneItems = useMemo<DisplayLeadItem[]>(() => {
-    if (type !== "phone") return [];
+    if (!showWhatsAppFeatures) return [];
 
     return businesses
       .filter((business) => !business.phone || !business.phone.trim())
@@ -241,10 +253,10 @@ export function ListColumn({
         lastMessageText: business.lastMessageText || null,
         lastWhatsappMessageId: business.lastWhatsappMessageId || null,
       }));
-  }, [businesses, type]);
+  }, [businesses, showWhatsAppFeatures]);
 
   const allDisplayItems: DisplayLeadItem[] =
-    type === "phone" && showWithoutPhones
+    showWhatsAppFeatures && showWithoutPhones
       ? [...items, ...missingPhoneItems]
       : items;
 
@@ -357,6 +369,10 @@ export function ListColumn({
 
   const getHref = (value: string, url?: string) => {
     if (type === "phone") {
+      if (isLandline) {
+        return `tel:${value.replace(/[^\d+]/g, "")}`;
+      }
+
       return `https://wa.me/${value.replace(/\D/g, "")}`;
     }
 
@@ -368,7 +384,7 @@ export function ListColumn({
   };
 
   const getActionText = () => {
-    if (type === "phone") return "WhatsApp";
+    if (type === "phone") return isLandline ? "Ara" : "WhatsApp";
     if (type === "email") return "Mail Gönder";
     return "Profili Aç";
   };
@@ -478,13 +494,19 @@ export function ListColumn({
               {title}
             </CardTitle>
 
-            {type === "phone" && (
+            {showWhatsAppFeatures && (
               <p className="mt-1 text-xs text-slate-400">
                 Template göndermek için firmaları seçebilirsiniz.
               </p>
             )}
 
-            {type === "phone" && onCsvDownload && (
+            {isLandline && (
+              <p className="mt-1 text-xs text-slate-400">
+                Bu numaralara WhatsApp üzerinden ulaşılamaz; arama yapabilirsiniz.
+              </p>
+            )}
+
+            {showWhatsAppFeatures && onCsvDownload && (
               <Button
                 type="button"
                 variant="outline"
@@ -498,7 +520,7 @@ export function ListColumn({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {type === "phone" && (
+            {showWhatsAppFeatures && (
               <Button
                 type="button"
                 variant="outline"
@@ -513,7 +535,7 @@ export function ListColumn({
               </Button>
             )}
 
-            {type === "phone" && missingPhoneItems.length > 0 && (
+            {showWhatsAppFeatures && missingPhoneItems.length > 0 && (
               <button
                 type="button"
                 onClick={() => setShowWithoutPhones((prev) => !prev)}
@@ -531,7 +553,7 @@ export function ListColumn({
           </div>
         </div>
 
-        {type === "phone" && (
+        {showWhatsAppFeatures && (
           <div className="relative flex justify-end">
             <button
               type="button"
@@ -642,8 +664,14 @@ export function ListColumn({
                       : "border-slate-200 bg-white hover:border-emerald-100"
                   }`}
                 >
-                  <div className="grid gap-4 xl:grid-cols-[32px_minmax(0,1fr)_160px_180px]">
-                    {type === "phone" && (
+                  <div
+                    className={`grid gap-4 ${
+                      showWhatsAppFeatures
+                        ? "xl:grid-cols-[32px_minmax(0,1fr)_160px_180px]"
+                        : "xl:grid-cols-[minmax(0,1fr)_160px]"
+                    }`}
+                  >
+                    {showWhatsAppFeatures && (
                       <div className="pt-1">
                         <input
                           type="checkbox"
@@ -690,7 +718,7 @@ export function ListColumn({
                           </Badge>
                         )}
 
-                        {type === "phone" && !canSelect && !isNoPhoneItem && (
+                        {showWhatsAppFeatures && !canSelect && !isNoPhoneItem && (
                           <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
                             Template tekrar gönderilemez.
                           </Badge>
@@ -747,6 +775,7 @@ export function ListColumn({
                       </select>
                     </div>
 
+                    {showWhatsAppFeatures && (
                     <div>
                       <p className="mb-2 text-xs font-medium text-slate-400">
                         WhatsApp Durumu
@@ -808,6 +837,7 @@ export function ListColumn({
                         </option>
                       </select>
                     </div>
+                    )}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
