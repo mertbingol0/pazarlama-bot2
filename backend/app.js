@@ -23,6 +23,9 @@ const {
   markIncomingWhatsAppReply,
 
   logWhatsAppMessage,
+  getWhatsAppConversations,
+  getWhatsAppMessagesForPhone,
+  markWhatsAppConversationRead,
 
   saveLiveSupportLead,
   getLiveSupportLeads,
@@ -300,6 +303,90 @@ app.get("/api/live-support-leads/unseen-count", async (req, res) => {
       success: false,
       message: "Canlı destek bildirim sayısı alınırken hata oluştu.",
       error: error.message,
+    });
+  }
+});
+
+// WhatsApp gelen kutusu (inbox) — sohbet listesi
+app.get("/api/whatsapp/conversations", async (req, res) => {
+  try {
+    const conversations = await getWhatsAppConversations();
+
+    return res.status(200).json({
+      success: true,
+      count: conversations.length,
+      conversations,
+    });
+  } catch (error) {
+    console.error("/api/whatsapp/conversations hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Sohbetler getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Bir numaranın tüm mesaj geçmişi (+ açılınca okundu işaretle)
+app.get("/api/whatsapp/conversations/:phone", async (req, res) => {
+  try {
+    const phone = String(req.params.phone || "");
+
+    const data = await getWhatsAppMessagesForPhone(phone);
+    await markWhatsAppConversationRead(phone);
+
+    return res.status(200).json({
+      success: true,
+      phone,
+      ...data,
+    });
+  } catch (error) {
+    console.error("/api/whatsapp/conversations/:phone hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Konuşma getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Gelen kutusundan serbest metin mesaj gönder
+app.post("/api/whatsapp/conversations/:phone/send", async (req, res) => {
+  try {
+    const phone = String(req.params.phone || "");
+    const message = String(req.body.message || "").trim();
+
+    if (!phone || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "Telefon ve mesaj zorunludur.",
+      });
+    }
+
+    const whatsappResult = await sendWhatsAppTextMessage({ to: phone, message });
+
+    await logWhatsAppMessage({
+      phone,
+      direction: "outgoing",
+      type: "text",
+      text: message,
+      messageId: whatsappResult.messageId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Mesaj gönderildi.",
+      result: whatsappResult,
+    });
+  } catch (error) {
+    console.error("/api/whatsapp/conversations/:phone/send hata:", error);
+
+    // 24 saat penceresi kapalıysa Meta serbest metni reddeder; mesajını ilet.
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Mesaj gönderilemedi. (24 saat penceresi kapalıysa template gerekir.)",
     });
   }
 });

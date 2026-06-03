@@ -21,6 +21,10 @@ const navigationItems = [
     href: "/rejected",
   },
   {
+    label: "WhatsApp",
+    href: "/whatsapp",
+  },
+  {
     label: "Canlı Destek",
     href: "/live-support",
   },

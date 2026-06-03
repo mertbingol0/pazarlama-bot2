@@ -331,12 +331,21 @@ await database.exec(`
     type TEXT DEFAULT 'text',
     text TEXT DEFAULT '',
     message_id TEXT,
+    read_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_phone
   ON whatsapp_messages(phone);
 `);
+
+const waMessageColumns = await database.all(
+  "PRAGMA table_info(whatsapp_messages)"
+);
+
+if (!waMessageColumns.map((column) => column.name).includes("read_at")) {
+  await database.exec("ALTER TABLE whatsapp_messages ADD COLUMN read_at TEXT;");
+}
 
 
   await database.run(`
@@ -1231,6 +1240,148 @@ async function getWhatsAppConversationByPhone(phone) {
   }));
 }
 
+// UTC olarak saklanan created_at değerinin şu andan kaç ms önce olduğunu döndürür.
+function msSince(createdAt) {
+  if (!createdAt) return Infinity;
+  const t = new Date(String(createdAt).replace(" ", "T") + "Z").getTime();
+  if (Number.isNaN(t)) return Infinity;
+  return Date.now() - t;
+}
+
+// WhatsApp gelen kutusu için sohbet listesi: numara bazında (son 10 hane)
+// son mesaj, okunmamış sayısı, işletme adı ve 24 saat penceresi durumu.
+async function getWhatsAppConversations() {
+  const database = await getDb();
+
+  const rows = await database.all(`
+    SELECT phone, direction, type, text, read_at, created_at
+    FROM whatsapp_messages
+    ORDER BY created_at ASC, id ASC
+  `);
+
+  const groups = new Map();
+
+  for (const row of rows) {
+    const key = String(row.phone || "").replace(/\D/g, "").slice(-10);
+    if (key.length < 7) continue;
+
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        contactKey: key,
+        phone: row.phone,
+        lastMessage: null,
+        lastMessageAt: null,
+        lastIncomingAt: null,
+        unreadCount: 0,
+      };
+      groups.set(key, group);
+    }
+
+    // Ülke kodlu (daha uzun) numarayı temsilci olarak tut.
+    if (
+      String(row.phone).replace(/\D/g, "").length >
+      String(group.phone).replace(/\D/g, "").length
+    ) {
+      group.phone = row.phone;
+    }
+
+    group.lastMessage = {
+      direction: row.direction,
+      text: row.text,
+      type: row.type,
+    };
+    group.lastMessageAt = row.created_at;
+
+    if (row.direction === "incoming") {
+      group.lastIncomingAt = row.created_at;
+      if (!row.read_at) group.unreadCount += 1;
+    }
+  }
+
+  const conversations = await Promise.all(
+    Array.from(groups.values()).map(async (group) => {
+      const business = await findBusinessByPhone(database, group.phone);
+
+      return {
+        contactKey: group.contactKey,
+        phone: group.phone,
+        businessName: business?.name || null,
+        lastMessage: group.lastMessage,
+        lastMessageAt: group.lastMessageAt,
+        lastIncomingAt: group.lastIncomingAt,
+        unreadCount: group.unreadCount,
+        // 24 saat müşteri hizmetleri penceresi açık mı (serbest metin için)
+        canSendFreeText:
+          group.lastIncomingAt != null &&
+          msSince(group.lastIncomingAt) < 24 * 60 * 60 * 1000,
+      };
+    })
+  );
+
+  // En son mesaja göre azalan sırala.
+  conversations.sort((a, b) =>
+    String(b.lastMessageAt || "").localeCompare(String(a.lastMessageAt || ""))
+  );
+
+  return conversations;
+}
+
+// Bir numaranın (son 10 hane) TÜM mesaj geçmişini döndürür.
+async function getWhatsAppMessagesForPhone(phone) {
+  const database = await getDb();
+
+  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  if (last10.length < 7) return { messages: [], canSendFreeText: false };
+
+  const rows = await database.all(
+    `
+    SELECT id, direction, type, text, message_id, created_at
+    FROM whatsapp_messages
+    WHERE phone LIKE ?
+    ORDER BY created_at ASC, id ASC
+    `,
+    `%${last10}`
+  );
+
+  const lastIncoming = [...rows]
+    .reverse()
+    .find((row) => row.direction === "incoming");
+
+  return {
+    messages: rows.map((row) => ({
+      id: row.id,
+      direction: row.direction,
+      type: row.type,
+      text: row.text,
+      messageId: row.message_id,
+      createdAt: row.created_at,
+    })),
+    canSendFreeText:
+      lastIncoming != null &&
+      msSince(lastIncoming.created_at) < 24 * 60 * 60 * 1000,
+  };
+}
+
+// Bir numaraya ait okunmamış gelen mesajları okundu işaretler.
+async function markWhatsAppConversationRead(phone) {
+  const database = await getDb();
+
+  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  if (last10.length < 7) return { updatedCount: 0 };
+
+  const result = await database.run(
+    `
+    UPDATE whatsapp_messages
+    SET read_at = CURRENT_TIMESTAMP
+    WHERE direction = 'incoming' AND read_at IS NULL AND phone LIKE ?
+    `,
+    `%${last10}`
+  );
+
+  return { updatedCount: result.changes || 0 };
+}
+
 async function getLiveSupportLeads() {
   const database = await getDb();
 
@@ -1755,6 +1906,9 @@ module.exports = {
 
   logWhatsAppMessage,
   getWhatsAppConversationByPhone,
+  getWhatsAppConversations,
+  getWhatsAppMessagesForPhone,
+  markWhatsAppConversationRead,
 
   saveLiveSupportLead,
   getLiveSupportLeads,
