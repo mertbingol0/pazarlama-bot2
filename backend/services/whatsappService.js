@@ -8,7 +8,9 @@ function normalizeWhatsAppNumber(value) {
   }
 
   const digitsOnly = rawValue.replace(/\D/g, "");
-  const normalizedNumber = digitsOnly.startsWith("00")
+
+  // Uluslararası "00" ön ekini temizle.
+  let normalizedNumber = digitsOnly.startsWith("00")
     ? digitsOnly.slice(2)
     : digitsOnly;
 
@@ -16,10 +18,19 @@ function normalizeWhatsAppNumber(value) {
     throw new Error("Telefon numarası sadece rakamlardan oluşmalıdır.");
   }
 
-  if (normalizedNumber.startsWith("0")) {
-    throw new Error(
-      "Telefon numarasını ülke koduyla gönderin. Örnek: 905551112233"
-    );
+  // Türkiye ülke kodu düzeltmesi:
+  // - Zaten 90 ile başlıyorsa dokunma.
+  // - Başında 0 varsa 0'ı silip başına 90 ekle (0530... -> 90530...).
+  // - 5 ile başlayan 10 haneli cep numarasıysa başına 90 ekle.
+  if (normalizedNumber.startsWith("90")) {
+    // olduğu gibi bırak
+  } else if (normalizedNumber.startsWith("0")) {
+    normalizedNumber = "90" + normalizedNumber.slice(1);
+  } else if (
+    normalizedNumber.length === 10 &&
+    normalizedNumber.startsWith("5")
+  ) {
+    normalizedNumber = "90" + normalizedNumber;
   }
 
   if (normalizedNumber.length < 8 || normalizedNumber.length > 15) {
@@ -157,7 +168,7 @@ async function sendWhatsAppTemplateMessage({
 
   const payload = {
     messaging_product: "whatsapp",
-    to,
+    to: normalizeWhatsAppNumber(to),
     type: "template",
     template,
   };
