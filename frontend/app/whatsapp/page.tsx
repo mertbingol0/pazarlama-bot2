@@ -26,6 +26,41 @@ type ChatMessage = {
   createdAt?: string;
 };
 
+type ContactBusiness = {
+  id?: number | string;
+  name?: string | null;
+  source?: string | null;
+  category?: string | null;
+  city?: string | null;
+  district?: string | null;
+  address?: string | null;
+  website?: string | null;
+};
+
+type ContactLead = {
+  status?: string;
+  result?: string;
+  meetingAt?: string | null;
+  assignedTo?: string | null;
+};
+
+const RESULT_OPTIONS: { value: string; label: string }[] = [
+  { value: "pending", label: "İşlem bekliyor" },
+  { value: "to_meet", label: "Görüşülecek" },
+  { value: "contacted", label: "Görüşüldü" },
+  { value: "record_taken", label: "Kayıt alındı" },
+  { value: "rejected", label: "Reddedildi" },
+  { value: "completed", label: "Tamamlandı" },
+];
+
+function formatSource(source?: string | null) {
+  if (source === "google_places") return "Google Places";
+  if (source === "google_maps") return "Google Maps";
+  if (source === "website_scrape") return "Website";
+  if (source === "manual") return "Manuel";
+  return source || "—";
+}
+
 function formatTime(value?: string | null) {
   if (!value) return "";
   try {
@@ -58,8 +93,14 @@ export default function WhatsAppPage() {
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [business, setBusiness] = useState<ContactBusiness | null>(null);
+  const [lead, setLead] = useState<ContactLead | null>(null);
+  const [outcomeResult, setOutcomeResult] = useState("pending");
+  const [meetingAt, setMeetingAt] = useState("");
+  const [outcomeSaved, setOutcomeSaved] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const initializedPhoneRef = useRef<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -86,16 +127,64 @@ export default function WhatsAppPage() {
         success: boolean;
         messages: ChatMessage[];
         canSendFreeText: boolean;
+        business: ContactBusiness | null;
+        lead: ContactLead | null;
       }>(response);
 
       if (response.ok && data.success) {
         setMessages(data.messages || []);
         setCanSendFreeText(Boolean(data.canSendFreeText));
+        setBusiness(data.business || null);
+        setLead(data.lead || null);
+
+        // Sonuç kontrollerini yalnızca sohbet ilk açıldığında doldur
+        // (polling sırasında kullanıcının seçimini ezme).
+        if (initializedPhoneRef.current !== phone) {
+          initializedPhoneRef.current = phone;
+          setOutcomeResult(data.lead?.result || "pending");
+          setMeetingAt((data.lead?.meetingAt || "").slice(0, 16));
+        }
       }
     } catch (error) {
       console.warn("Mesajlar alınamadı:", error);
     }
   }, []);
+
+  const handleSaveOutcome = useCallback(
+    async (result: string, nextMeetingAt: string) => {
+      if (!selectedPhone) return;
+
+      setOutcomeSaved(false);
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/whatsapp/conversations/${encodeURIComponent(
+            selectedPhone
+          )}/outcome`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              result,
+              meetingAt: nextMeetingAt || null,
+            }),
+          }
+        );
+
+        const data = await readJsonResponse<{ success: boolean; lead: ContactLead }>(
+          response
+        );
+
+        if (response.ok && data.success) {
+          setLead(data.lead || null);
+          setOutcomeSaved(true);
+          window.setTimeout(() => setOutcomeSaved(false), 2000);
+        }
+      } catch (error) {
+        console.warn("Sonuç kaydedilemedi:", error);
+      }
+    },
+    [selectedPhone]
+  );
 
   // Sohbet listesini sık aralıklarla yenile (yenilemeden anlık güncelleme).
   useEffect(() => {
@@ -137,6 +226,9 @@ export default function WhatsAppPage() {
   const handleSelect = (phone: string) => {
     setSelectedPhone(phone);
     setErrorMessage("");
+    initializedPhoneRef.current = null; // yeni sohbette sonuç kontrolleri yeniden yüklensin
+    setBusiness(null);
+    setLead(null);
     // Okundu işaretlenince listedeki rozet güncellensin.
     setConversations((current) =>
       current.map((conversation) =>
@@ -282,11 +374,77 @@ export default function WhatsAppPage() {
               </div>
             ) : (
               <>
-                <div className="border-b border-slate-100 px-5 py-3">
-                  <p className="text-sm font-semibold text-slate-800">
-                    {selectedConversation?.businessName || selectedPhone}
-                  </p>
-                  <p className="text-xs text-slate-400">{selectedPhone}</p>
+                <div className="space-y-3 border-b border-slate-100 px-5 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {business?.name ||
+                        selectedConversation?.businessName ||
+                        "İşletme eşleştirilemedi"}
+                    </p>
+                    <p className="text-xs text-slate-400">{selectedPhone}</p>
+
+                    {business && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Kaynak: {formatSource(business.source)}
+                        {business.category ? ` • ${business.category}` : ""}
+                        {business.city
+                          ? ` • ${business.district || ""} ${business.city}`.trim()
+                          : ""}
+                      </p>
+                    )}
+
+                    {business?.address && (
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {business.address}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Sonuç / görüşme planı — canlı desteğe işlenir */}
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        Sonuç
+                      </label>
+                      <select
+                        value={outcomeResult}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setOutcomeResult(value);
+                          void handleSaveOutcome(value, meetingAt);
+                        }}
+                        className="mt-1 h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                      >
+                        {RESULT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        Görüşme Tarihi
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={meetingAt}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setMeetingAt(value);
+                          void handleSaveOutcome(outcomeResult, value);
+                        }}
+                        className="mt-1 h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+
+                    <span className="pb-1 text-[11px] text-slate-400">
+                      {outcomeSaved
+                        ? "✓ Canlı desteğe işlendi"
+                        : "Seçim canlı desteğe yansır"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 p-4">

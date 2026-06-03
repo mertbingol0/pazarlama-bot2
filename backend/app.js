@@ -26,6 +26,8 @@ const {
   getWhatsAppConversations,
   getWhatsAppMessagesForPhone,
   markWhatsAppConversationRead,
+  getWhatsAppContactInfo,
+  upsertLiveSupportOutcome,
 
   saveLiveSupportLead,
   getLiveSupportLeads,
@@ -333,12 +335,15 @@ app.get("/api/whatsapp/conversations/:phone", async (req, res) => {
     const phone = String(req.params.phone || "");
 
     const data = await getWhatsAppMessagesForPhone(phone);
+    const contact = await getWhatsAppContactInfo(phone);
     await markWhatsAppConversationRead(phone);
 
     return res.status(200).json({
       success: true,
       phone,
       ...data,
+      business: contact.business,
+      lead: contact.lead,
     });
   } catch (error) {
     console.error("/api/whatsapp/conversations/:phone hata:", error);
@@ -387,6 +392,36 @@ app.post("/api/whatsapp/conversations/:phone/send", async (req, res) => {
       message:
         error.message ||
         "Mesaj gönderilemedi. (24 saat penceresi kapalıysa template gerekir.)",
+    });
+  }
+});
+
+// WhatsApp sohbetinden sonuç/görüşme planı belirle → canlı desteğe işle
+app.post("/api/whatsapp/conversations/:phone/outcome", async (req, res) => {
+  try {
+    const phone = String(req.params.phone || "");
+    const result = String(req.body.result || "pending");
+    const meetingAt = req.body.meetingAt ? String(req.body.meetingAt) : null;
+
+    if (!phone) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Telefon zorunludur." });
+    }
+
+    const contact = await upsertLiveSupportOutcome({ phone, result, meetingAt });
+
+    return res.status(200).json({
+      success: true,
+      message: "Sonuç kaydedildi ve canlı desteğe işlendi.",
+      ...contact,
+    });
+  } catch (error) {
+    console.error("/api/whatsapp/conversations/:phone/outcome hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Sonuç kaydedilemedi.",
+      error: error.message,
     });
   }
 });

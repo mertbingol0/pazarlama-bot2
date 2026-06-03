@@ -1147,7 +1147,7 @@ async function findBusinessByPhone(database, normalizedPhone) {
   return database.get(
     `
     SELECT id, name, email, instagram, socials, address, website,
-           whatsapp_status, status
+           whatsapp_status, status, source, category, city, district
     FROM businesses
     WHERE ${NORMALIZED_BUSINESS_PHONE_SQL} LIKE ?
     ORDER BY id DESC
@@ -1463,6 +1463,84 @@ async function markWhatsAppConversationRead(phone) {
   );
 
   return { updatedCount: result.changes || 0 };
+}
+
+// Bir telefon için işletme bilgisi + canlı destek durumunu döndürür
+// (WhatsApp sohbet başlığında ve sonuç kontrollerinde gösterilir).
+async function getWhatsAppContactInfo(phone) {
+  const database = await getDb();
+  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  if (last10.length < 7) return { business: null, lead: null };
+
+  const business = await findBusinessByPhone(database, last10);
+
+  const lead = await database.get(
+    `
+    SELECT status, result, meeting_at, assigned_to
+    FROM live_support_leads
+    WHERE phone LIKE ?
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    `%${last10}`
+  );
+
+  return {
+    business: business
+      ? {
+          id: business.id,
+          name: business.name,
+          source: business.source,
+          category: business.category,
+          city: business.city,
+          district: business.district,
+          address: business.address,
+          website: business.website,
+          email: business.email,
+          socials: business.socials || business.instagram || null,
+        }
+      : null,
+    lead: lead
+      ? {
+          status: lead.status || "info_requested",
+          result: lead.result || "pending",
+          meetingAt: lead.meeting_at,
+          assignedTo: lead.assigned_to,
+        }
+      : null,
+  };
+}
+
+// WhatsApp sohbetinden sonuç (görüşülecek/kayıt alındı/reddedildi vb.) ve
+// görüşme tarihi belirleyip canlı destek lead'i oluşturur/günceller.
+async function upsertLiveSupportOutcome({
+  phone,
+  result,
+  meetingAt,
+  buttonText = "Panelden eklendi",
+}) {
+  const database = await getDb();
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+  if (!normalizedPhone) return null;
+
+  const safeResult = LIVE_SUPPORT_RESULTS.includes(result) ? result : "pending";
+
+  await database.run(
+    `
+    INSERT INTO live_support_leads (phone, button_text, status, result, meeting_at, seen_at)
+    VALUES (?, ?, 'info_requested', ?, ?, NULL)
+    ON CONFLICT(phone) DO UPDATE SET
+      result = excluded.result,
+      meeting_at = excluded.meeting_at,
+      updated_at = CURRENT_TIMESTAMP
+    `,
+    normalizedPhone,
+    buttonText,
+    safeResult,
+    meetingAt || null
+  );
+
+  return getWhatsAppContactInfo(normalizedPhone);
 }
 
 async function getLiveSupportLeads() {
@@ -1992,6 +2070,8 @@ module.exports = {
   getWhatsAppConversations,
   getWhatsAppMessagesForPhone,
   markWhatsAppConversationRead,
+  getWhatsAppContactInfo,
+  upsertLiveSupportOutcome,
 
   saveLiveSupportLead,
   getLiveSupportLeads,
