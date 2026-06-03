@@ -97,21 +97,37 @@ export default function WhatsAppPage() {
     }
   }, []);
 
-  // Sohbet listesini periyodik yenile.
+  // Sohbet listesini sık aralıklarla yenile (yenilemeden anlık güncelleme).
   useEffect(() => {
     void fetchConversations();
-    const id = window.setInterval(() => void fetchConversations(), 5000);
+    const id = window.setInterval(() => void fetchConversations(), 3000);
     return () => window.clearInterval(id);
   }, [fetchConversations]);
 
-  // Seçili sohbetin mesajlarını periyodik yenile.
+  // Seçili sohbetin mesajlarını ~2 saniyede bir yenile.
   useEffect(() => {
     if (!selectedPhone) return;
 
     void fetchMessages(selectedPhone);
-    const id = window.setInterval(() => void fetchMessages(selectedPhone), 4000);
+    const id = window.setInterval(() => void fetchMessages(selectedPhone), 2000);
     return () => window.clearInterval(id);
   }, [selectedPhone, fetchMessages]);
+
+  // Sekme tekrar görünür/odaklanınca anında yenile.
+  useEffect(() => {
+    const refreshNow = () => {
+      void fetchConversations();
+      if (selectedPhone) void fetchMessages(selectedPhone);
+    };
+
+    window.addEventListener("focus", refreshNow);
+    document.addEventListener("visibilitychange", refreshNow);
+
+    return () => {
+      window.removeEventListener("focus", refreshNow);
+      document.removeEventListener("visibilitychange", refreshNow);
+    };
+  }, [selectedPhone, fetchConversations, fetchMessages]);
 
   // Yeni mesaj gelince en alta kaydır.
   useEffect(() => {

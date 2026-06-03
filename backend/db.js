@@ -1299,14 +1299,51 @@ async function getWhatsAppConversations() {
     }
   }
 
+  // Geçmiş sohbetler: mesaj logunda olmayan ama WhatsApp geçmişi olan
+  // (template gönderilmiş ya da cevap gelmiş) işletmeleri de listeye ekle.
+  const historyRows = await database.all(`
+    SELECT name, phone, last_message_text, last_incoming_at, template_sent_at
+    FROM businesses
+    WHERE phone IS NOT NULL AND TRIM(phone) != ''
+      AND (
+        template_sent_at IS NOT NULL
+        OR last_incoming_at IS NOT NULL
+        OR (last_message_text IS NOT NULL AND TRIM(last_message_text) != '')
+      )
+  `);
+
+  for (const business of historyRows) {
+    const key = String(business.phone).replace(/\D/g, "").slice(-10);
+    if (key.length < 7 || groups.has(key)) continue;
+
+    const hasReply =
+      business.last_incoming_at ||
+      (business.last_message_text && business.last_message_text.trim());
+
+    groups.set(key, {
+      contactKey: key,
+      phone: business.phone,
+      businessName: business.name || null,
+      historical: true,
+      lastMessage: hasReply
+        ? { direction: "incoming", text: business.last_message_text || "(mesaj)" }
+        : { direction: "outgoing", text: "Template gönderildi" },
+      lastMessageAt: business.last_incoming_at || business.template_sent_at,
+      lastIncomingAt: business.last_incoming_at || null,
+      unreadCount: 0,
+    });
+  }
+
   const conversations = await Promise.all(
     Array.from(groups.values()).map(async (group) => {
-      const business = await findBusinessByPhone(database, group.phone);
+      const business = group.historical
+        ? null
+        : await findBusinessByPhone(database, group.phone);
 
       return {
         contactKey: group.contactKey,
         phone: group.phone,
-        businessName: business?.name || null,
+        businessName: group.businessName || business?.name || null,
         lastMessage: group.lastMessage,
         lastMessageAt: group.lastMessageAt,
         lastIncomingAt: group.lastIncomingAt,
@@ -1343,6 +1380,52 @@ async function getWhatsAppMessagesForPhone(phone) {
     `,
     `%${last10}`
   );
+
+  // Mesaj logu boşsa (geçmiş sohbet) işletme geçmişinden sentetik baloncuk üret.
+  if (rows.length === 0) {
+    const business = await database.get(
+      `
+      SELECT last_message_text, last_incoming_at, template_sent_at
+      FROM businesses
+      WHERE ${NORMALIZED_BUSINESS_PHONE_SQL} LIKE ?
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      `%${last10}`
+    );
+
+    const synthetic = [];
+
+    if (business?.template_sent_at) {
+      synthetic.push({
+        id: "history-template",
+        direction: "outgoing",
+        type: "template",
+        text: "Template gönderildi",
+        messageId: null,
+        createdAt: business.template_sent_at,
+      });
+    }
+
+    if (business?.last_message_text && business.last_message_text.trim()) {
+      synthetic.push({
+        id: "history-incoming",
+        direction: "incoming",
+        type: "text",
+        text: business.last_message_text,
+        messageId: null,
+        createdAt: business.last_incoming_at || business.template_sent_at,
+      });
+    }
+
+    return {
+      messages: synthetic,
+      historical: synthetic.length > 0,
+      canSendFreeText:
+        business?.last_incoming_at != null &&
+        msSince(business.last_incoming_at) < 24 * 60 * 60 * 1000,
+    };
+  }
 
   const lastIncoming = [...rows]
     .reverse()
