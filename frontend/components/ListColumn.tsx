@@ -18,6 +18,7 @@ import {
   updateBusinessWhatsAppStatus,
 } from "@/lib/api";
 
+import { SocialChip } from "@/components/contact-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -230,6 +231,7 @@ export function ListColumn({
     useState<WhatsAppStatusFilter>("all");
 
   const [isWhatsappFilterOpen, setIsWhatsappFilterOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   const missingPhoneItems = useMemo<DisplayLeadItem[]>(() => {
     if (!showWhatsAppFeatures) return [];
@@ -485,14 +487,67 @@ export function ListColumn({
     }
   };
 
+  // Tablo sütun şablonu (varyanta göre seçim ve WhatsApp Durumu sütunları
+  // gösterilir/gizlenir). Tüm satırlar aynı şablonu kullanır → hizalı tablo.
+  const showSelectCol = showWhatsAppFeatures;
+  const showWhatsAppCol = showWhatsAppFeatures;
+
+  const valueHeader =
+    type === "email"
+      ? "E-posta"
+      : type === "instagram"
+      ? "Sosyal Medya"
+      : "Numara";
+
+  const valueColorClass =
+    type === "email"
+      ? "text-indigo-700"
+      : isLandline
+      ? "text-sky-700"
+      : "text-emerald-700";
+
+  const gridTemplateColumns = [
+    showSelectCol ? "2.5rem" : null,
+    "minmax(11rem,1.5fr)",
+    "minmax(10rem,1.4fr)",
+    "7rem",
+    "8.5rem",
+    showWhatsAppCol ? "9.5rem" : null,
+    "minmax(11rem,1.2fr)",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <Card className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
       <CardHeader className="space-y-4 overflow-visible">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <CardTitle className="text-base font-semibold text-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsOpen((prev) => !prev)}
+              aria-expanded={isOpen}
+              className="flex items-center gap-2 text-base font-semibold text-slate-800"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                className={`text-slate-400 transition-transform ${
+                  isOpen ? "rotate-90" : ""
+                }`}
+              >
+                <path
+                  d="M9 6l6 6-6 6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
               {title}
-            </CardTitle>
+            </button>
 
             {showWhatsAppFeatures && (
               <p className="mt-1 text-xs text-slate-400">
@@ -506,7 +561,7 @@ export function ListColumn({
               </p>
             )}
 
-            {showWhatsAppFeatures && onCsvDownload && (
+            {onCsvDownload && (
               <Button
                 type="button"
                 variant="outline"
@@ -609,70 +664,84 @@ export function ListColumn({
         )}
       </CardHeader>
 
-      <CardContent className="overflow-visible">
-        {displayItems.length === 0 ? (
-          <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-            Sonuç bulunamadı.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {displayItems.map((item) => {
-              const itemKey = getLeadKey(item);
+      {isOpen && (
+        <CardContent className="overflow-x-auto px-0 pb-0">
+          {displayItems.length === 0 ? (
+            <p className="mx-6 mb-6 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+              Sonuç bulunamadı.
+            </p>
+          ) : (
+            <div className="min-w-[60rem] border-t border-slate-200">
+              {/* Tablo başlığı */}
+              <div
+                className="grid border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                style={{ gridTemplateColumns }}
+              >
+                {showSelectCol && (
+                  <div className="border-r border-slate-100 px-3 py-2" />
+                )}
+                <div className="border-r border-slate-100 px-3 py-2">Firma</div>
+                <div className="border-r border-slate-100 px-3 py-2">
+                  {valueHeader}
+                </div>
+                <div className="border-r border-slate-100 px-3 py-2">Kaynak</div>
+                <div className="border-r border-slate-100 px-3 py-2">
+                  Onay Durumu
+                </div>
+                {showWhatsAppCol && (
+                  <div className="border-r border-slate-100 px-3 py-2">
+                    WhatsApp Durumu
+                  </div>
+                )}
+                <div className="px-3 py-2">Aksiyon</div>
+              </div>
 
-              const currentStatus = getCurrentLeadStatus(item);
+              {displayItems.map((item) => {
+                const itemKey = getLeadKey(item);
+                const currentStatus = getCurrentLeadStatus(item);
+                const isNoPhoneItem = item.noPhone === true;
+                const relatedBusiness = getRelatedBusiness(item);
+                const businessId = getItemBusinessId(item);
 
-              const isNoPhoneItem = item.noPhone === true;
-              const relatedBusiness = getRelatedBusiness(item);
+                const websiteUrl = normalizeExternalUrl(
+                  item.website || relatedBusiness?.website
+                );
 
-              const businessId = getItemBusinessId(item);
+                const currentWhatsAppStatus = getCurrentWhatsAppStatus(item);
+                const currentTemplateSentAt = getCurrentTemplateSentAt(item);
 
-              const websiteUrl = normalizeExternalUrl(
-                item.website || relatedBusiness?.website
-              );
+                const isUpdating = updatingItemKey === itemKey;
+                const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
 
-              const currentWhatsAppStatus = getCurrentWhatsAppStatus(item);
-              const currentTemplateSentAt = getCurrentTemplateSentAt(item);
+                const canSelect =
+                  type === "phone" &&
+                  businessId !== undefined &&
+                  (canSelectForTemplate({
+                    status: currentWhatsAppStatus,
+                    noPhone: isNoPhoneItem,
+                    templateSentAt: currentTemplateSentAt,
+                    leadStatus: currentStatus,
+                  }) ||
+                    canSelectForManualMessage(
+                      currentWhatsAppStatus,
+                      isNoPhoneItem
+                    ));
 
-              const isUpdating = updatingItemKey === itemKey;
-              const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
+                const isSelected = isSelectedBusiness(
+                  selectedBusinessIds,
+                  businessId
+                );
 
-              const canSelect =
-                type === "phone" &&
-                businessId !== undefined &&
-                (canSelectForTemplate({
-                  status: currentWhatsAppStatus,
-                  noPhone: isNoPhoneItem,
-                  templateSentAt: currentTemplateSentAt,
-                  leadStatus: currentStatus,
-                }) ||
-                  canSelectForManualMessage(
-                    currentWhatsAppStatus,
-                    isNoPhoneItem
-                  ));
-
-              const isSelected = isSelectedBusiness(
-                selectedBusinessIds,
-                businessId
-              );
-
-              return (
-                <div
-                  key={itemKey}
-                  className={`rounded-2xl border p-4 shadow-sm transition hover:shadow-md ${
-                    isSelected
-                      ? "border-emerald-300 bg-emerald-50/40"
-                      : "border-slate-200 bg-white hover:border-emerald-100"
-                  }`}
-                >
+                return (
                   <div
-                    className={`grid gap-4 ${
-                      showWhatsAppFeatures
-                        ? "xl:grid-cols-[32px_minmax(0,1fr)_160px_180px]"
-                        : "xl:grid-cols-[minmax(0,1fr)_160px]"
+                    key={itemKey}
+                    className={`grid items-start border-b border-slate-200 transition ${
+                      isSelected ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/60"
                     }`}
+                    style={{ gridTemplateColumns }}
                   >
-                    {showWhatsAppFeatures && (
-                      <div className="pt-1">
+                    {showSelectCol && (
+                      <div className="border-r border-slate-100 p-3">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -682,61 +751,107 @@ export function ListColumn({
                               onToggleBusinessSelection?.(businessId);
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 accent-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="mt-1 h-4 w-4 rounded border-slate-300 accent-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label={`${item.businessName} seç`}
                         />
                       </div>
                     )}
 
-                    <div className="min-w-0">
-                      <p className="break-words text-base font-semibold text-slate-900">
+                    {/* Firma */}
+                    <div className="min-w-0 border-r border-slate-100 p-3">
+                      <p className="break-words text-sm font-semibold text-slate-900">
                         {item.businessName}
                       </p>
 
-                      <p
-                        className={`mt-1 break-all text-sm font-semibold ${
-                          isNoPhoneItem ? "text-slate-400" : "text-slate-800"
-                        }`}
-                      >
-                        {item.value}
-                      </p>
-
                       {item.address && (
-                        <p className="mt-2 text-xs leading-5 text-slate-400">
+                        <p className="mt-1 text-xs leading-5 text-slate-400">
                           {item.address}
                         </p>
                       )}
 
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="rounded-full">
-                          Kaynak: {formatSource(item.source)}
-                        </Badge>
+                      {(isNoPhoneItem ||
+                        (showWhatsAppFeatures && !canSelect) ||
+                        isUpdating) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {isNoPhoneItem && (
+                            <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
+                              Telefon kaydı yok
+                            </Badge>
+                          )}
 
-                        {isNoPhoneItem && (
-                          <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
-                            Telefon kaydı yok
-                          </Badge>
-                        )}
+                          {showWhatsAppFeatures &&
+                            !canSelect &&
+                            !isNoPhoneItem && (
+                              <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
+                                Tekrar gönderilemez
+                              </Badge>
+                            )}
 
-                        {showWhatsAppFeatures && !canSelect && !isNoPhoneItem && (
-                          <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
-                            Template tekrar gönderilemez.
-                          </Badge>
-                        )}
-
-                        {isUpdating && (
-                          <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
-                            Güncelleniyor...
-                          </Badge>
-                        )}
-                      </div>
+                          {isUpdating && (
+                            <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
+                              Güncelleniyor...
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    <div>
-                      <p className="mb-2 text-xs font-medium text-slate-400">
-                        Onay Durumu
-                      </p>
+                    {/* Değer (numara / mail / sosyal) */}
+                    <div className="min-w-0 border-r border-slate-100 p-3">
+                      {type === "instagram" ? (
+                        <div className="flex flex-wrap gap-2">
+                          {(item.socialLinks && item.socialLinks.length > 0
+                            ? item.socialLinks
+                            : [item.value]
+                          )
+                            .filter(Boolean)
+                            .map((link) => (
+                              <SocialChip key={link} url={link} />
+                            ))}
+                        </div>
+                      ) : (
+                        <>
+                          <span
+                            className={`break-all text-sm font-semibold ${
+                              isNoPhoneItem ? "text-slate-400" : valueColorClass
+                            }`}
+                          >
+                            {item.value}
+                          </span>
 
+                          {/* Telefon altında ilgili işletmenin sosyal mecra ikonları */}
+                          {type === "phone" &&
+                            (() => {
+                              const links = String(
+                                relatedBusiness?.socials ||
+                                  relatedBusiness?.instagram ||
+                                  ""
+                              )
+                                .split(",")
+                                .map((value) => value.trim())
+                                .filter(Boolean);
+
+                              if (links.length === 0) return null;
+
+                              return (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {links.map((link) => (
+                                    <SocialChip key={link} url={link} size="sm" />
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Kaynak */}
+                    <div className="border-r border-slate-100 p-3 text-xs text-slate-500">
+                      {formatSource(item.source)}
+                    </div>
+
+                    {/* Onay Durumu */}
+                    <div className="border-r border-slate-100 p-3">
                       <select
                         value={currentStatus}
                         disabled={isUpdating}
@@ -748,157 +863,129 @@ export function ListColumn({
                             event.target.value as LeadStatus
                           )
                         }
-                        className={`h-9 w-full rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getStatusClassName(
+                        className={`h-9 w-full rounded-xl border px-2 pr-6 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getStatusClassName(
                           currentStatus
                         )}`}
                       >
-                        <option
-                          className="bg-white text-slate-700"
-                          value="approved"
-                        >
+                        <option className="bg-white text-slate-700" value="approved">
                           Onaylanan
                         </option>
-
-                        <option
-                          className="bg-white text-slate-700"
-                          value="pending"
-                        >
+                        <option className="bg-white text-slate-700" value="pending">
                           Bekleyen
                         </option>
-
-                        <option
-                          className="bg-white text-slate-700"
-                          value="rejected"
-                        >
+                        <option className="bg-white text-slate-700" value="rejected">
                           Reddedilen
                         </option>
                       </select>
                     </div>
 
-                    {showWhatsAppFeatures && (
-                    <div>
-                      <p className="mb-2 text-xs font-medium text-slate-400">
-                        WhatsApp Durumu
-                      </p>
-
-                      <select
-                        value={currentWhatsAppStatus}
-                        disabled={
-                          isWhatsAppUpdating ||
-                          currentWhatsAppStatus === "not_interested"
-                        }
-                        onChange={(event) =>
-                          void handleWhatsAppStatusChange(
-                            item,
-                            itemKey,
-                            currentWhatsAppStatus,
-                            event.target.value as WhatsAppStatus
-                          )
-                        }
-                        className={`h-9 w-full rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getWhatsAppStatusClassName(
-                          currentWhatsAppStatus
-                        )}`}
-                      >
-                        <option
-                          className="bg-white text-slate-700"
-                          value="not_sent"
+                    {/* WhatsApp Durumu */}
+                    {showWhatsAppCol && (
+                      <div className="border-r border-slate-100 p-3">
+                        <select
+                          value={currentWhatsAppStatus}
                           disabled={
-                            currentWhatsAppStatus !== "not_sent" ||
-                            Boolean(currentTemplateSentAt)
+                            isWhatsAppUpdating ||
+                            currentWhatsAppStatus === "not_interested"
                           }
+                          onChange={(event) =>
+                            void handleWhatsAppStatusChange(
+                              item,
+                              itemKey,
+                              currentWhatsAppStatus,
+                              event.target.value as WhatsAppStatus
+                            )
+                          }
+                          className={`h-9 w-full rounded-xl border px-2 pr-6 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getWhatsAppStatusClassName(
+                            currentWhatsAppStatus
+                          )}`}
                         >
-                          N/A
-                        </option>
-
-                        <option
-                          className="bg-white text-slate-700"
-                          value="template_sent"
-                        >
-                          Template gönderildi
-                        </option>
-
-                        <option
-                          className="bg-white text-slate-700"
-                          value="replied"
-                        >
-                          Bilgi isteniyor
-                        </option>
-
-                        <option
-                          className="bg-white text-slate-700" value="follow_up">
-                          Daha sonra aranacak
-                        </option>
-
-                        <option
-                          className="bg-white text-slate-700"
-                          value="not_interested"
-                        >
-                          İlgilenmiyor
-                        </option>
-                      </select>
-                    </div>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {!isNoPhoneItem && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopy(item.value)}
-                        >
-                          Kopyala
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          asChild
-                          className="bg-emerald-500 text-white hover:bg-emerald-600"
-                        >
-                          <a
-                            href={getHref(item.value, item.url)}
-                            target="_blank"
-                            rel="noreferrer"
+                          <option
+                            className="bg-white text-slate-700"
+                            value="not_sent"
+                            disabled={
+                              currentWhatsAppStatus !== "not_sent" ||
+                              Boolean(currentTemplateSentAt)
+                            }
                           >
-                            {getActionText()}
+                            N/A
+                          </option>
+                          <option
+                            className="bg-white text-slate-700"
+                            value="template_sent"
+                          >
+                            Template gönderildi
+                          </option>
+                          <option className="bg-white text-slate-700" value="replied">
+                            Bilgi isteniyor
+                          </option>
+                          <option
+                            className="bg-white text-slate-700"
+                            value="follow_up"
+                          >
+                            Daha sonra aranacak
+                          </option>
+                          <option
+                            className="bg-white text-slate-700"
+                            value="not_interested"
+                          >
+                            İlgilenmiyor
+                          </option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Aksiyon */}
+                    <div className="flex flex-wrap items-start gap-1.5 p-3">
+                      {!isNoPhoneItem && type !== "instagram" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(item.value)}
+                          >
+                            Kopyala
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            asChild
+                            className="bg-emerald-500 text-white hover:bg-emerald-600"
+                          >
+                            <a
+                              href={getHref(item.value, item.url)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {getActionText()}
+                            </a>
+                          </Button>
+                        </>
+                      )}
+
+                      {item.url && (
+                        <Button variant="secondary" size="sm" asChild>
+                          <a href={item.url} target="_blank" rel="noreferrer">
+                            Maps
                           </a>
                         </Button>
-                      </>
-                    )}
+                      )}
 
-                    {item.url && (
-                      <Button variant="secondary" size="sm" asChild>
-                        <a href={item.url} target="_blank" rel="noreferrer">
-                          Google Maps
-                        </a>
-                      </Button>
-                    )}
-
-                    {websiteUrl && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={websiteUrl} target="_blank" rel="noreferrer">
-                          Web Sitesi
-                        </a>
-                      </Button>
-                    )}
-
-                    {item.address && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCopy(item.address || "")}
-                      >
-                        Adres Kopyala
-                      </Button>
-                    )}
+                      {websiteUrl && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={websiteUrl} target="_blank" rel="noreferrer">
+                            Web
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }

@@ -92,6 +92,9 @@ function mapBusinessRow(row) {
     externalId: row.external_id,
     name: row.name,
     phone: row.phone,
+    email: row.email,
+    instagram: row.instagram,
+    socials: row.socials,
     address: row.address,
     website: row.website,
     googleMapsUrl: row.google_maps_url,
@@ -277,6 +280,18 @@ if (!businessColumnNames.includes("last_whatsapp_message_id")) {
     "ALTER TABLE businesses ADD COLUMN last_whatsapp_message_id TEXT;"
   );
 }
+
+if (!businessColumnNames.includes("email")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN email TEXT;");
+}
+
+if (!businessColumnNames.includes("instagram")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN instagram TEXT;");
+}
+
+if (!businessColumnNames.includes("socials")) {
+  await database.exec("ALTER TABLE businesses ADD COLUMN socials TEXT;");
+}
 const liveSupportColumns = await database.all(
   "PRAGMA table_info(live_support_leads)"
 );
@@ -288,6 +303,40 @@ if (!liveSupportColumnNames.includes("seen_at")) {
     "ALTER TABLE live_support_leads ADD COLUMN seen_at TEXT DEFAULT NULL;"
   );
 }
+
+if (!liveSupportColumnNames.includes("result")) {
+  await database.exec(
+    "ALTER TABLE live_support_leads ADD COLUMN result TEXT DEFAULT 'pending';"
+  );
+}
+
+if (!liveSupportColumnNames.includes("meeting_at")) {
+  await database.exec(
+    "ALTER TABLE live_support_leads ADD COLUMN meeting_at TEXT;"
+  );
+}
+
+if (!liveSupportColumnNames.includes("assigned_to")) {
+  await database.exec(
+    "ALTER TABLE live_support_leads ADD COLUMN assigned_to TEXT;"
+  );
+}
+
+await database.exec(`
+  CREATE TABLE IF NOT EXISTS whatsapp_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    business_id INTEGER,
+    direction TEXT NOT NULL,
+    type TEXT DEFAULT 'text',
+    text TEXT DEFAULT '',
+    message_id TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_phone
+  ON whatsapp_messages(phone);
+`);
 
 
   await database.run(`
@@ -440,6 +489,9 @@ const rows = await database.all(
     external_id,
     name,
     phone,
+    email,
+    instagram,
+    socials,
     address,
     website,
     google_maps_url,
@@ -561,6 +613,9 @@ for (const existingBusiness of existingBusinesses) {
         external_id,
         name,
         phone,
+        email,
+        instagram,
+        socials,
         address,
         website,
         google_maps_url,
@@ -579,12 +634,15 @@ for (const existingBusiness of existingBusinesses) {
         last_message_text,
         last_whatsapp_message_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       search.id,
       business.externalId || business.id || null,
       business.name || null,
       business.phone || null,
+      business.email || null,
+      business.instagram || null,
+      business.socials || null,
       business.address || null,
       business.website || null,
       business.googleMapsUrl || null,
@@ -652,6 +710,9 @@ async function getSearchDetailsById(searchId) {
     external_id,
     name,
     phone,
+    email,
+    instagram,
+    socials,
     address,
     website,
     google_maps_url,
@@ -709,6 +770,9 @@ const updatedBusiness = await database.get(
     external_id,
     name,
     phone,
+    email,
+    instagram,
+    socials,
     address,
     website,
     google_maps_url,
@@ -991,9 +1055,16 @@ async function markIncomingWhatsAppReply({
   return getBusinessById(row.id);
 }
 
+const LIVE_SUPPORT_STATUSES = [
+  "info_requested",
+  "follow_up",
+  "not_interested",
+];
+
 async function saveLiveSupportLead({
   phone,
   buttonText = "Bilgi almak istiyorum",
+  status = "info_requested",
   messageId = null,
 }) {
   const database = await getDb();
@@ -1004,6 +1075,10 @@ async function saveLiveSupportLead({
     return null;
   }
 
+  const safeStatus = LIVE_SUPPORT_STATUSES.includes(status)
+    ? status
+    : "info_requested";
+
   await database.run(
     `
     INSERT INTO live_support_leads (
@@ -1013,16 +1088,17 @@ async function saveLiveSupportLead({
       message_id,
       seen_at
     )
-    VALUES (?, ?, 'info_requested', ?, NULL)
+    VALUES (?, ?, ?, ?, NULL)
     ON CONFLICT(phone) DO UPDATE SET
       button_text = excluded.button_text,
-      status = 'info_requested',
+      status = excluded.status,
       message_id = excluded.message_id,
       seen_at = NULL,
       updated_at = CURRENT_TIMESTAMP
     `,
     normalizedPhone,
     buttonText,
+    safeStatus,
     messageId
   );
 
@@ -1045,6 +1121,116 @@ async function saveLiveSupportLead({
   );
 }
 
+// businesses.phone üzerindeki boşluk/işaretleri temizleyen SQL ifadesi.
+const NORMALIZED_BUSINESS_PHONE_SQL = `
+  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(phone, ''),
+    ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')
+`;
+
+// Bir telefon numarasına (son 10 hane) karşılık gelen işletmeyi bulur.
+async function findBusinessByPhone(database, normalizedPhone) {
+  const last10 = String(normalizedPhone || "").slice(-10);
+
+  if (last10.length < 7) {
+    return null;
+  }
+
+  return database.get(
+    `
+    SELECT id, name, email, instagram, socials, address, website,
+           whatsapp_status, status
+    FROM businesses
+    WHERE ${NORMALIZED_BUSINESS_PHONE_SQL} LIKE ?
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    `%${last10}`
+  );
+}
+
+// Giden/gelen bir WhatsApp mesajını konuşma geçmişi tablosuna kaydeder.
+async function logWhatsAppMessage({
+  phone,
+  businessId = null,
+  direction,
+  type = "text",
+  text = "",
+  messageId = null,
+}) {
+  const database = await getDb();
+
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+
+  if (!normalizedPhone || !direction) {
+    return null;
+  }
+
+  await database.run(
+    `
+    INSERT INTO whatsapp_messages (
+      phone, business_id, direction, type, text, message_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    normalizedPhone,
+    businessId,
+    direction,
+    type,
+    String(text || ""),
+    messageId
+  );
+
+  return true;
+}
+
+// Bir telefon numarasının (son 10 hane) en son aktif olduğu güne ait
+// WhatsApp konuşmasını (giden + gelen mesajlar) zaman sırasıyla döndürür.
+async function getWhatsAppConversationByPhone(phone) {
+  const database = await getDb();
+
+  const last10 = String(phone || "")
+    .replace(/\D/g, "")
+    .slice(-10);
+
+  if (last10.length < 7) {
+    return [];
+  }
+
+  // En son mesaj atılan günü bul.
+  const lastDayRow = await database.get(
+    `
+    SELECT date(MAX(created_at)) AS lastDay
+    FROM whatsapp_messages
+    WHERE phone LIKE ?
+    `,
+    `%${last10}`
+  );
+
+  if (!lastDayRow?.lastDay) {
+    return [];
+  }
+
+  const rows = await database.all(
+    `
+    SELECT id, direction, type, text, message_id, created_at
+    FROM whatsapp_messages
+    WHERE phone LIKE ? AND date(created_at) = date(?)
+    ORDER BY created_at ASC, id ASC
+    `,
+    `%${last10}`,
+    lastDayRow.lastDay
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    direction: row.direction,
+    type: row.type,
+    text: row.text,
+    messageId: row.message_id,
+    createdAt: row.created_at,
+  }));
+}
+
 async function getLiveSupportLeads() {
   const database = await getDb();
 
@@ -1054,6 +1240,9 @@ async function getLiveSupportLeads() {
       phone,
       button_text,
       status,
+      result,
+      meeting_at,
+      assigned_to,
       note,
       message_id,
       seen_at,
@@ -1063,17 +1252,129 @@ async function getLiveSupportLeads() {
     ORDER BY updated_at DESC, id DESC
   `);
 
-  return rows.map((row) => ({
+  return Promise.all(
+    rows.map(async (row) => {
+      const business = await findBusinessByPhone(database, row.phone);
+      const conversation = await getWhatsAppConversationByPhone(row.phone);
+
+      return {
+        id: row.id,
+        phone: row.phone,
+        buttonText: row.button_text,
+        status: row.status || "info_requested",
+        result: row.result || "pending",
+        meetingAt: row.meeting_at,
+        assignedTo: row.assigned_to,
+        note: row.note || "",
+        messageId: row.message_id,
+        seenAt: row.seen_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+
+        // İşletme eşleşmesi (telefon → businesses)
+        businessId: business?.id || null,
+        businessName: business?.name || null,
+        email: business?.email || null,
+        instagram: business?.instagram || null,
+        socials: business?.socials || null,
+        address: business?.address || null,
+        website: business?.website || null,
+
+        // O güne ait WhatsApp konuşması (giden + gelen)
+        conversation,
+      };
+    })
+  );
+}
+
+// Belirli tarih aralığında (created_at, gün bazında dahil) rapor verisi üretir.
+// Kategoriler: ilgilenenler (info_requested), kayıt oluşturanlar (approved
+// işletmeler), daha sonra dönecekler (follow_up), ilgilenmeyenler (not_interested).
+async function getReportData({ from, to }) {
+  const database = await getDb();
+
+  const rangeClause = "date(created_at) BETWEEN date(?) AND date(?)";
+
+  const supportRows = await database.all(
+    `
+    SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
+           note, created_at, updated_at
+    FROM live_support_leads
+    WHERE ${rangeClause}
+    ORDER BY created_at DESC, id DESC
+    `,
+    from,
+    to
+  );
+
+  const enrichedSupport = await Promise.all(
+    supportRows.map(async (row) => {
+      const business = await findBusinessByPhone(database, row.phone);
+
+      return {
+        id: row.id,
+        phone: row.phone,
+        status: row.status || "info_requested",
+        result: row.result || "pending",
+        meetingAt: row.meeting_at,
+        assignedTo: row.assigned_to,
+        buttonText: row.button_text,
+        note: row.note || "",
+        createdAt: row.created_at,
+        businessName: business?.name || null,
+        email: business?.email || null,
+        socials: business?.socials || business?.instagram || null,
+        address: business?.address || null,
+        website: business?.website || null,
+      };
+    })
+  );
+
+  const interested = enrichedSupport.filter(
+    (lead) => lead.status === "info_requested"
+  );
+  const followUp = enrichedSupport.filter((lead) => lead.status === "follow_up");
+  const notInterested = enrichedSupport.filter(
+    (lead) => lead.status === "not_interested"
+  );
+
+  const approvedRows = await database.all(
+    `
+    SELECT id, name, phone, email, instagram, socials, address, website, created_at
+    FROM businesses
+    WHERE status = 'approved' AND ${rangeClause}
+    ORDER BY created_at DESC, id DESC
+    `,
+    from,
+    to
+  );
+
+  const approved = approvedRows.map((row) => ({
     id: row.id,
+    businessName: row.name,
     phone: row.phone,
-    buttonText: row.button_text,
-    status: row.status || "info_requested",
-    note: row.note || "",
-    messageId: row.message_id,
-    seenAt: row.seen_at,
+    email: row.email,
+    socials: row.socials || row.instagram,
+    address: row.address,
+    website: row.website,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
   }));
+
+  return {
+    range: { from, to },
+    stats: {
+      interested: interested.length,
+      approved: approved.length,
+      followUp: followUp.length,
+      notInterested: notInterested.length,
+    },
+    categories: {
+      interested,
+      approved,
+      followUp,
+      notInterested,
+    },
+  };
 }
 
 async function updateLiveSupportLeadNote(leadId, note) {
@@ -1123,6 +1424,97 @@ async function updateLiveSupportLeadNote(leadId, note) {
     seenAt: row.seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+const LIVE_SUPPORT_RESULTS = [
+  "pending",
+  "to_meet",
+  "contacted",
+  "record_taken",
+  "rejected",
+  "completed",
+];
+
+// Bir canlı destek lead'inin sonuç / görüşme tarihi / atanan personel / not
+// alanlarından gönderilenleri günceller ve zenginleştirilmiş kaydı döndürür.
+async function updateLiveSupportLead(leadId, fields = {}) {
+  const database = await getDb();
+
+  const sets = [];
+  const params = [];
+
+  if (fields.note !== undefined) {
+    sets.push("note = ?");
+    params.push(String(fields.note || ""));
+  }
+
+  if (fields.result !== undefined) {
+    const safeResult = LIVE_SUPPORT_RESULTS.includes(fields.result)
+      ? fields.result
+      : "pending";
+    sets.push("result = ?");
+    params.push(safeResult);
+  }
+
+  if (fields.meetingAt !== undefined) {
+    sets.push("meeting_at = ?");
+    params.push(fields.meetingAt || null);
+  }
+
+  if (fields.assignedTo !== undefined) {
+    sets.push("assigned_to = ?");
+    params.push(fields.assignedTo || null);
+  }
+
+  if (sets.length === 0) {
+    return null;
+  }
+
+  sets.push("updated_at = CURRENT_TIMESTAMP");
+
+  const result = await database.run(
+    `UPDATE live_support_leads SET ${sets.join(", ")} WHERE id = ?`,
+    ...params,
+    leadId
+  );
+
+  if (result.changes === 0) {
+    return null;
+  }
+
+  const row = await database.get(
+    `
+    SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
+           note, message_id, seen_at, created_at, updated_at
+    FROM live_support_leads
+    WHERE id = ?
+    `,
+    leadId
+  );
+
+  const business = await findBusinessByPhone(database, row.phone);
+
+  return {
+    id: row.id,
+    phone: row.phone,
+    buttonText: row.button_text,
+    status: row.status || "info_requested",
+    result: row.result || "pending",
+    meetingAt: row.meeting_at,
+    assignedTo: row.assigned_to,
+    note: row.note || "",
+    messageId: row.message_id,
+    seenAt: row.seen_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    businessId: business?.id || null,
+    businessName: business?.name || null,
+    email: business?.email || null,
+    instagram: business?.instagram || null,
+    socials: business?.socials || null,
+    address: business?.address || null,
+    website: business?.website || null,
   };
 }
 
@@ -1361,9 +1753,14 @@ module.exports = {
   markTemplateSent,
   markIncomingWhatsAppReply,
 
+  logWhatsAppMessage,
+  getWhatsAppConversationByPhone,
+
   saveLiveSupportLead,
   getLiveSupportLeads,
+  getReportData,
   updateLiveSupportLeadNote,
+  updateLiveSupportLead,
   clearLiveSupportLeads,
   getLiveSupportUnseenCount,
   markLiveSupportLeadsAsSeen,

@@ -407,6 +407,8 @@ async function searchBusinessesWithGoogle({
 
   let businesses = [];
   const searchedQueries = [];
+  let successfulRequests = 0;
+  const requestErrors = [];
 
   for (const keyword of keywords) {
     const textQuery = buildSearchQuery({
@@ -429,8 +431,10 @@ async function searchBusinessesWithGoogle({
         pageSize: perKeywordLimit,
       });
 
+      successfulRequests += 1;
       businesses = mergeUniqueBusinesses(businesses, keywordBusinesses);
     } catch (error) {
+  requestErrors.push(error);
   console.error(`"${keyword}" araması başarısız oldu:`, {
     name: error.name,
     message: error.message,
@@ -438,6 +442,15 @@ async function searchBusinessesWithGoogle({
     stack: error.stack,
   });
 }
+  }
+
+  // Hiçbir istek başarılı olmadıysa (ör. kota/izin hatası) bunu "0 sonuç"
+  // gibi ele alma; hata fırlat ki çağıran taraf kayıtlı sonuçlara (cache)
+  // düşebilsin ve mevcut veriler boş listeyle ezilmesin.
+  if (successfulRequests === 0 && requestErrors.length > 0) {
+    throw new Error(
+      requestErrors[0].message || "Google Places API isteği başarısız oldu."
+    );
   }
 
   const limitedBusinesses = businesses.slice(0, safeLimit);

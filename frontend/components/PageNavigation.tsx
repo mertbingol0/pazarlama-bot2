@@ -24,6 +24,10 @@ const navigationItems = [
     label: "Canlı Destek",
     href: "/live-support",
   },
+  {
+    label: "Raporlar",
+    href: "/reports",
+  },
 ];
 
 export function PageNavigation() {

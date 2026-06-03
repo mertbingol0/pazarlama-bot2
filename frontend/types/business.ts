@@ -46,6 +46,8 @@ export type LeadItem = {
   lat?: number | null;
   lng?: number | null;
 
+  socialLinks?: string[];
+
   templateSentAt?: string | null;
   lastIncomingAt?: string | null;
   lastMessageText?: string | null;
@@ -57,6 +59,9 @@ export type Business = {
   name: string;
   address?: string;
   phone?: string;
+  email?: string;
+  instagram?: string;
+  socials?: string;
   website?: string;
   googleMapsUrl?: string;
   rating?: number;

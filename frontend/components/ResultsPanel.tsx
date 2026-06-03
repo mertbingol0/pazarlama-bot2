@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import type { Business, SearchResult } from "@/types/business";
 
+import { Button } from "@/components/ui/button";
 import { ListColumn } from "@/components/ListColumn";
 import { StatCard } from "@/components/StatCard";
 import { ResultsMap } from "@/components/ResultsMap";
-import { downloadSearchResultsAsCsv } from "@/lib/export";
+import {
+  downloadSearchResultsAsCsv,
+  downloadLeadListAsCsv,
+} from "@/lib/export";
 import { classifyPhoneType } from "@/lib/phone";
 import { WhatsAppBusinessPanel } from "@/components/WhatsAppBusinessPanel";
 
@@ -50,6 +54,8 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
     Array<string | number>
   >([]);
 
+  const [isMessagePanelOpen, setIsMessagePanelOpen] = useState(false);
+
   const businesses = useMemo(() => {
   return results.businesses || [];
 }, [results.businesses]);
@@ -66,9 +72,42 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
     );
   }, [results.results.phones]);
 
+  // Bir işletmenin tüm sosyal linklerini tek kartta toplayıp ikon dizisi
+  // olarak göstermek için işletme bazında grupla.
   const socialItems = useMemo(() => {
-    return results.results.instagrams || [];
+    const items = results.results.instagrams || [];
+    const grouped = new Map<string, (typeof items)[number] & { socialLinks: string[] }>();
+
+    items.forEach((item) => {
+      const key = String(item.businessId || item.id || item.businessName);
+      const existing = grouped.get(key);
+
+      if (existing) {
+        if (item.value && !existing.socialLinks.includes(item.value)) {
+          existing.socialLinks.push(item.value);
+        }
+        return;
+      }
+
+      grouped.set(key, {
+        ...item,
+        id: key,
+        socialLinks: item.value ? [item.value] : [],
+      });
+    });
+
+    return Array.from(grouped.values()).map((item) => ({
+      ...item,
+      // url backend'de sosyal linke set ediliyor; "Google Maps" butonunun
+      // yanlış yönlenmemesi için temizle (linkler ikonlarda zaten var).
+      url: undefined,
+      value: item.socialLinks.join(", "),
+    }));
   }, [results.results.instagrams]);
+
+  const emailItems = useMemo(() => {
+    return results.results.emails || [];
+  }, [results.results.emails]);
 
   const eligibleBusinesses = useMemo(() => {
     return businesses.filter(isTemplateEligibleBusiness);
@@ -125,47 +164,134 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         </div>
       )}
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.95fr)]">
-        <div className="order-2 space-y-4 xl:order-1">
-          <ResultsMap businesses={businesses} />
-
-          <ListColumn
-            title="WhatsApp Numaraları"
-            items={whatsappPhones}
-            type="phone"
-            variant="whatsapp"
-            businesses={businesses}
-            onCsvDownload={() => downloadSearchResultsAsCsv(results)}
-            selectedBusinessIds={selectedBusinessIds}
-            onToggleBusinessSelection={handleToggleBusinessSelection}
-            onSetSelectedBusinessIds={handleSetSelectedBusinessIds}
-          />
-
-          <ListColumn
-            title="Sabit Hatlar"
-            items={landlinePhones}
-            type="phone"
-            variant="landline"
-            businesses={businesses}
-          />
-
-          <ListColumn
-            title="Sosyal Mecralar"
-            items={socialItems}
-            type="instagram"
-            businesses={businesses}
-          />
-        </div>
-
-      <div className="order-1 xl:order-2 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
-        <WhatsAppBusinessPanel
-          businesses={businesses}
-          selectedBusinesses={selectedBusinesses}
-          selectedPhoneCount={selectedPhoneCount}
-          onClearSelections={handleClearSelections}
-        />
+      <div className="mt-6">
+        <ResultsMap businesses={businesses} />
       </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => downloadSearchResultsAsCsv(results)}
+          className="rounded-full"
+        >
+          Tüm Sonuçları CSV İndir
+        </Button>
+
+        <Button
+          type="button"
+          onClick={() => setIsMessagePanelOpen(true)}
+          className="rounded-full bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
+        >
+          Mesaj Gönderim Paneli
+          {selectedPhoneCount > 0 && (
+            <span className="ml-2 rounded-full bg-white/25 px-2 py-0.5 text-xs font-semibold">
+              {selectedPhoneCount}
+            </span>
+          )}
+        </Button>
+      </div>
+
+      {/* 4 kategori alt alta, her biri tam genişlik hizalı tablo */}
+      <section className="mt-4 space-y-4">
+        <ListColumn
+          title="WhatsApp Numaraları"
+          items={whatsappPhones}
+          type="phone"
+          variant="whatsapp"
+          businesses={businesses}
+          onCsvDownload={() =>
+            downloadLeadListAsCsv(whatsappPhones, "phone", results, "whatsapp")
+          }
+          selectedBusinessIds={selectedBusinessIds}
+          onToggleBusinessSelection={handleToggleBusinessSelection}
+          onSetSelectedBusinessIds={handleSetSelectedBusinessIds}
+        />
+
+        <ListColumn
+          title="Sabit Hatlar"
+          items={landlinePhones}
+          type="phone"
+          variant="landline"
+          businesses={businesses}
+          onCsvDownload={() =>
+            downloadLeadListAsCsv(landlinePhones, "phone", results, "sabit-hatlar")
+          }
+        />
+
+        <ListColumn
+          title="Sosyal Mecralar"
+          items={socialItems}
+          type="instagram"
+          businesses={businesses}
+          onCsvDownload={() =>
+            downloadLeadListAsCsv(socialItems, "instagram", results)
+          }
+        />
+
+        <ListColumn
+          title="Mail Adresleri"
+          items={emailItems}
+          type="email"
+          businesses={businesses}
+          onCsvDownload={() =>
+            downloadLeadListAsCsv(emailItems, "email", results)
+          }
+        />
       </section>
+
+      {/* Sağdan açılır mesaj gönderim drawer'ı */}
+      <div
+        className={`fixed inset-0 z-40 overflow-hidden ${
+          isMessagePanelOpen ? "" : "pointer-events-none"
+        }`}
+        aria-hidden={!isMessagePanelOpen}
+      >
+        <div
+          onClick={() => setIsMessagePanelOpen(false)}
+          className={`absolute inset-0 bg-slate-900/40 transition-opacity duration-300 ${
+            isMessagePanelOpen ? "opacity-100" : "opacity-0"
+          }`}
+        />
+
+        <aside
+          className={`absolute right-0 top-0 flex h-full w-full max-w-md transform flex-col bg-slate-50 shadow-2xl transition-transform duration-300 ${
+            isMessagePanelOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+          aria-label="Mesaj gönderim paneli"
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+            <h3 className="text-sm font-semibold text-slate-800">
+              Manuel Mesaj Gönderimi
+            </h3>
+
+            <button
+              type="button"
+              onClick={() => setIsMessagePanelOpen(false)}
+              className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Paneli kapat"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M6 6l12 12M18 6L6 18"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <WhatsAppBusinessPanel
+              businesses={businesses}
+              selectedBusinesses={selectedBusinesses}
+              selectedPhoneCount={selectedPhoneCount}
+              onClearSelections={handleClearSelections}
+            />
+          </div>
+        </aside>
+      </div>
     </>
   );
 }

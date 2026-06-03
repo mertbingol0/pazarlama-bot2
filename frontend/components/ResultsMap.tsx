@@ -263,20 +263,15 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
   return (
     <>
       <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-sm">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
-          <div>
-            <CardTitle className="text-base font-semibold text-slate-900">
-              Haritada Sonuçlar
-            </CardTitle>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Bulunan işletmelerin konumlarını Google Maps üzerinde görüntüleyin.
-            </p>
-          </div>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+          <CardTitle className="text-base font-semibold text-slate-900">
+            Haritada Sonuçlar
+          </CardTitle>
 
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={() => setIsFullscreenOpen(true)}
             className="rounded-xl border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
           >
@@ -284,7 +279,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
           </Button>
         </CardHeader>
 
-        <CardContent>{renderMap("h-[320px]")}</CardContent>
+        <CardContent>{renderMap("h-[200px]")}</CardContent>
       </Card>
 
       {isFullscreenOpen && (

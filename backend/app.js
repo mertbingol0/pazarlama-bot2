@@ -1,5 +1,8 @@
 const { searchBusinessesWithGoogle } = require("./services/googlePlacesService");
 const {
+  enrichBusinessesWithContacts,
+} = require("./services/websiteScraperService");
+const {
   sendWhatsAppTextMessage,
   sendWhatsAppTemplateTest,
   sendWhatsAppTemplateMessage,
@@ -19,9 +22,13 @@ const {
   markTemplateSent,
   markIncomingWhatsAppReply,
 
+  logWhatsAppMessage,
+
   saveLiveSupportLead,
   getLiveSupportLeads,
+  getReportData,
   updateLiveSupportLeadNote,
+  updateLiveSupportLead,
   clearLiveSupportLeads,
   getLiveSupportUnseenCount,
   markLiveSupportLeadsAsSeen,
@@ -297,6 +304,34 @@ app.get("/api/live-support-leads/unseen-count", async (req, res) => {
   }
 });
 
+app.get("/api/reports", async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const defaultFrom = new Date();
+    defaultFrom.setDate(defaultFrom.getDate() - 30);
+
+    const from = String(req.query.from || defaultFrom.toISOString().slice(0, 10));
+    const to = String(req.query.to || today);
+
+    const report = await getReportData({ from, to });
+
+    return res.status(200).json({
+      success: true,
+      message: "Rapor başarıyla oluşturuldu.",
+      ...report,
+    });
+  } catch (error) {
+    console.error("/api/reports hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Rapor oluşturulurken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
 app.get("/api/live-support-leads", async (req, res) => {
   try {
     const leads = await getLiveSupportLeads();
@@ -353,6 +388,56 @@ app.patch("/api/live-support-leads/mark-seen", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Canlı destek bildirimleri güncellenirken hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+app.patch("/api/live-support-leads/:id", async (req, res) => {
+  try {
+    const leadId = Number(req.params.id);
+
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli bir canlı destek lead ID değeri gönderilmelidir.",
+      });
+    }
+
+    const fields = {};
+
+    if (req.body.note !== undefined) fields.note = String(req.body.note || "");
+    if (req.body.result !== undefined)
+      fields.result = String(req.body.result || "pending");
+    if (req.body.meetingAt !== undefined)
+      fields.meetingAt = req.body.meetingAt
+        ? String(req.body.meetingAt)
+        : null;
+    if (req.body.assignedTo !== undefined)
+      fields.assignedTo = req.body.assignedTo
+        ? String(req.body.assignedTo)
+        : null;
+
+    const updatedLead = await updateLiveSupportLead(leadId, fields);
+
+    if (!updatedLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Canlı destek kaydı bulunamadı ya da güncellenecek alan yok.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Canlı destek kaydı güncellendi.",
+      lead: updatedLead,
+    });
+  } catch (error) {
+    console.error("/api/live-support-leads/:id hata:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Canlı destek kaydı güncellenirken bir hata oluştu.",
       error: error.message,
     });
   }
@@ -605,6 +690,15 @@ app.post("/api/whatsapp/send-template", async (req, res) => {
         messageId: whatsappResult.messageId,
       });
 
+      await logWhatsAppMessage({
+        phone: business.phone,
+        businessId,
+        direction: "outgoing",
+        type: "template",
+        text: `Template gönderildi: ${templateName}`,
+        messageId: whatsappResult.messageId,
+      });
+
         results.push({
           businessId,
           success: true,
@@ -701,6 +795,15 @@ if (!["replied", "follow_up"].includes(business.whatsappStatus)) {
     const whatsappResult = await sendWhatsAppTextMessage({
       to: business.phone,
       message,
+    });
+
+    await logWhatsAppMessage({
+      phone: business.phone,
+      businessId,
+      direction: "outgoing",
+      type: "text",
+      text: message,
+      messageId: whatsappResult.messageId,
     });
 
     const updatedBusiness = await updateBusinessWhatsAppStatus(
@@ -869,6 +972,20 @@ app.post("/api/search", async (req, res) => {
 
       const googleBusinesses = googleResult.businesses || [];
 
+      // Website'i olan işletmeleri e-posta + sosyal medya verisiyle zenginleştir.
+      try {
+        await enrichBusinessesWithContacts(googleBusinesses, {
+          concurrency: 10,
+          timeoutMs: 6000,
+        });
+        console.log("İşletme website'leri iletişim verisi için tarandı.");
+      } catch (scrapeError) {
+        console.warn(
+          "Website kazıma sırasında genel hata (sonuçlar yine de döner):",
+          scrapeError.message
+        );
+      }
+
       await saveSearchResults({
         category: normalizedCategory,
         city: normalizedCity,
@@ -965,8 +1082,52 @@ app.post("/api/search", async (req, res) => {
   lng: business.lng || null,
 }));
 
+    const buildContactItem = (business, value, extra = {}) => ({
+      // Bir işletmenin birden çok mail/sosyal linki olabilir; React anahtarı
+      // ve durum yönetimi için id'yi değere göre benzersiz tut. İşletme
+      // eşleşmesi businessId üzerinden yapılır.
+      id: `${business.id}-${value}`,
+      businessId: business.id,
+      value,
+      businessName: business.name,
+      address: business.address,
+      source: business.source || "google_places",
+      url: business.googleMapsUrl,
+      website: business.website,
+      status: business.status || "pending",
+      ...extra,
+    });
+
+    const emails = businesses
+      .filter((business) => business.email)
+      .flatMap((business) =>
+        String(business.email)
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .map((value) => buildContactItem(business, value))
+      );
+
+    // Sosyal mecralar: instagram + scrape edilen diğer sosyal linkler.
+    const instagrams = businesses
+      .filter((business) => business.socials || business.instagram)
+      .flatMap((business) => {
+        const links = String(business.socials || business.instagram || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+
+        const uniqueLinks = Array.from(new Set(links));
+
+        return uniqueLinks.map((link) =>
+          buildContactItem(business, link, { url: link })
+        );
+      });
+
     const totalBusinesses = businesses.length;
     const phonesFound = phones.length;
+    const emailsFound = emails.length;
+    const instagramsFound = instagrams.length;
     if (totalBusinesses === 0) {
   return res.status(200).json({
     success: true,
@@ -1013,13 +1174,13 @@ app.post("/api/search", async (req, res) => {
       stats: {
         totalBusinesses,
         phonesFound,
-        emailsFound: 0,
-        instagramsFound: 0,
+        emailsFound,
+        instagramsFound,
       },
       results: {
         phones,
-        emails: [],
-        instagrams: [],
+        emails,
+        instagrams,
       },
       businesses,
     });
@@ -1260,6 +1421,15 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
     action,
   });
 
+  // Gelen her mesajı konuşma geçmişine kaydet (tanımlı butona uymasa da).
+  await logWhatsAppMessage({
+    phone: fromPhone,
+    direction: "incoming",
+    type: message.type || "text",
+    text: replyText,
+    messageId,
+  });
+
   if (!action) {
     console.log("Tanımlı olmayan WhatsApp cevabı:", replyText);
     continue;
@@ -1287,6 +1457,7 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
     const liveSupportLead = await saveLiveSupportLead({
       phone: fromPhone,
       buttonText: replyText || "Bilgi almak istiyorum",
+      status: "info_requested",
       messageId,
     });
 
@@ -1306,9 +1477,17 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
     const followUpDate = new Date();
     followUpDate.setDate(followUpDate.getDate() + 1);
 
-    console.log("Firma daha sonra dönüş istedi. Takip planlandı:", {
+    const liveSupportLead = await saveLiveSupportLead({
+      phone: fromPhone,
+      buttonText: replyText || "Daha sonra dönüş yapacağım",
+      status: "follow_up",
+      messageId,
+    });
+
+    console.log("Firma daha sonra dönüş istedi. Canlı desteğe eklendi:", {
       phone: fromPhone,
       businessId: updatedBusiness?.id || null,
+      liveSupportLeadId: liveSupportLead?.id || null,
       followUpAt: followUpDate.toISOString(),
     });
   }
@@ -1319,9 +1498,17 @@ app.post("/webhooks/whatsapp/webhook", async (req, res) => {
       await updateBusinessWhatsAppStatus(updatedBusiness.id, "not_interested");
     }
 
-    console.log("Firma ilgilenmiyor. Görüşme sonlandırıldı:", {
+    const liveSupportLead = await saveLiveSupportLead({
+      phone: fromPhone,
+      buttonText: replyText || "İlgilenmiyorum",
+      status: "not_interested",
+      messageId,
+    });
+
+    console.log("Firma ilgilenmiyor. Canlı desteğe eklendi:", {
       phone: fromPhone,
       businessId: updatedBusiness?.id || null,
+      liveSupportLeadId: liveSupportLead?.id || null,
     });
   }
 }
