@@ -18,11 +18,12 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
+            set -e
             git -C /home/pazarlama/pazarlama-bot2 pull origin main
-            cd /home/pazarlama/pazarlama-bot2/backend
-            npm install
-            pm2 restart pazarlamabot
             cd /home/pazarlama/pazarlama-bot2/frontend
             npm install
             npm run build
+            cd /home/pazarlama/pazarlama-bot2/backend
+            npm install
+            pm2 restart pazarlamabot
             pm2 restart pazarlamabot-frontend

@@ -62,6 +62,7 @@ export type Business = {
   email?: string;
   instagram?: string;
   socials?: string;
+  source?: LeadSource;
   website?: string;
   googleMapsUrl?: string;
   rating?: number;
