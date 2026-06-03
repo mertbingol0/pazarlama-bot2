@@ -19,7 +19,8 @@ jobs:
           port: 22
           script: |
             set -e
-            git -C /home/pazarlama/pazarlama-bot2 pull origin main
+            git -C /home/pazarlama/pazarlama-bot2 fetch origin main
+            git -C /home/pazarlama/pazarlama-bot2 reset --hard origin/main
             cd /home/pazarlama/pazarlama-bot2/frontend
             npm install
             npm run build
