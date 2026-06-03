@@ -312,7 +312,7 @@ export default function WhatsAppPage() {
           </div>
         </header>
 
-        <div className="grid gap-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[20rem_minmax(0,1fr)] lg:h-[calc(100vh-16rem)]">
+        <div className="grid gap-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)_17rem] lg:h-[calc(100vh-16rem)]">
           {/* Sol: sohbet listesi */}
           <aside className="flex flex-col border-b border-slate-100 lg:border-b-0 lg:border-r">
             <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
@@ -374,76 +374,14 @@ export default function WhatsAppPage() {
               </div>
             ) : (
               <>
-                <div className="space-y-3 border-b border-slate-100 px-5 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800">
                       {business?.name ||
                         selectedConversation?.businessName ||
                         "İşletme eşleştirilemedi"}
                     </p>
                     <p className="text-xs text-slate-400">{selectedPhone}</p>
-
-                    {business && (
-                      <p className="mt-1 text-xs text-slate-400">
-                        Kaynak: {formatSource(business.source)}
-                        {business.category ? ` • ${business.category}` : ""}
-                        {business.city
-                          ? ` • ${business.district || ""} ${business.city}`.trim()
-                          : ""}
-                      </p>
-                    )}
-
-                    {business?.address && (
-                      <p className="mt-0.5 text-xs text-slate-400">
-                        {business.address}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Sonuç / görüşme planı — canlı desteğe işlenir */}
-                  <div className="flex flex-wrap items-end gap-2">
-                    <div>
-                      <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                        Sonuç
-                      </label>
-                      <select
-                        value={outcomeResult}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setOutcomeResult(value);
-                          void handleSaveOutcome(value, meetingAt);
-                        }}
-                        className="mt-1 h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                      >
-                        {RESULT_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                        Görüşme Tarihi
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={meetingAt}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setMeetingAt(value);
-                          void handleSaveOutcome(outcomeResult, value);
-                        }}
-                        className="mt-1 h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                      />
-                    </div>
-
-                    <span className="pb-1 text-[11px] text-slate-400">
-                      {outcomeSaved
-                        ? "✓ Canlı desteğe işlendi"
-                        : "Seçim canlı desteğe yansır"}
-                    </span>
                   </div>
                 </div>
 
@@ -527,6 +465,89 @@ export default function WhatsAppPage() {
               </>
             )}
           </section>
+
+          {/* En sağ: talep durumu + işletme detayları (ince panel) */}
+          <aside className="flex flex-col border-t border-slate-100 lg:border-l lg:border-t-0">
+            {!selectedPhone ? (
+              <div className="flex flex-1 items-center justify-center p-4 text-xs text-slate-400">
+                Detaylar
+              </div>
+            ) : (
+              <div className="space-y-4 overflow-y-auto p-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Talep Durumu
+                  </p>
+
+                  <label className="mt-3 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    Sonuç
+                  </label>
+                  <select
+                    value={outcomeResult}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setOutcomeResult(value);
+                      void handleSaveOutcome(value, meetingAt);
+                    }}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  >
+                    {RESULT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label className="mt-3 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    Görüşme Tarihi
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={meetingAt}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setMeetingAt(value);
+                      void handleSaveOutcome(outcomeResult, value);
+                    }}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    {outcomeSaved
+                      ? "✓ Canlı desteğe işlendi"
+                      : "Seçim canlı desteğe yansır"}
+                  </p>
+                </div>
+
+                {business && (
+                  <div className="space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                    <p className="font-semibold text-slate-600">İşletme</p>
+                    <p>Kaynak: {formatSource(business.source)}</p>
+                    {business.category && <p>Kategori: {business.category}</p>}
+                    {(business.city || business.district) && (
+                      <p>
+                        {business.district ? `${business.district} ` : ""}
+                        {business.city || ""}
+                      </p>
+                    )}
+                    {business.address && (
+                      <p className="leading-5">{business.address}</p>
+                    )}
+                    {business.website && (
+                      <a
+                        href={business.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block break-all text-emerald-600 hover:text-emerald-700"
+                      >
+                        {business.website}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
         </div>
       </div>
     </main>
