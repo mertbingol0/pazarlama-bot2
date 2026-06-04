@@ -1,4 +1,7 @@
-const { searchBusinessesWithGoogle } = require("./services/googlePlacesService");
+const {
+  searchBusinessesWithGoogle,
+  lookupBusinessOnGoogle,
+} = require("./services/googlePlacesService");
 const {
   enrichBusinessesWithContacts,
 } = require("./services/websiteScraperService");
@@ -11,6 +14,7 @@ const {
   initDatabase,
   getCachedSearchResults,
   saveSearchResults,
+  mergeSearchResults,
   getSearchHistory,
   getSearchDetailsById,
   updateBusinessStatus,
@@ -40,7 +44,29 @@ const {
   upsertManualMessageTestBusiness,
 
   authenticateUser,
+  getUserById,
+  listUsers,
+  createUser,
+
+  upsertBusinessInteraction,
+  addBusinessNote,
+  updateBusinessNote,
+  getBusinessNotes,
+  getBusinessCrmBatch,
+  getContactedBusinesses,
+  getDashboardStats,
+  createManualBusiness,
+  listAssignableUsers,
 } = require("./db");
+
+const { signToken, requireAuth, requireAdmin } = require("./auth");
+const { z } = require("zod");
+const {
+  USER_ROLES,
+  TEAMS,
+  INTERACTION_CHANNELS,
+  INTERACTION_OUTCOMES,
+} = require("./dbConstants");
 
 const crypto = require("crypto");
 
@@ -64,8 +90,8 @@ app.use(
   "http://lf-api.jefedes.com",
   "https://lf-api.jefedes.com",
 ],
-    methods: ["GET", "POST", "PATCH", "DELETE"],
-    allowedHeaders: ["Content-Type"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -1080,73 +1106,115 @@ app.post("/api/search", async (req, res) => {
     .filter((value) => value && String(value).trim())
     .join(" ");
 
+  // Arama modu:
+  //  - "local" (varsayılan): cache-first. Bu parametreler için kayıt varsa
+  //    API'ye gitmeden DB'den döner (lokalizasyon). Hiç kayıt yoksa ilk kez
+  //    API'den çekip kaydeder.
+  //  - "fresh" ("Yeni sorgu"): her zaman API'den güncel veri çeker; bu sorguda
+  //    DB'de henüz olmayan yeni & benzersiz işletmeleri ekler (merge), silmez.
+  const mode = String(req.body.mode || "local") === "fresh" ? "fresh" : "local";
+
   try {
     let businesses = [];
     let fromCache = false;
+    let addedCount = 0;
 
-    try {
-      const googleResult = await searchBusinessesWithGoogle({
-        category: normalizedCategory,
-        city: normalizedCity,
-        district: normalizedDistrict,
-        limit,
-      });
-
-      const googleBusinesses = googleResult.businesses || [];
-
-      // Website'i olan işletmeleri e-posta + sosyal medya verisiyle zenginleştir.
-      try {
-        await enrichBusinessesWithContacts(googleBusinesses, {
-          concurrency: 10,
-          timeoutMs: 6000,
-        });
-        console.log("İşletme website'leri iletişim verisi için tarandı.");
-      } catch (scrapeError) {
-        console.warn(
-          "Website kazıma sırasında genel hata (sonuçlar yine de döner):",
-          scrapeError.message
-        );
-      }
-
-      await saveSearchResults({
-        category: normalizedCategory,
-        city: normalizedCity,
-        district: normalizedDistrict,
-        businesses: googleBusinesses,
-      });
-
-      const savedResults = await getCachedSearchResults({
-        category: normalizedCategory,
-        city: normalizedCity,
-        district: normalizedDistrict,
-      });
-
-      businesses = savedResults?.businesses || googleBusinesses;
-
-      console.log("Güncel sonuçlar Google Places API'den çekildi.");
-      console.log("Sonuçlar SQLite'a kaydedildi.");
-    } catch (googleError) {
-      console.error(
-        "Google Places hata verdi, kayıtlı sonuç kontrol ediliyor:",
-        googleError
-      );
-
+    // LOCAL: önce yerel veritabanına bak.
+    if (mode === "local") {
       const cached = await getCachedSearchResults({
         category: normalizedCategory,
         city: normalizedCity,
         district: normalizedDistrict,
       });
 
-      if (!cached) {
-        throw googleError;
+      if (cached && cached.businesses.length > 0) {
+        businesses = cached.businesses;
+        fromCache = true;
+        console.log("Sonuçlar yerel veritabanından getirildi (local mod).");
       }
+    }
 
-      businesses = cached.businesses;
-      fromCache = true;
+    // fromCache değilse: API'den çek (local ilk kez VEYA fresh).
+    if (!fromCache) {
+      try {
+        const googleResult = await searchBusinessesWithGoogle({
+          category: normalizedCategory,
+          city: normalizedCity,
+          district: normalizedDistrict,
+          limit,
+        });
 
-      console.log(
-        "Google Places hata verdiği için sonuçlar SQLite yedeğinden getirildi."
-      );
+        const googleBusinesses = googleResult.businesses || [];
+
+        // Website'i olan işletmeleri e-posta + sosyal medya verisiyle zenginleştir.
+        try {
+          await enrichBusinessesWithContacts(googleBusinesses, {
+            concurrency: 10,
+            timeoutMs: 6000,
+          });
+          console.log("İşletme website'leri iletişim verisi için tarandı.");
+        } catch (scrapeError) {
+          console.warn(
+            "Website kazıma sırasında genel hata (sonuçlar yine de döner):",
+            scrapeError.message
+          );
+        }
+
+        if (mode === "fresh") {
+          // Mevcut kayıtları silmeden yalnızca yeni & benzersizleri ekle.
+          const mergeResult = await mergeSearchResults({
+            category: normalizedCategory,
+            city: normalizedCity,
+            district: normalizedDistrict,
+            businesses: googleBusinesses,
+          });
+          addedCount = mergeResult.addedCount;
+          console.log(
+            `Yeni sorgu (fresh): ${addedCount} yeni işletme eklendi (merge).`
+          );
+        } else {
+          // Local ilk kez: tam kaydet.
+          await saveSearchResults({
+            category: normalizedCategory,
+            city: normalizedCity,
+            district: normalizedDistrict,
+            businesses: googleBusinesses,
+          });
+          console.log("Local ilk sorgu: sonuçlar veritabanına kaydedildi.");
+        }
+
+        const savedResults = await getCachedSearchResults({
+          category: normalizedCategory,
+          city: normalizedCity,
+          district: normalizedDistrict,
+        });
+
+        businesses = savedResults?.businesses || googleBusinesses;
+
+        console.log("Güncel sonuçlar Google Places API'den çekildi.");
+      } catch (googleError) {
+        console.error(
+          "Google Places hata verdi, kayıtlı sonuç kontrol ediliyor:",
+          googleError
+        );
+
+        const cached = await getCachedSearchResults({
+          category: normalizedCategory,
+          city: normalizedCity,
+          district: normalizedDistrict,
+        });
+
+        if (!cached) {
+          throw googleError;
+        }
+
+        businesses = cached.businesses;
+        fromCache = true;
+
+        console.log(
+          "Google Places hata verdiği için sonuçlar veritabanı yedeğinden getirildi."
+        );
+      }
     }
 
     if (
@@ -1257,6 +1325,8 @@ app.post("/api/search", async (req, res) => {
     message:
       "Google Places araması tamamlandı ancak bu kriterlerle işletme bulunamadı. Kategori, il, ilçe veya API bağlantısını kontrol edin.",
     fromCache,
+    mode,
+    addedCount,
     query: {
       category: normalizedCategory,
       city: normalizedCity,
@@ -1283,9 +1353,13 @@ app.post("/api/search", async (req, res) => {
       success: true,
       provider: "google",
       message: fromCache
-        ? "Güncel veri alınamadığı için kayıtlı son sonuçlar gösteriliyor."
+        ? "Sonuçlar yerel veritabanından getirildi."
+        : mode === "fresh"
+        ? `Güncel sonuçlar getirildi. ${addedCount} yeni işletme eklendi.`
         : "Güncel Google Places arama sonuçları başarıyla getirildi.",
       fromCache,
+      mode,
+      addedCount,
       query: {
         category: normalizedCategory,
         city: normalizedCity,
@@ -1662,7 +1736,7 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const token = signToken(user);
 
     return res.status(200).json({
       success: true,
@@ -1671,7 +1745,9 @@ app.post("/api/auth/login", async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
+        fullName: user.fullName,
         role: user.role,
+        team: user.team,
       },
     });
   } catch (error) {
@@ -1684,6 +1760,517 @@ app.post("/api/auth/login", async (req, res) => {
     });
   }
 });
+
+// Geçerli token'a karşılık gelen güncel kullanıcı bilgisi.
+app.get("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+
+    if (!user || user.isActive === false) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Oturum geçersiz." });
+    }
+
+    return res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error("/api/auth/me hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Kullanıcı bilgisi alınamadı.",
+      error: error.message,
+    });
+  }
+});
+
+// Kullanıcı oluşturma şeması (zod).
+const createUserSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3, "Kullanıcı adı en az 3 karakter olmalıdır.")
+    .max(50, "Kullanıcı adı en fazla 50 karakter olabilir."),
+  password: z
+    .string()
+    .min(6, "Şifre en az 6 karakter olmalıdır.")
+    .max(100, "Şifre çok uzun."),
+  fullName: z.string().trim().max(120).optional().or(z.literal("")),
+  role: z.enum(USER_ROLES).default("personnel"),
+  team: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.enum(TEAMS).optional()
+  ),
+});
+
+// Admin: yeni kullanıcı oluşturur (birimiyle birlikte).
+app.post("/api/users", requireAdmin, async (req, res) => {
+  try {
+    const parsed = createUserSchema.safeParse(req.body || {});
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+        errors: parsed.error.issues,
+      });
+    }
+
+    const { username, password, fullName, role, team } = parsed.data;
+
+    // Personel için birim zorunlu; admin için yok sayılır.
+    if (role === "personnel" && !team) {
+      return res.status(400).json({
+        success: false,
+        message: "Personel için bir birim seçilmelidir.",
+      });
+    }
+
+    const user = await createUser({
+      username,
+      password,
+      fullName: fullName || null,
+      role,
+      team: role === "admin" ? null : team,
+      createdBy: req.user.id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Kullanıcı oluşturuldu.",
+      user,
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) {
+      console.error("/api/users (POST) hata:", error);
+    }
+    return res.status(status).json({
+      success: false,
+      message:
+        status >= 500 ? "Kullanıcı oluşturulurken bir hata oluştu." : error.message,
+    });
+  }
+});
+
+// Admin: kullanıcı listesi.
+app.get("/api/users", requireAdmin, async (req, res) => {
+  try {
+    const users = await listUsers();
+    return res.status(200).json({ success: true, count: users.length, users });
+  } catch (error) {
+    console.error("/api/users (GET) hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Kullanıcılar getirilirken bir hata oluştu.",
+      error: error.message,
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CRM: işletme görüşmesi (kanal/sonuç/personel) + notlar.
+// Tüm giriş yapmış kullanıcılar erişebilir; veriler herkese görünür.
+// ---------------------------------------------------------------------------
+
+// Admin dashboard istatistikleri (bugün / tarih aralığı / belirli personel).
+app.get("/api/dashboard/stats", requireAdmin, async (req, res) => {
+  try {
+    const stats = await getDashboardStats({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      userId: req.query.userId ? Number(req.query.userId) : null,
+    });
+    return res.status(200).json({ success: true, stats });
+  } catch (error) {
+    console.error("/api/dashboard/stats hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Dashboard verileri getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Durum Takip: mevcut kullanıcının kendi istatistikleri.
+app.get("/api/me/stats", requireAuth, async (req, res) => {
+  try {
+    const stats = await getDashboardStats({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      userId: req.user.id,
+    });
+    return res.status(200).json({ success: true, stats });
+  } catch (error) {
+    console.error("/api/me/stats hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "İstatistikler getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Durum Takip: mevcut kullanıcının kendi işletmeleri.
+app.get("/api/me/contacted", requireAuth, async (req, res) => {
+  try {
+    const businesses = await getContactedBusinesses({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      q: req.query.q || null,
+      all: req.query.all === "1" || req.query.all === "true",
+      userId: req.user.id,
+    });
+    return res
+      .status(200)
+      .json({ success: true, count: businesses.length, businesses });
+  } catch (error) {
+    console.error("/api/me/contacted hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "İşletmeler getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Görüşme atamasında kullanılacak kullanıcı listesi.
+app.get("/api/users/assignable", requireAuth, async (req, res) => {
+  try {
+    const users = await listAssignableUsers();
+    return res.status(200).json({ success: true, users });
+  } catch (error) {
+    console.error("/api/users/assignable hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Kullanıcılar getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Personel: sahadan manuel işletme ekleme (tüm bilgiler + görüşme + not).
+const manualBusinessSchema = z.object({
+  name: z.string().trim().min(2, "İşletme adı zorunludur.").max(200),
+  phone: z.string().trim().max(50).optional(),
+  email: z.string().trim().max(200).optional(),
+  address: z.string().trim().max(500).optional(),
+  city: z.string().trim().max(100).optional(),
+  district: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(100).optional(),
+  website: z.string().trim().max(300).optional(),
+  socials: z.string().trim().max(500).optional(),
+  channel: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.enum(INTERACTION_CHANNELS).optional()
+  ),
+  outcome: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.enum(INTERACTION_OUTCOMES).optional()
+  ),
+  assignedUserId: z.coerce.number().int().positive().nullish(),
+  note: z.string().trim().max(2000).optional(),
+});
+
+// Manuel ekleme yardımı: ad + il + ilçe ile Google Maps'te işletme araştır.
+app.post("/api/businesses/lookup", requireAuth, async (req, res) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const city = String(req.body?.city || "").trim();
+    const district = String(req.body?.district || "").trim();
+
+    if (!name) {
+      return res
+        .status(400)
+        .json({ success: false, message: "İşletme adı gerekli." });
+    }
+
+    const found = await lookupBusinessOnGoogle({ name, city, district });
+
+    if (!found) {
+      return res.status(200).json({ success: true, business: null });
+    }
+
+    // Web sitesi varsa e-posta + sosyal medyayı da çek.
+    try {
+      await enrichBusinessesWithContacts([found], {
+        concurrency: 1,
+        timeoutMs: 6000,
+      });
+    } catch (scrapeError) {
+      console.warn("Lookup zenginleştirme hatası:", scrapeError.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      business: {
+        name: found.name || null,
+        phone: found.phone || null,
+        email: found.email || null,
+        address: found.address || null,
+        website: found.website || null,
+        socials: found.socials || found.instagram || null,
+        googleMapsUrl: found.googleMapsUrl || null,
+        rating: found.rating || null,
+        // İl/ilçe Google'dan ayrıştırılır; yoksa kullanıcının girdiği kullanılır.
+        city: found.googleCity || city || null,
+        district: found.googleDistrict || district || null,
+      },
+    });
+  } catch (error) {
+    console.error("/api/businesses/lookup hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Google Maps araması başarısız oldu.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/businesses/manual", requireAuth, async (req, res) => {
+  try {
+    const parsed = manualBusinessSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+      });
+    }
+
+    const d = parsed.data;
+    const actorId = req.user.id;
+    const personnelId = d.assignedUserId ?? actorId;
+
+    const businessId = await createManualBusiness({
+      name: d.name,
+      phone: d.phone || null,
+      email: d.email || null,
+      address: d.address || null,
+      city: d.city || null,
+      district: d.district || null,
+      category: d.category || null,
+      website: d.website || null,
+      socials: d.socials || null,
+      createdBy: personnelId,
+    });
+
+    // Görüşme kaydı (kanal/sonuç) — biri bile verildiyse oluştur.
+    if (d.channel || d.outcome) {
+      await upsertBusinessInteraction({
+        businessId,
+        userId: personnelId,
+        channel: d.channel ?? null,
+        outcome: d.outcome ?? null,
+      });
+    }
+
+    // Not (yazar = ekleyen kullanıcı).
+    if (d.note && d.note.trim()) {
+      await addBusinessNote({ businessId, userId: actorId, note: d.note });
+    }
+
+    return res.status(201).json({ success: true, businessId });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error("manual business POST hata:", error);
+    return res.status(status).json({
+      success: false,
+      message:
+        status >= 500 ? "İşletme eklenirken hata oluştu." : error.message,
+    });
+  }
+});
+
+// İletişime geçilen işletmeler (görüşme veya notu olanlar) — sonuçla birlikte.
+app.get("/api/businesses/contacted", requireAuth, async (req, res) => {
+  try {
+    const businesses = await getContactedBusinesses({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      q: req.query.q || null,
+      all: req.query.all === "1" || req.query.all === "true",
+    });
+    return res
+      .status(200)
+      .json({ success: true, count: businesses.length, businesses });
+  } catch (error) {
+    console.error("/api/businesses/contacted hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "İletişime geçilen işletmeler getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Birden çok işletme için görüşme + notları toplu getir.
+app.post("/api/businesses/crm-batch", requireAuth, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const crm = await getBusinessCrmBatch(ids);
+    return res.status(200).json({ success: true, crm });
+  } catch (error) {
+    console.error("/api/businesses/crm-batch hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Görüşme verileri getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+const interactionSchema = z.object({
+  channel: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.enum(INTERACTION_CHANNELS).optional()
+  ),
+  outcome: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.enum(INTERACTION_OUTCOMES).optional()
+  ),
+  // İletişime geçen personel (değiştirilebilir). Gönderilmezse mevcut kullanıcı.
+  assignedUserId: z.coerce.number().int().positive().nullish(),
+});
+
+// İşletmenin görüşme kaydını (kanal/sonuç/personel) oluştur/güncelle.
+app.put("/api/businesses/:id/interaction", requireAuth, async (req, res) => {
+  try {
+    const businessId = Number(req.params.id);
+    if (!Number.isInteger(businessId) || businessId <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçerli bir işletme ID gönderin." });
+    }
+
+    const parsed = interactionSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+      });
+    }
+
+    const { channel, outcome, assignedUserId } = parsed.data;
+
+    const interaction = await upsertBusinessInteraction({
+      businessId,
+      // Personel gönderilmezse görüşmeyi yapan = mevcut kullanıcı.
+      userId: assignedUserId ?? req.user.id,
+      channel: channel ?? null,
+      outcome: outcome ?? null,
+    });
+
+    return res.status(200).json({ success: true, interaction });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error("interaction PUT hata:", error);
+    return res.status(status).json({
+      success: false,
+      message:
+        status >= 500 ? "Görüşme kaydedilirken hata oluştu." : error.message,
+    });
+  }
+});
+
+const noteSchema = z.object({
+  note: z.string().trim().min(1, "Not boş olamaz.").max(2000),
+});
+
+// İşletmeye not ekle (yazar = mevcut kullanıcı).
+app.post("/api/businesses/:id/notes", requireAuth, async (req, res) => {
+  try {
+    const businessId = Number(req.params.id);
+    if (!Number.isInteger(businessId) || businessId <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçerli bir işletme ID gönderin." });
+    }
+
+    const parsed = noteSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+      });
+    }
+
+    const note = await addBusinessNote({
+      businessId,
+      userId: req.user.id,
+      note: parsed.data.note,
+    });
+
+    return res.status(201).json({ success: true, note });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error("note POST hata:", error);
+    return res.status(status).json({
+      success: false,
+      message: status >= 500 ? "Not eklenirken hata oluştu." : error.message,
+    });
+  }
+});
+
+// Bir işletmenin TÜM notlarını (tüm kullanıcıların) en güncel haliyle getir.
+app.get("/api/businesses/:businessId/notes", requireAuth, async (req, res) => {
+  try {
+    const businessId = Number(req.params.businessId);
+    if (!Number.isInteger(businessId) || businessId <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçerli bir işletme ID gönderin." });
+    }
+    const notes = await getBusinessNotes(businessId);
+    return res.status(200).json({ success: true, notes });
+  } catch (error) {
+    console.error("notes GET hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Notlar getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Mevcut bir notu düzenle (yalnızca notu ekleyen kullanıcı veya admin).
+app.patch(
+  "/api/businesses/:businessId/notes/:noteId",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const noteId = Number(req.params.noteId);
+      if (!Number.isInteger(noteId) || noteId <= 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Geçerli bir not ID gönderin." });
+      }
+
+      const parsed = noteSchema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+        });
+      }
+
+      const note = await updateBusinessNote({
+        noteId,
+        note: parsed.data.note,
+        actorId: req.user.id,
+        actorRole: req.user.role,
+      });
+
+      return res.status(200).json({ success: true, note });
+    } catch (error) {
+      const status = error.statusCode || 500;
+      if (status >= 500) console.error("note PATCH hata:", error);
+      return res.status(status).json({
+        success: false,
+        message:
+          status >= 500 ? "Not düzenlenirken hata oluştu." : error.message,
+      });
+    }
+  }
+);
 
 initDatabase()
   .then(() => {

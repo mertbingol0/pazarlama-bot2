@@ -1,5 +1,12 @@
 import type { LeadItem, SearchResult } from "@/types/business";
 import type { StoredLeadType } from "@/lib/lead-status-storage";
+import {
+  OUTCOME_LABELS,
+  CHANNEL_LABELS,
+  TEAM_LABELS,
+  type ContactedBusiness,
+  type Team,
+} from "@/lib/api";
 
 function escapeCsvCell(value: string) {
   return `"${String(value).replaceAll('"', '""')}"`;
@@ -152,4 +159,111 @@ export function downloadLeadListAsCsv(
   )}.csv`;
 
   triggerDownload(buildCsvBlob(rows), fileName);
+}
+
+// İletişime geçilen işletmeler: görüşme sonucuna göre kategorize edilmiş, her
+// şeyiyle (işletme bilgisi + görüşme + notlar) CSV.
+const CONTACTED_OUTCOME_ORDER: Record<string, number> = {
+  record_taken: 0,
+  to_meet: 1,
+  follow_up: 2,
+  rejected: 3,
+};
+
+function outcomeRank(outcome?: string | null) {
+  if (outcome && outcome in CONTACTED_OUTCOME_ORDER) {
+    return CONTACTED_OUTCOME_ORDER[outcome];
+  }
+  return 99;
+}
+
+function formatCsvDateTime(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(String(value).replace(" ", "T") + "Z");
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function downloadContactedBusinessesAsCsv(
+  businesses: ContactedBusiness[],
+  fileSuffix = "gorunum"
+) {
+  const header = [
+    "Görüşme Sonucu",
+    "İşletme Adı",
+    "Telefon",
+    "E-posta",
+    "Sektör",
+    "İl",
+    "İlçe",
+    "Adres",
+    "Web Sitesi",
+    "Sosyal Medya",
+    "İletişim Kanalı",
+    "İletişime Geçen Personel",
+    "Birim",
+    "Görüşme/Aktivite Tarihi",
+    "Not Sayısı",
+    "Notlar",
+  ];
+
+  // Kategoriye göre (sonuç sırası), sonra tarihe göre sırala.
+  const sorted = [...businesses].sort((a, b) => {
+    const ra = outcomeRank(a.interaction?.outcome);
+    const rb = outcomeRank(b.interaction?.outcome);
+    if (ra !== rb) return ra - rb;
+    return String(b.activityAt || "").localeCompare(String(a.activityAt || ""));
+  });
+
+  const rows = [
+    header,
+    ...sorted.map((b) => {
+      const i = b.interaction;
+      const outcomeLabel =
+        i?.outcome && OUTCOME_LABELS[i.outcome]
+          ? OUTCOME_LABELS[i.outcome]
+          : "Belirtilmemiş";
+      const channelLabel =
+        i?.channel && CHANNEL_LABELS[i.channel] ? CHANNEL_LABELS[i.channel] : "";
+      const teamLabel = i?.team ? TEAM_LABELS[i.team as Team] || i.team : "";
+      const notesText = (b.notes || [])
+        .map(
+          (n) =>
+            `${n.note} (${n.userFullName || n.userUsername || "?"}, ${formatCsvDateTime(
+              n.createdAt
+            )})`
+        )
+        .join(" || ");
+
+      return [
+        outcomeLabel,
+        b.name || "",
+        formatTextForExcel(b.phone || ""),
+        b.email || "",
+        b.category || "",
+        b.city || "",
+        b.district || "",
+        b.address || "",
+        b.website || "",
+        b.socials || "",
+        channelLabel,
+        i?.userFullName || i?.userUsername || "",
+        teamLabel,
+        formatCsvDateTime(b.activityAt || i?.updatedAt),
+        String((b.notes || []).length),
+        notesText,
+      ];
+    }),
+  ];
+
+  triggerDownload(
+    buildCsvBlob(rows),
+    `iletisim-gecilen-isletmeler-${slugForFile(fileSuffix)}.csv`
+  );
 }

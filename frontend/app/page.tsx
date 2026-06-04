@@ -2,186 +2,56 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  Search,
+  MessageCircle,
+  Headset,
+  BarChart3,
+  ArrowUpRight,
+} from "lucide-react";
 
-import { searchBusinesses } from "@/lib/api";
-import type { SearchLimit, SearchResult } from "@/types/business";
-
-import { EmptyState } from "@/components/EmptyState";
-import { ErrorState } from "@/components/ErrorState";
-import { SearchForm } from "@/components/SearchForm";
-import { LoadingState } from "@/components/LoadingState";
-import { ResultsPanel } from "@/components/ResultsPanel";
 import { PageNavigation } from "@/components/PageNavigation";
+import { AdminDashboard } from "@/components/AdminDashboard";
+import { loadAuth } from "@/lib/auth-storage";
+import { Card, CardContent } from "@/components/ui/card";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const LAST_SEARCH_STORAGE_KEY = "jefedes-last-search";
-
-type SavedSearchState = {
-  category: string;
-  city: string;
-  district: string;
-  limit: SearchLimit;
-  results?: SearchResult | null;
-};
+const quickLinks = [
+  {
+    label: "İşletme Araştırması",
+    description: "Kategori, il ve ilçeye göre işletme arayın ve listeleyin.",
+    href: "/business-research",
+    icon: Search,
+    accent: "text-emerald-600 bg-emerald-50",
+  },
+  {
+    label: "WhatsApp",
+    description: "Gelen kutusu ve sohbetleri yönetin.",
+    href: "/whatsapp",
+    icon: MessageCircle,
+    accent: "text-green-600 bg-green-50",
+  },
+  {
+    label: "Canlı Destek",
+    description: "Bilgi talep eden işletmeleri takip edin.",
+    href: "/live-support",
+    icon: Headset,
+    accent: "text-sky-600 bg-sky-50",
+  },
+  {
+    label: "Raporlar",
+    description: "Görüşme ve sonuç istatistiklerini görüntüleyin.",
+    href: "/reports",
+    icon: BarChart3,
+    accent: "text-indigo-600 bg-indigo-50",
+  },
+];
 
 export default function Home() {
-  const [category, setCategory] = useState("");
-  const [city, setCity] = useState("");
-  const [district, setDistrict] = useState("");
-  const [limit, setLimit] = useState<SearchLimit>("50");
-
-  const [results, setResults] = useState<SearchResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const fetchSearchResults = async ({
-    category,
-    city,
-    district,
-    limit,
-  }: {
-    category: string;
-    city: string;
-    district: string;
-    limit: SearchLimit;
-  }) => {
-    const backendResponse = await searchBusinesses({
-      category,
-      city,
-      district,
-      limit,
-    });
-
-    return {
-      query: {
-        category: backendResponse.query.category,
-        city: backendResponse.query.city,
-        district: backendResponse.query.district,
-        limit,
-      },
-      stats: backendResponse.stats,
-      results: backendResponse.results,
-      businesses: backendResponse.businesses || [],
-      fromCache: backendResponse.fromCache,
-    } satisfies SearchResult;
-  };
-
-useEffect(() => {
-  const timeoutId = window.setTimeout(() => {
-    const savedSearch = localStorage.getItem(LAST_SEARCH_STORAGE_KEY);
-
-    if (!savedSearch) {
-      return;
-    }
-
-    try {
-      const parsedSearch = JSON.parse(savedSearch) as SavedSearchState;
-
-      setCategory(parsedSearch.category || "");
-      setCity(parsedSearch.city || "");
-      setDistrict(parsedSearch.district || "");
-      setLimit(parsedSearch.limit || "50");
-      setResults(parsedSearch.results || null);
-
-      if (!parsedSearch.category) {
-        return;
-      }
-
-      void fetchSearchResults({
-        category: parsedSearch.category,
-        city: parsedSearch.city || "",
-        district: parsedSearch.district || "",
-        limit: parsedSearch.limit || "50",
-      })
-        .then((nextResults) => {
-          setResults(nextResults);
-          saveLastSearch({
-            category: parsedSearch.category,
-            city: parsedSearch.city || "",
-            district: parsedSearch.district || "",
-            limit: parsedSearch.limit || "50",
-            results: nextResults,
-          });
-        })
-        .catch((error) => {
-          console.warn("Son arama güncellenemedi, kayıtlı sonuç korunuyor:", error);
-        });
-    } catch (error) {
-      console.error("Son arama okunamadı:", error);
-      localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
-    }
-  }, 0);
-
-  return () => {
-    window.clearTimeout(timeoutId);
-  };
-}, []);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const clearLastSearchOnPageClose = () => {
-      localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
-    };
-
-    window.addEventListener("beforeunload", clearLastSearchOnPageClose);
-
-    return () => {
-      window.removeEventListener("beforeunload", clearLastSearchOnPageClose);
-    };
+    setIsAdmin(loadAuth()?.user?.role === "admin");
   }, []);
-
-  const saveLastSearch = (searchState: SavedSearchState) => {
-    localStorage.setItem(LAST_SEARCH_STORAGE_KEY, JSON.stringify(searchState));
-  };
-
-  const handleClearSearch = () => {
-    setCategory("");
-    setCity("");
-    setDistrict("");
-    setLimit("50");
-    setResults(null);
-    setErrorMessage(null);
-
-    localStorage.removeItem(LAST_SEARCH_STORAGE_KEY);
-  };
-
-  const handleSearch = async () => {
-    if (!category) {
-      setErrorMessage("Lütfen en az bir kategori seçin.");
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const nextResults = await fetchSearchResults({
-        category,
-        city,
-        district,
-        limit,
-      });
-
-      setResults(nextResults);
-
-      saveLastSearch({
-        category,
-        city,
-        district,
-        limit,
-        results: nextResults,
-      });
-    } catch (error) {
-      console.error("Backend bağlantı hatası:", error);
-
-      setErrorMessage(
-        "Backend bağlantısı kurulamadı veya arama sonuçları alınamadı."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <main className="min-h-screen bg-[#f7fbf9] px-6 py-8 text-slate-900">
@@ -205,72 +75,49 @@ useEffect(() => {
             <PageNavigation />
           </div>
 
-          <div className="mx-auto mt-8 max-w-3xl text-center">
-            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-5xl">
-              Potansiyel müşterilerinizi{" "}
-              <span className="text-emerald-500">daha hızlı</span> bulun
+          <div className="mt-10">
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-4xl">
+              Hoş geldiniz 👋
             </h1>
-
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-500 md:text-base">
-              Kategori ve arama limiti seçerek işletmeleri arayın. İsterseniz il ve
-              ilçe bilgisiyle aramayı daraltın; telefon, web sitesi ve Google Maps
-              bilgilerini görüntüleyip CSV olarak dışa aktarın.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 md:text-base">
+              Jefedes Lead Flow paneline hoş geldiniz. Soldaki menüden ve aşağıdaki
+              hızlı erişim kartlarından çalışmak istediğiniz bölüme geçebilirsiniz.
             </p>
           </div>
         </header>
 
-        <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
-          <CardHeader className="pb-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle className="text-xl font-semibold text-slate-900">
-                  Arama Bilgileri
-                </CardTitle>
+        {/* Admin: bugünün görüşme sonucu dashboard'u */}
+        {isAdmin && <AdminDashboard />}
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Arama yapmak için kategori ve limit seçin. İsterseniz il ve
-                  ilçe bilgisiyle aramayı daraltabilirsiniz.
-                </p>
-              </div>
-
-              {results && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClearSearch}
-                  className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
-                >
-                  Aramayı Temizle
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            <SearchForm
-              category={category}
-              city={city}
-              district={district}
-              limit={limit}
-              isLoading={isLoading}
-              onCategoryChange={setCategory}
-              onCityChange={setCity}
-              onDistrictChange={setDistrict}
-              onLimitChange={setLimit}
-              onSearch={handleSearch}
-            />
-          </CardContent>
-        </Card>
-
-        {isLoading && <LoadingState />}
-
-        {errorMessage && !isLoading && <ErrorState message={errorMessage} />}
-
-        {!results && !isLoading && !errorMessage && <EmptyState />}
-
-        {results && !isLoading && !errorMessage && (
-          <ResultsPanel results={results} />
-        )}
+        <section className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {quickLinks.map((link) => {
+            const Icon = link.icon;
+            return (
+              <Link key={link.href} href={link.href} className="group">
+                <Card className="h-full rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
+                  <CardContent className="flex h-full flex-col gap-3 p-5">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl ${link.accent}`}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <ArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-emerald-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">
+                        {link.label}
+                      </h2>
+                      <p className="mt-1 text-sm leading-5 text-slate-500">
+                        {link.description}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </section>
       </div>
     </main>
   );

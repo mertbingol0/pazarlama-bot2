@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { AuthGuard } from "@/components/AuthGuard";
-import { Footer } from "@/components/Footer";
+import { PanelChrome } from "@/components/PanelChrome";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -28,8 +28,7 @@ export default function RootLayout({
     <html lang="tr" className={`${plusJakartaSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
         <AuthGuard>
-          <div className="flex-1">{children}</div>
-          <Footer />
+          <PanelChrome>{children}</PanelChrome>
         </AuthGuard>
       </body>
     </html>

@@ -15,12 +15,16 @@ export type WhatsAppStatusFilter =
 
 export type SearchLimit = "10" | "50" | "100" | "250" | "500" | "all";
 
+// Arama modu: "local" cache-first (yerel DB), "fresh" API'den güncel + merge.
+export type SearchMode = "local" | "fresh";
+
 export type SearchParams = {
   category: string;
   city: string;
   district: string;
   limit?: SearchLimit;
   maxResults?: number;
+  mode?: SearchMode;
 };
 
 export type LeadSource =
@@ -108,6 +112,8 @@ export type SearchResult = {
   };
   businesses?: Business[];
   fromCache?: boolean;
+  mode?: SearchMode;
+  addedCount?: number;
 };
 
 export type SearchApiResponse = SearchResult & {

@@ -13,14 +13,6 @@ const navigationItems = [
     href: "/",
   },
   {
-    label: "Onaylananlar",
-    href: "/approved",
-  },
-  {
-    label: "Reddedilenler",
-    href: "/rejected",
-  },
-  {
     label: "WhatsApp",
     href: "/whatsapp",
   },

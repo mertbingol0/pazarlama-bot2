@@ -25,7 +25,7 @@ The application helps teams:
 - CSV export for search results
 - Approved and rejected lead views
 - Live support / interest request view
-- Local SQLite persistence
+- PostgreSQL persistence (Drizzle ORM)
 
 ## Tech Stack
 
@@ -41,7 +41,7 @@ The application helps teams:
 
 - Node.js
 - Express
-- SQLite
+- PostgreSQL + Drizzle ORM
 - WhatsApp Cloud API integration
 - Google Places API integration
 
@@ -99,13 +99,16 @@ The backend is an Express API responsible for:
 Important areas:
 
 - `backend/app.js`: API routes and application setup
-- `backend/db.js`: SQLite schema, queries, and data helpers
+- `backend/schema.js`: Drizzle ORM PostgreSQL schema
+- `backend/dbClient.js`: PostgreSQL pool + Drizzle client
+- `backend/db.js`: queries and data helpers
+- `backend/migrations`: generated Drizzle SQL migrations
 - `backend/services`: external service integrations
 - `backend/scripts`: local utility scripts
 
 ## Data Model Overview
 
-The SQLite database stores the main application data.
+The PostgreSQL database stores the main application data.
 
 Core entities:
 
@@ -154,9 +157,35 @@ Do not commit real API keys, tokens, passwords, or production credentials.
 
 Install dependencies separately for backend and frontend.
 
+### Database (PostgreSQL)
+
+The backend uses PostgreSQL via Drizzle ORM. A local instance is provided through
+`docker-compose.yml` (host port `5433`).
+
+```bash
+# Proje kökünden: yerel PostgreSQL'i başlat
+docker compose up -d
+```
+
+Set `DATABASE_URL` in `backend/.env` (see `backend/.env.example`):
+
+```
+DATABASE_URL=postgres://pazarlama:pazarlama@localhost:5433/pazarlama
+```
+
+The schema lives in `backend/schema.js`. Migrations are generated into
+`backend/migrations/` and are applied **automatically on backend startup**
+(`initDatabase()` runs the Drizzle migrator), so no manual migration step is
+required to boot the app. To change the schema:
+
+```bash
+cd backend
+npm run db:generate   # şema değişikliğinden sonra yeni migration üret
+```
+
 Backend:
 
-```powershell
+```bash
 cd backend
 npm install
 npm run dev
@@ -197,8 +226,9 @@ Recommended deployment considerations:
 - Configure allowed origins for browser requests
 - Configure Google API key restrictions for production domains
 - Configure WhatsApp webhook URLs for the deployed backend
-- Keep SQLite persistence strategy explicit for the production environment
-- Avoid committing generated local database files
+- Provision a PostgreSQL instance and set `DATABASE_URL` on the production host
+- Migrations run automatically on backend startup (no manual step needed)
+- Avoid committing `.env` and local database volumes
 
 ## Security Notes
 

@@ -5,7 +5,10 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "nodemon app.js",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.js",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.js",
+    "db:studio": "drizzle-kit studio --config=drizzle.config.js"
   },
   "keywords": [],
   "author": "",
@@ -14,11 +17,14 @@
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^6.0.1"
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31.10",
     "nodemon": "^3.1.14"
   }
 }

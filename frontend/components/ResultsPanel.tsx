@@ -1,8 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Business, SearchResult } from "@/types/business";
 
+import {
+  getAssignableUsers,
+  getBusinessCrmBatch,
+  type AssignableUser,
+  type BusinessCrm,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "@/components/ListColumn";
 import { StatCard } from "@/components/StatCard";
@@ -59,6 +65,60 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
   const businesses = useMemo(() => {
   return results.businesses || [];
 }, [results.businesses]);
+
+  // CRM: atanabilir kullanıcılar + işletme görüşme/not verisi.
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [crmByBusinessId, setCrmByBusinessId] = useState<
+    Record<string, BusinessCrm>
+  >({});
+
+  useEffect(() => {
+    let active = true;
+    getAssignableUsers()
+      .then((users) => {
+        if (active) setAssignableUsers(users);
+      })
+      .catch((error) => {
+        console.warn("Atanabilir kullanıcılar getirilemedi:", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // İşletme kimlikleri değiştikçe görüşme/not verisini toplu getir.
+  const businessIdsKey = useMemo(
+    () =>
+      businesses
+        .map((business) => business.id)
+        .filter((id) => id !== undefined && id !== null)
+        .join(","),
+    [businesses]
+  );
+
+  useEffect(() => {
+    const ids = businessIdsKey ? businessIdsKey.split(",") : [];
+
+    let active = true;
+    // getBusinessCrmBatch boş id listesinde {} döndürür (senkron setState yok).
+    getBusinessCrmBatch(ids)
+      .then((map) => {
+        if (active) setCrmByBusinessId(map);
+      })
+      .catch((error) => {
+        console.warn("Görüşme verileri getirilemedi:", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [businessIdsKey]);
+
+  const handleCrmChange = (
+    businessId: number | string,
+    data: BusinessCrm
+  ) => {
+    setCrmByBusinessId((prev) => ({ ...prev, [String(businessId)]: data }));
+  };
 
   const whatsappPhones = useMemo(() => {
     return results.results.phones.filter(
@@ -158,11 +218,19 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         <StatCard title="Gönderime Uygun" value={eligibleBusinesses.length} />
       </section>
 
-      {results.fromCache && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Bu sonuçlar 24 saatlik önbellekten getirildi.
+      {results.fromCache ? (
+        <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          Bu sonuçlar yerel veritabanından getirildi (API kullanılmadı). Güncel
+          veri için &quot;Yeni Sorgu&quot; seçeneğini kullanın.
         </div>
-      )}
+      ) : results.mode === "fresh" ? (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Güncel veriler Google&apos;dan çekildi.{" "}
+          {typeof results.addedCount === "number" && results.addedCount > 0
+            ? `${results.addedCount} yeni işletme veritabanına eklendi.`
+            : "Yeni işletme bulunamadı; mevcut kayıtlar korundu."}
+        </div>
+      ) : null}
 
       <div className="mt-6">
         <ResultsMap businesses={businesses} />
@@ -206,6 +274,10 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           selectedBusinessIds={selectedBusinessIds}
           onToggleBusinessSelection={handleToggleBusinessSelection}
           onSetSelectedBusinessIds={handleSetSelectedBusinessIds}
+          enableInteractions
+          assignableUsers={assignableUsers}
+          crmByBusinessId={crmByBusinessId}
+          onCrmChange={handleCrmChange}
         />
 
         <ListColumn
@@ -217,6 +289,10 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           onCsvDownload={() =>
             downloadLeadListAsCsv(landlinePhones, "phone", results, "sabit-hatlar")
           }
+          enableInteractions
+          assignableUsers={assignableUsers}
+          crmByBusinessId={crmByBusinessId}
+          onCrmChange={handleCrmChange}
         />
 
         <ListColumn

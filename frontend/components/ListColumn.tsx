@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type {
   Business,
   LeadItem,
@@ -8,20 +8,18 @@ import type {
   WhatsAppStatus,
   WhatsAppStatusFilter,
 } from "@/types/business";
+import { getLeadKey, type StoredLeadType } from "@/lib/lead-status-storage";
 import {
-  getLeadKey,
-  saveLeadStatus,
-  type StoredLeadType,
-} from "@/lib/lead-status-storage";
-import {
-  updateBusinessStatus,
-  updateBusinessWhatsAppStatus,
+  OUTCOME_LABELS,
+  type AssignableUser,
+  type BusinessCrm,
 } from "@/lib/api";
 
 import { SocialChip } from "@/components/contact-icons";
+import { BusinessInteractionPanel } from "@/components/BusinessInteractionPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 type ListColumnProps = {
   title: string;
@@ -39,6 +37,12 @@ type ListColumnProps = {
   selectedBusinessIds?: Array<string | number>;
   onToggleBusinessSelection?: (businessId: string | number) => void;
   onSetSelectedBusinessIds?: (businessIds: Array<string | number>) => void;
+
+  // CRM: işletme görüşmesi (kanal/sonuç/personel) + notlar.
+  enableInteractions?: boolean;
+  assignableUsers?: AssignableUser[];
+  crmByBusinessId?: Record<string, BusinessCrm>;
+  onCrmChange?: (businessId: number | string, data: BusinessCrm) => void;
 };
 
 type DisplayLeadItem = LeadItem & {
@@ -92,47 +96,6 @@ function normalizeWhatsAppStatus(status?: string | null): WhatsAppStatus {
   }
 
   return "not_sent";
-}
-
-function getStatusClassName(status: LeadStatus) {
-  if (status === "approved") {
-    return "border-emerald-100 bg-emerald-50/80 text-emerald-700";
-  }
-
-  if (status === "rejected") {
-    return "border-red-100 bg-red-50/80 text-red-700";
-  }
-
-  return "border-orange-100 bg-orange-50/80 text-orange-700";
-}
-
-function getWhatsAppStatusClassName(status: WhatsAppStatus) {
-  if (status === "template_sent") {
-    return "border-blue-100 bg-blue-50/80 text-blue-700";
-  }
-
-  if (status === "replied") {
-    return "border-emerald-100 bg-emerald-50/80 text-emerald-700";
-  }
-
-  if (status === "follow_up") {
-    return "border-amber-100 bg-amber-50/80 text-amber-700";
-  }
-
-  if (status === "not_interested") {
-    return "border-red-100 bg-red-50/80 text-red-700";
-  }
-
-  return "border-slate-100 bg-slate-50 text-slate-500";
-}
-
-function formatSource(source: string) {
-  if (source === "google_places") return "Google Places";
-  if (source === "google_maps") return "Google Maps";
-  if (source === "website_scrape") return "Website";
-  if (source === "backend") return "Backend";
-
-  return source;
 }
 
 function normalizeExternalUrl(url?: string) {
@@ -206,32 +169,38 @@ export function ListColumn({
   selectedBusinessIds = [],
   onToggleBusinessSelection,
   onSetSelectedBusinessIds,
+  enableInteractions = false,
+  assignableUsers = [],
+  crmByBusinessId = {},
+  onCrmChange,
 }: ListColumnProps) {
   const isLandline = type === "phone" && variant === "landline";
 
   // Sabit hatlar ve sosyal mecralar için WhatsApp'a özgü alanlar (seçim,
   // template gönderimi, WhatsApp durumu) gizlenir.
   const showWhatsAppFeatures = type === "phone" && !isLandline;
-  const [localStatuses, setLocalStatuses] = useState<Record<string, LeadStatus>>(
-    {}
-  );
-
-  const [localWhatsAppStatuses, setLocalWhatsAppStatuses] = useState<
-    Record<string, WhatsAppStatus>
-  >({});
 
   const [showWithoutPhones, setShowWithoutPhones] = useState(false);
-  const [updatingItemKey, setUpdatingItemKey] = useState<string | null>(null);
-
-  const [updatingWhatsAppItemKey, setUpdatingWhatsAppItemKey] = useState<
-    string | null
-  >(null);
 
   const [whatsappStatusFilter, setWhatsappStatusFilter] =
     useState<WhatsAppStatusFilter>("all");
 
   const [isWhatsappFilterOpen, setIsWhatsappFilterOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
+
+  // Hangi satırların görüşme paneli açık (itemKey bazında).
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const showInteractions = enableInteractions && type === "phone";
 
   const missingPhoneItems = useMemo<DisplayLeadItem[]>(() => {
     if (!showWhatsAppFeatures) return [];
@@ -283,14 +252,8 @@ export function ListColumn({
 
   const getCurrentLeadStatus = (item: DisplayLeadItem): LeadStatus => {
     const relatedBusiness = getRelatedBusiness(item);
-    const itemKey = getLeadKey(item);
 
-    return (
-      localStatuses[itemKey] ||
-      item.status ||
-      relatedBusiness?.status ||
-      "pending"
-    );
+    return item.status || relatedBusiness?.status || "pending";
   };
 
   const getCurrentTemplateSentAt = (item: DisplayLeadItem) => {
@@ -301,13 +264,9 @@ export function ListColumn({
 
   const getCurrentWhatsAppStatus = (item: DisplayLeadItem): WhatsAppStatus => {
     const relatedBusiness = getRelatedBusiness(item);
-    const itemKey = getLeadKey(item);
 
     return normalizeWhatsAppStatus(
-      localWhatsAppStatuses[itemKey] ||
-        item.whatsappStatus ||
-        relatedBusiness?.whatsappStatus ||
-        "not_sent"
+      item.whatsappStatus || relatedBusiness?.whatsappStatus || "not_sent"
     );
   };
 
@@ -396,101 +355,10 @@ export function ListColumn({
     alert("Kopyalandı");
   };
 
-  const handleStatusChange = async (
-    item: DisplayLeadItem,
-    itemKey: string,
-    currentStatus: LeadStatus,
-    nextStatus: LeadStatus
-  ) => {
-    if (currentStatus === nextStatus) return;
-
-    const businessId = getItemBusinessId(item);
-
-    setUpdatingItemKey(itemKey);
-
-    setLocalStatuses((prev) => ({
-      ...prev,
-      [itemKey]: nextStatus,
-    }));
-
-    try {
-      if (!businessId) {
-        saveLeadStatus(item, type, nextStatus);
-        console.warn("Business ID bulunamadı, sadece localStorage güncellendi.");
-        return;
-      }
-
-      await updateBusinessStatus(businessId, nextStatus);
-
-      saveLeadStatus(item, type, nextStatus);
-
-      console.log("Backend status güncellendi:", businessId, nextStatus);
-    } catch (error) {
-      console.error("Backend status güncelleme hatası:", error);
-
-      setLocalStatuses((prev) => ({
-        ...prev,
-        [itemKey]: currentStatus,
-      }));
-
-      alert(
-        "Durum güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin."
-      );
-    } finally {
-      setUpdatingItemKey(null);
-    }
-  };
-
-  const handleWhatsAppStatusChange = async (
-    item: DisplayLeadItem,
-    itemKey: string,
-    currentWhatsAppStatus: WhatsAppStatus,
-    nextWhatsAppStatus: WhatsAppStatus
-  ) => {
-    if (currentWhatsAppStatus === nextWhatsAppStatus) return;
-
-    const businessId = getItemBusinessId(item);
-
-    if (!businessId) {
-      alert("Business ID bulunamadı. WhatsApp durumu güncellenemedi.");
-      return;
-    }
-
-    setUpdatingWhatsAppItemKey(itemKey);
-
-    setLocalWhatsAppStatuses((prev) => ({
-      ...prev,
-      [itemKey]: nextWhatsAppStatus,
-    }));
-
-    try {
-      await updateBusinessWhatsAppStatus(businessId, nextWhatsAppStatus);
-
-      console.log(
-        "Backend WhatsApp status güncellendi:",
-        businessId,
-        nextWhatsAppStatus
-      );
-    } catch (error) {
-      console.error("WhatsApp status güncelleme hatası:", error);
-
-      setLocalWhatsAppStatuses((prev) => ({
-        ...prev,
-        [itemKey]: currentWhatsAppStatus,
-      }));
-
-      alert(
-        "WhatsApp durumu güncellenemedi. Backend bağlantısını veya endpoint'i kontrol edin."
-      );
-    } finally {
-      setUpdatingWhatsAppItemKey(null);
-    }
-  };
-
-  // Tablo sütun şablonu (varyanta göre seçim ve WhatsApp Durumu sütunları
-  // gösterilir/gizlenir). Tüm satırlar aynı şablonu kullanır → hizalı tablo.
+  // Tablo sütun şablonu. Kaynak / Onay Durumu / WhatsApp Durumu sütunları
+  // kaldırıldı (yerlerine yeni bir yapı gelecek). Tüm satırlar aynı şablonu
+  // kullanır → hizalı tablo.
   const showSelectCol = showWhatsAppFeatures;
-  const showWhatsAppCol = showWhatsAppFeatures;
 
   const valueHeader =
     type === "email"
@@ -510,9 +378,6 @@ export function ListColumn({
     showSelectCol ? "2.5rem" : null,
     "minmax(11rem,1.5fr)",
     "minmax(10rem,1.4fr)",
-    "7rem",
-    "8.5rem",
-    showWhatsAppCol ? "9.5rem" : null,
     "minmax(11rem,1.2fr)",
   ]
     .filter(Boolean)
@@ -671,7 +536,7 @@ export function ListColumn({
               Sonuç bulunamadı.
             </p>
           ) : (
-            <div className="min-w-[60rem] border-t border-slate-200">
+            <div className="min-w-[34rem] border-t border-slate-200">
               {/* Tablo başlığı */}
               <div
                 className="grid border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
@@ -684,15 +549,6 @@ export function ListColumn({
                 <div className="border-r border-slate-100 px-3 py-2">
                   {valueHeader}
                 </div>
-                <div className="border-r border-slate-100 px-3 py-2">Kaynak</div>
-                <div className="border-r border-slate-100 px-3 py-2">
-                  Onay Durumu
-                </div>
-                {showWhatsAppCol && (
-                  <div className="border-r border-slate-100 px-3 py-2">
-                    WhatsApp Durumu
-                  </div>
-                )}
                 <div className="px-3 py-2">Aksiyon</div>
               </div>
 
@@ -709,9 +565,6 @@ export function ListColumn({
 
                 const currentWhatsAppStatus = getCurrentWhatsAppStatus(item);
                 const currentTemplateSentAt = getCurrentTemplateSentAt(item);
-
-                const isUpdating = updatingItemKey === itemKey;
-                const isWhatsAppUpdating = updatingWhatsAppItemKey === itemKey;
 
                 const canSelect =
                   type === "phone" &&
@@ -732,9 +585,24 @@ export function ListColumn({
                   businessId
                 );
 
+                // CRM: bu işletmenin görüşme/not verisi.
+                const canInteract =
+                  showInteractions && businessId !== undefined;
+                const crm =
+                  canInteract && businessId !== undefined
+                    ? crmByBusinessId[String(businessId)]
+                    : undefined;
+                const currentOutcome =
+                  crm?.interaction?.outcome &&
+                  crm.interaction.outcome !== "pending"
+                    ? crm.interaction.outcome
+                    : null;
+                const noteCount = crm?.notes?.length ?? 0;
+                const isExpanded = expandedKeys.has(itemKey);
+
                 return (
+                  <Fragment key={itemKey}>
                   <div
-                    key={itemKey}
                     className={`grid items-start border-b border-slate-200 transition ${
                       isSelected ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/60"
                     }`}
@@ -759,19 +627,67 @@ export function ListColumn({
 
                     {/* Firma */}
                     <div className="min-w-0 border-r border-slate-100 p-3">
-                      <p className="break-words text-sm font-semibold text-slate-900">
-                        {item.businessName}
-                      </p>
+                      <div className="flex items-start gap-2">
+                        {canInteract && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(itemKey)}
+                            aria-expanded={isExpanded}
+                            aria-label={
+                              isExpanded ? "Görüşmeyi kapat" : "Görüşmeyi aç"
+                            }
+                            className="mt-0.5 shrink-0 rounded-md p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              className={`transition-transform ${
+                                isExpanded ? "rotate-90" : ""
+                              }`}
+                            >
+                              <path
+                                d="M9 6l6 6-6 6"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        )}
 
-                      {item.address && (
-                        <p className="mt-1 text-xs leading-5 text-slate-400">
-                          {item.address}
-                        </p>
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-sm font-semibold text-slate-900">
+                            {item.businessName}
+                          </p>
+
+                          {item.address && (
+                            <p className="mt-1 text-xs leading-5 text-slate-400">
+                              {item.address}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {canInteract && (currentOutcome || noteCount > 0) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {currentOutcome && (
+                            <Badge className="rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                              {OUTCOME_LABELS[currentOutcome] || currentOutcome}
+                            </Badge>
+                          )}
+                          {noteCount > 0 && (
+                            <Badge className="rounded-full bg-slate-100 text-slate-500 hover:bg-slate-100">
+                              {noteCount} not
+                            </Badge>
+                          )}
+                        </div>
                       )}
 
                       {(isNoPhoneItem ||
-                        (showWhatsAppFeatures && !canSelect) ||
-                        isUpdating) && (
+                        (showWhatsAppFeatures && !canSelect)) && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           {isNoPhoneItem && (
                             <Badge className="rounded-full bg-amber-50 text-amber-700 hover:bg-amber-50">
@@ -786,12 +702,6 @@ export function ListColumn({
                                 Tekrar gönderilemez
                               </Badge>
                             )}
-
-                          {isUpdating && (
-                            <Badge className="rounded-full bg-slate-50 text-slate-500 hover:bg-slate-50">
-                              Güncelleniyor...
-                            </Badge>
-                          )}
                         </div>
                       )}
                     </div>
@@ -845,96 +755,6 @@ export function ListColumn({
                       )}
                     </div>
 
-                    {/* Kaynak */}
-                    <div className="border-r border-slate-100 p-3 text-xs text-slate-500">
-                      {formatSource(item.source)}
-                    </div>
-
-                    {/* Onay Durumu */}
-                    <div className="border-r border-slate-100 p-3">
-                      <select
-                        value={currentStatus}
-                        disabled={isUpdating}
-                        onChange={(event) =>
-                          void handleStatusChange(
-                            item,
-                            itemKey,
-                            currentStatus,
-                            event.target.value as LeadStatus
-                          )
-                        }
-                        className={`h-9 w-full rounded-xl border px-2 pr-6 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getStatusClassName(
-                          currentStatus
-                        )}`}
-                      >
-                        <option className="bg-white text-slate-700" value="approved">
-                          Onaylanan
-                        </option>
-                        <option className="bg-white text-slate-700" value="pending">
-                          Bekleyen
-                        </option>
-                        <option className="bg-white text-slate-700" value="rejected">
-                          Reddedilen
-                        </option>
-                      </select>
-                    </div>
-
-                    {/* WhatsApp Durumu */}
-                    {showWhatsAppCol && (
-                      <div className="border-r border-slate-100 p-3">
-                        <select
-                          value={currentWhatsAppStatus}
-                          disabled={
-                            isWhatsAppUpdating ||
-                            currentWhatsAppStatus === "not_interested"
-                          }
-                          onChange={(event) =>
-                            void handleWhatsAppStatusChange(
-                              item,
-                              itemKey,
-                              currentWhatsAppStatus,
-                              event.target.value as WhatsAppStatus
-                            )
-                          }
-                          className={`h-9 w-full rounded-xl border px-2 pr-6 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 ${getWhatsAppStatusClassName(
-                            currentWhatsAppStatus
-                          )}`}
-                        >
-                          <option
-                            className="bg-white text-slate-700"
-                            value="not_sent"
-                            disabled={
-                              currentWhatsAppStatus !== "not_sent" ||
-                              Boolean(currentTemplateSentAt)
-                            }
-                          >
-                            N/A
-                          </option>
-                          <option
-                            className="bg-white text-slate-700"
-                            value="template_sent"
-                          >
-                            Template gönderildi
-                          </option>
-                          <option className="bg-white text-slate-700" value="replied">
-                            Bilgi isteniyor
-                          </option>
-                          <option
-                            className="bg-white text-slate-700"
-                            value="follow_up"
-                          >
-                            Daha sonra aranacak
-                          </option>
-                          <option
-                            className="bg-white text-slate-700"
-                            value="not_interested"
-                          >
-                            İlgilenmiyor
-                          </option>
-                        </select>
-                      </div>
-                    )}
-
                     {/* Aksiyon */}
                     <div className="flex flex-wrap items-start gap-1.5 p-3">
                       {!isNoPhoneItem && type !== "instagram" && (
@@ -980,6 +800,16 @@ export function ListColumn({
                       )}
                     </div>
                   </div>
+
+                  {canInteract && isExpanded && businessId !== undefined && (
+                    <BusinessInteractionPanel
+                      businessId={businessId}
+                      initial={crm ?? { interaction: null, notes: [] }}
+                      assignableUsers={assignableUsers}
+                      onUpdated={onCrmChange}
+                    />
+                  )}
+                  </Fragment>
                 );
               })}
             </div>

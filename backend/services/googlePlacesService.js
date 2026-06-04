@@ -229,14 +229,45 @@ function buildSearchQuery({ keyword, city, district }) {
     .join(" ");
 }
 
+// Google addressComponents'ten Türkiye için il (administrative_area_level_1)
+// ve ilçe (administrative_area_level_2 / sublocality) ayrıştırır.
+function parseTurkishLocation(addressComponents = []) {
+  let city = null;
+  let district = null;
+
+  for (const component of addressComponents) {
+    const types = component.types || [];
+    const value = component.longText || component.shortText || null;
+
+    if (types.includes("administrative_area_level_1")) city = value;
+    if (types.includes("administrative_area_level_2")) district = value;
+  }
+
+  if (!district) {
+    for (const component of addressComponents) {
+      const types = component.types || [];
+      if (types.includes("sublocality_level_1") || types.includes("locality")) {
+        district = component.longText || component.shortText || null;
+        break;
+      }
+    }
+  }
+
+  return { city, district };
+}
+
 function normalizeGoogleBusiness(
   place,
   { category, city, district, searchKeyword } = {}
 ) {
+  const parsedLocation = parseTurkishLocation(place.addressComponents);
+
   return {
     id: place.id || place.name || crypto.randomUUID(),
     name: place.displayName?.text || "İsimsiz İşletme",
     address: place.formattedAddress || "",
+    googleCity: parsedLocation.city,
+    googleDistrict: parsedLocation.district,
     phone: place.nationalPhoneNumber || place.internationalPhoneNumber || "",
     website: place.websiteUri || "",
     googleMapsUrl: place.googleMapsUri || "",
@@ -347,6 +378,7 @@ async function searchGooglePlacesByKeyword({
         "places.rating",
         "places.userRatingCount",
         "places.location",
+        "places.addressComponents",
       ].join(","),
     },
     body: JSON.stringify({
@@ -469,6 +501,32 @@ async function searchBusinessesWithGoogle({
   };
 }
 
+// Tek bir işletmeyi adı + il + ilçe ile Google'da arar, en iyi eşleşmeyi döndürür.
+async function lookupBusinessOnGoogle({ name, city = "", district = "" }) {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Google Places API anahtarı tanımlı değil.");
+  }
+
+  const keyword = String(name || "").trim();
+  if (!keyword) {
+    return null;
+  }
+
+  const results = await searchGooglePlacesByKeyword({
+    apiKey,
+    keyword,
+    category: null,
+    city,
+    district,
+    pageSize: 3,
+  });
+
+  return results[0] || null;
+}
+
 module.exports = {
   searchBusinessesWithGoogle,
+  lookupBusinessOnGoogle,
 };

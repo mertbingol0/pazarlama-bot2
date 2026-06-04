@@ -1,17 +1,45 @@
-const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
+const { sql } = require("drizzle-orm");
+const { migrate } = require("drizzle-orm/node-postgres/migrator");
+const { getDb } = require("./dbClient");
+const {
+  USER_ROLES,
+  TEAMS,
+  INTERACTION_CHANNELS,
+  INTERACTION_OUTCOMES,
+} = require("./dbConstants");
 
 const DEFAULT_ADMIN_USERNAME = "admin";
-const DEFAULT_ADMIN_PASSWORD = "jefedes1212";
+const DEFAULT_ADMIN_PASSWORD = "Mehmet.1823";
 
-const dataDir = path.join(__dirname, "data");
-const dbPath = path.join(dataDir, "database.sqlite");
+// ---------------------------------------------------------------------------
+// Düşük seviyeli yardımcılar (Drizzle + raw SQL).
+// getDb().execute(sqlQuery) node-postgres sonucunu döndürür: { rows, rowCount }.
+// ---------------------------------------------------------------------------
+async function execAll(query) {
+  const result = await getDb().execute(query);
+  return result.rows || [];
+}
 
-let db;
+async function execGet(query) {
+  const result = await getDb().execute(query);
+  return (result.rows && result.rows[0]) || null;
+}
 
+async function execRun(query) {
+  const result = await getDb().execute(query);
+  return { changes: result.rowCount || 0, rows: result.rows || [] };
+}
+
+// businesses.phone üzerindeki boşluk/işaretleri temizleyen SQL ifadesi.
+function normalizedBusinessPhoneSql() {
+  return sql`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
+}
+
+// ---------------------------------------------------------------------------
+// Normalleştirme / yardımcı saf fonksiyonlar.
+// ---------------------------------------------------------------------------
 function normalizeText(value) {
   return String(value || "")
     .trim()
@@ -21,6 +49,7 @@ function normalizeText(value) {
 function normalizePhone(value) {
   return String(value || "").replace(/\D/g, "");
 }
+
 function createSearchKey({ category, city, district }) {
   return `${normalizeText(category)}|${normalizeText(city)}|${normalizeText(
     district
@@ -53,6 +82,7 @@ function createBusinessIdentityKey(business) {
     business.address
   )}`;
 }
+
 function getBusinessStatePriority(state) {
   let priority = 0;
 
@@ -86,6 +116,7 @@ function getBusinessStatePriority(state) {
 
   return priority;
 }
+
 function mapBusinessRow(row) {
   return {
     id: row.id,
@@ -128,261 +159,35 @@ function validateBusinessStatus(status) {
     );
   }
 }
+
 function validateWhatsAppStatus(status) {
   const allowedStatuses = [
-  "not_sent",
-  "template_sent",
-  "waiting_reply",
-  "replied",
-  "follow_up",
-  "not_interested",
-];
+    "not_sent",
+    "template_sent",
+    "waiting_reply",
+    "replied",
+    "follow_up",
+    "not_interested",
+  ];
 
   if (!allowedStatuses.includes(status)) {
- throw new Error(
-  "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply, replied, follow_up veya not_interested olabilir."
-);
-  }
-}
-async function getDb() {
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  if (!db) {
-    db = await open({
-      filename: dbPath,
-      driver: sqlite3.Database,
-    });
-
-    await db.exec("PRAGMA foreign_keys = ON;");
-  }
-
-  return db;
-}
-
-async function initDatabase() {
-  const database = await getDb();
-
-await database.exec(`
-  CREATE TABLE IF NOT EXISTS searches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    search_key TEXT NOT NULL UNIQUE,
-    category TEXT NOT NULL,
-    city TEXT NOT NULL,
-    district TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS businesses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    search_id INTEGER NOT NULL,
-    external_id TEXT,
-    name TEXT,
-    phone TEXT,
-    address TEXT,
-    website TEXT,
-    google_maps_url TEXT,
-    rating REAL,
-    user_rating_count INTEGER DEFAULT 0,
-    source TEXT DEFAULT 'google_places',
-    status TEXT DEFAULT 'pending',
-    category TEXT,
-    city TEXT,
-    district TEXT,
-    lat REAL,
-    lng REAL,
-    whatsapp_status TEXT DEFAULT 'not_sent',
-    template_sent_at TEXT,
-    last_incoming_at TEXT,
-    last_message_text TEXT,
-    last_whatsapp_message_id TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS live_support_leads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    phone TEXT NOT NULL UNIQUE,
-    button_text TEXT DEFAULT 'Bilgi almak istiyorum',
-    status TEXT DEFAULT 'info_requested',
-    note TEXT DEFAULT '',
-    message_id TEXT,
-    seen_at TEXT DEFAULT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    password_salt TEXT NOT NULL,
-    role TEXT DEFAULT 'admin',
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-  const businessColumns = await database.all("PRAGMA table_info(businesses)");
-  const businessColumnNames = businessColumns.map((column) => column.name);
-
-  if (!businessColumnNames.includes("external_id")) {
-    await database.exec("ALTER TABLE businesses ADD COLUMN external_id TEXT;");
-  }
-
-  if (!businessColumnNames.includes("status")) {
-    await database.exec(
-      "ALTER TABLE businesses ADD COLUMN status TEXT DEFAULT 'pending';"
+    throw new Error(
+      "Geçersiz WhatsApp status. Sadece not_sent, template_sent, waiting_reply, replied, follow_up veya not_interested olabilir."
     );
   }
-
-  if (!businessColumnNames.includes("category")) {
-    await database.exec("ALTER TABLE businesses ADD COLUMN category TEXT;");
-  }
-
-  if (!businessColumnNames.includes("city")) {
-    await database.exec("ALTER TABLE businesses ADD COLUMN city TEXT;");
-  }
-
-  if (!businessColumnNames.includes("district")) {
-    await database.exec("ALTER TABLE businesses ADD COLUMN district TEXT;");
-  }
-  if (!businessColumnNames.includes("lat")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN lat REAL;");
 }
 
-if (!businessColumnNames.includes("lng")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN lng REAL;");
-}
-
-if (!businessColumnNames.includes("whatsapp_status")) {
-  await database.exec(
-    "ALTER TABLE businesses ADD COLUMN whatsapp_status TEXT DEFAULT 'not_sent';"
-  );
-}
-
-if (!businessColumnNames.includes("template_sent_at")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN template_sent_at TEXT;");
-}
-
-if (!businessColumnNames.includes("last_incoming_at")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN last_incoming_at TEXT;");
-}
-
-if (!businessColumnNames.includes("last_message_text")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN last_message_text TEXT;");
-}
-
-if (!businessColumnNames.includes("last_whatsapp_message_id")) {
-  await database.exec(
-    "ALTER TABLE businesses ADD COLUMN last_whatsapp_message_id TEXT;"
-  );
-}
-
-if (!businessColumnNames.includes("email")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN email TEXT;");
-}
-
-if (!businessColumnNames.includes("instagram")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN instagram TEXT;");
-}
-
-if (!businessColumnNames.includes("socials")) {
-  await database.exec("ALTER TABLE businesses ADD COLUMN socials TEXT;");
-}
-const liveSupportColumns = await database.all(
-  "PRAGMA table_info(live_support_leads)"
-);
-
-const liveSupportColumnNames = liveSupportColumns.map((column) => column.name);
-
-if (!liveSupportColumnNames.includes("seen_at")) {
-  await database.exec(
-    "ALTER TABLE live_support_leads ADD COLUMN seen_at TEXT DEFAULT NULL;"
-  );
-}
-
-if (!liveSupportColumnNames.includes("result")) {
-  await database.exec(
-    "ALTER TABLE live_support_leads ADD COLUMN result TEXT DEFAULT 'pending';"
-  );
-}
-
-if (!liveSupportColumnNames.includes("meeting_at")) {
-  await database.exec(
-    "ALTER TABLE live_support_leads ADD COLUMN meeting_at TEXT;"
-  );
-}
-
-if (!liveSupportColumnNames.includes("assigned_to")) {
-  await database.exec(
-    "ALTER TABLE live_support_leads ADD COLUMN assigned_to TEXT;"
-  );
-}
-
-await database.exec(`
-  CREATE TABLE IF NOT EXISTS whatsapp_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    phone TEXT NOT NULL,
-    business_id INTEGER,
-    direction TEXT NOT NULL,
-    type TEXT DEFAULT 'text',
-    text TEXT DEFAULT '',
-    message_id TEXT,
-    read_at TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_phone
-  ON whatsapp_messages(phone);
-`);
-
-const waMessageColumns = await database.all(
-  "PRAGMA table_info(whatsapp_messages)"
-);
-
-if (!waMessageColumns.map((column) => column.name).includes("read_at")) {
-  await database.exec("ALTER TABLE whatsapp_messages ADD COLUMN read_at TEXT;");
-}
-
-
-  await database.run(`
-    UPDATE businesses
-    SET source = 'google_places'
-    WHERE source IS NULL OR source = 'Apify Google Maps Scraper'
-  `);
-
-  await database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_businesses_status 
-    ON businesses(status);
-
-    CREATE INDEX IF NOT EXISTS idx_businesses_external_id 
-    ON businesses(external_id);
-
-    CREATE INDEX IF NOT EXISTS idx_businesses_whatsapp_status 
-    ON businesses(whatsapp_status);
-
-    CREATE INDEX IF NOT EXISTS idx_live_support_leads_phone 
-    ON live_support_leads(phone);
-
-    CREATE INDEX IF NOT EXISTS idx_live_support_leads_status 
-    ON live_support_leads(status);
-
-    CREATE INDEX IF NOT EXISTS idx_live_support_leads_updated_at 
-    ON live_support_leads(updated_at);
-
-    CREATE INDEX IF NOT EXISTS idx_live_support_leads_seen_at
-    ON live_support_leads(seen_at);
-
-    CREATE INDEX IF NOT EXISTS idx_users_username
-    ON users(username);
-  `);
+// ---------------------------------------------------------------------------
+// Şema / başlatma.
+// ---------------------------------------------------------------------------
+async function initDatabase() {
+  await migrate(getDb(), {
+    migrationsFolder: path.join(__dirname, "migrations"),
+  });
 
   await seedDefaultAdminUser();
 
-  console.log("SQLite database hazır.");
+  console.log("PostgreSQL database hazır.");
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -410,11 +215,8 @@ function verifyPassword(password, salt, expectedHash) {
 }
 
 async function seedDefaultAdminUser() {
-  const database = await getDb();
-
-  const existing = await database.get(
-    "SELECT id FROM users WHERE username = ?",
-    DEFAULT_ADMIN_USERNAME
+  const existing = await execGet(
+    sql`SELECT id FROM users WHERE username = ${DEFAULT_ADMIN_USERNAME}`
   );
 
   if (existing) {
@@ -423,32 +225,41 @@ async function seedDefaultAdminUser() {
 
   const { salt, hash } = hashPassword(DEFAULT_ADMIN_PASSWORD);
 
-  await database.run(
+  await execRun(
+    sql`
+    INSERT INTO users (username, password_hash, password_salt, full_name, role)
+    VALUES (${DEFAULT_ADMIN_USERNAME}, ${hash}, ${salt}, 'Sistem Yöneticisi', 'admin')
     `
-    INSERT INTO users (username, password_hash, password_salt, role)
-    VALUES (?, ?, ?, 'admin')
-    `,
-    DEFAULT_ADMIN_USERNAME,
-    hash,
-    salt
   );
 
-  console.log(`Varsayilan admin kullanicisi olusturuldu: ${DEFAULT_ADMIN_USERNAME}`);
+  console.log(
+    `Varsayilan admin kullanicisi olusturuldu: ${DEFAULT_ADMIN_USERNAME}`
+  );
+}
+
+function mapUserRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    fullName: row.full_name || null,
+    role: row.role || "personnel",
+    team: row.team || null,
+    isActive: row.is_active !== false,
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
+  };
 }
 
 async function findUserByUsername(username) {
-  const database = await getDb();
-
-  const row = await database.get(
-    `
-    SELECT id, username, password_hash, password_salt, role, created_at, updated_at
+  return execGet(
+    sql`
+    SELECT id, username, password_hash, password_salt, full_name, role, team,
+           is_active, created_at, updated_at, last_login_at
     FROM users
-    WHERE username = ?
-    `,
-    String(username || "").trim()
+    WHERE username = ${String(username || "").trim()}
+    `
   );
-
-  return row || null;
 }
 
 async function authenticateUser({ username, password }) {
@@ -464,115 +275,193 @@ async function authenticateUser({ username, password }) {
     return null;
   }
 
-  const isValid = verifyPassword(password, user.password_salt, user.password_hash);
+  // Pasif kullanıcılar giriş yapamaz.
+  if (user.is_active === false) {
+    return null;
+  }
+
+  const isValid = verifyPassword(
+    password,
+    user.password_salt,
+    user.password_hash
+  );
 
   if (!isValid) {
     return null;
   }
 
+  // Son giriş zamanını güncelle (best-effort).
+  await execRun(sql`UPDATE users SET last_login_at = now() WHERE id = ${user.id}`);
+
   return {
     id: user.id,
     username: user.username,
-    role: user.role || "admin",
+    fullName: user.full_name || null,
+    role: user.role || "personnel",
+    team: user.team || null,
     createdAt: user.created_at,
   };
 }
 
+async function getUserById(userId) {
+  const row = await execGet(
+    sql`
+    SELECT id, username, full_name, role, team, is_active, created_at, last_login_at
+    FROM users
+    WHERE id = ${userId}
+    `
+  );
+
+  return mapUserRow(row);
+}
+
+async function listUsers() {
+  const rows = await execAll(
+    sql`
+    SELECT id, username, full_name, role, team, is_active, created_at, last_login_at
+    FROM users
+    ORDER BY created_at ASC, id ASC
+    `
+  );
+
+  return rows.map(mapUserRow);
+}
+
+// Admin tarafından yeni kullanıcı oluşturur. role/team doğrulanır.
+async function createUser({
+  username,
+  password,
+  fullName = null,
+  role = "personnel",
+  team = null,
+  createdBy = null,
+}) {
+  const normalizedUsername = String(username || "").trim();
+
+  if (!normalizedUsername) {
+    const err = new Error("Kullanıcı adı zorunludur.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!password || String(password).length < 6) {
+    const err = new Error("Şifre en az 6 karakter olmalıdır.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!USER_ROLES.includes(role)) {
+    const err = new Error("Geçersiz rol.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // admin'in birimi olmaz; personel için birim zorunludur.
+  let normalizedTeam = team || null;
+  if (role === "admin") {
+    normalizedTeam = null;
+  } else {
+    if (!normalizedTeam || !TEAMS.includes(normalizedTeam)) {
+      const err = new Error("Personel için geçerli bir birim seçilmelidir.");
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
+  const { salt, hash } = hashPassword(password);
+
+  try {
+    const row = await execGet(
+      sql`
+      INSERT INTO users (username, password_hash, password_salt, full_name, role, team, created_by)
+      VALUES (${normalizedUsername}, ${hash}, ${salt}, ${
+        fullName || null
+      }, ${role}, ${normalizedTeam}, ${createdBy})
+      RETURNING id, username, full_name, role, team, is_active, created_at, last_login_at
+      `
+    );
+
+    return mapUserRow(row);
+  } catch (error) {
+    // Drizzle, pg hatasını DrizzleQueryError içinde error.cause olarak sarar.
+    const pgCode = error?.code || error?.cause?.code;
+    if (pgCode === "23505") {
+      const err = new Error("Bu kullanıcı adı zaten kullanılıyor.");
+      err.statusCode = 409;
+      throw err;
+    }
+    throw error;
+  }
+}
+
+// Mevcut admin'in şifresini günceller (varsa). Boot'ta varsayılan admin şifresini
+// (.env / DEFAULT) ile senkron tutmak için kullanılır.
+async function setUserPasswordByUsername(username, password) {
+  const { salt, hash } = hashPassword(password);
+  const result = await execRun(
+    sql`
+    UPDATE users
+    SET password_hash = ${hash}, password_salt = ${salt}, updated_at = now()
+    WHERE username = ${String(username || "").trim()}
+    `
+  );
+  return result.changes > 0;
+}
+
 async function getCachedSearchResults({ category, city, district }) {
-  const database = await getDb();
   const searchKey = createSearchKey({ category, city, district });
 
-  const search = await database.get(
-    "SELECT * FROM searches WHERE search_key = ?",
-    searchKey
+  const search = await execGet(
+    sql`SELECT * FROM searches WHERE search_key = ${searchKey}`
   );
 
   if (!search) {
     return null;
   }
 
-const rows = await database.all(
-  `
-  SELECT 
-    id,
-    external_id,
-    name,
-    phone,
-    email,
-    instagram,
-    socials,
-    address,
-    website,
-    google_maps_url,
-    rating,
-    user_rating_count,
-    source,
-    status,
-    category,
-    city,
-    district,
-    lat,
-    lng,
-    whatsapp_status,
-    template_sent_at,
-    last_incoming_at,
-    last_message_text,
-    last_whatsapp_message_id,
-    created_at
-  FROM businesses
-  WHERE search_id = ?
-  ORDER BY id ASC
-  `,
-  search.id
-);
-
-  const businesses = rows.map(mapBusinessRow);
+  const rows = await execAll(
+    sql`
+    SELECT
+      id, external_id, name, phone, email, instagram, socials, address,
+      website, google_maps_url, rating, user_rating_count, source, status,
+      category, city, district, lat, lng, whatsapp_status, template_sent_at,
+      last_incoming_at, last_message_text, last_whatsapp_message_id, created_at
+    FROM businesses
+    WHERE search_id = ${search.id}
+    ORDER BY id ASC
+    `
+  );
 
   return {
     search,
-    businesses,
+    businesses: rows.map(mapBusinessRow),
   };
 }
 
 async function saveSearchResults({ category, city, district, businesses }) {
-  const database = await getDb();
   const searchKey = createSearchKey({ category, city, district });
 
-  await database.run(
-    `
+  await execRun(
+    sql`
     INSERT INTO searches (search_key, category, city, district)
-    VALUES (?, ?, ?, ?)
+    VALUES (${searchKey}, ${category}, ${city}, ${district})
     ON CONFLICT(search_key) DO UPDATE SET
       category = excluded.category,
       city = excluded.city,
       district = excluded.district,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-    searchKey,
-    category,
-    city,
-    district
-  );
-
-  const search = await database.get(
-    "SELECT * FROM searches WHERE search_key = ?",
-    searchKey
-  );
-
-  const existingBusinesses = await database.all(
+      updated_at = now()
     `
-    SELECT 
-      id,
-      external_id,
-      name,
-      phone,
-      address,
-      google_maps_url,
-      status,
-      whatsapp_status,
-      template_sent_at,
-      last_incoming_at,
-      last_message_text,
+  );
+
+  const search = await execGet(
+    sql`SELECT * FROM searches WHERE search_key = ${searchKey}`
+  );
+
+  const existingBusinesses = await execAll(
+    sql`
+    SELECT
+      id, external_id, name, phone, address, google_maps_url, status,
+      whatsapp_status, template_sent_at, last_incoming_at, last_message_text,
       last_whatsapp_message_id
     FROM businesses
     `
@@ -580,28 +469,29 @@ async function saveSearchResults({ category, city, district, businesses }) {
 
   const existingBusinessStateMap = new Map();
 
-for (const existingBusiness of existingBusinesses) {
-  const key = createBusinessIdentityKey(existingBusiness);
+  for (const existingBusiness of existingBusinesses) {
+    const key = createBusinessIdentityKey(existingBusiness);
 
-  const nextState = {
-    status: existingBusiness.status || "pending",
-    whatsappStatus: existingBusiness.whatsapp_status || "not_sent",
-    templateSentAt: existingBusiness.template_sent_at || null,
-    lastIncomingAt: existingBusiness.last_incoming_at || null,
-    lastMessageText: existingBusiness.last_message_text || null,
-    lastWhatsappMessageId: existingBusiness.last_whatsapp_message_id || null,
-  };
+    const nextState = {
+      status: existingBusiness.status || "pending",
+      whatsappStatus: existingBusiness.whatsapp_status || "not_sent",
+      templateSentAt: existingBusiness.template_sent_at || null,
+      lastIncomingAt: existingBusiness.last_incoming_at || null,
+      lastMessageText: existingBusiness.last_message_text || null,
+      lastWhatsappMessageId: existingBusiness.last_whatsapp_message_id || null,
+    };
 
-  const currentState = existingBusinessStateMap.get(key);
+    const currentState = existingBusinessStateMap.get(key);
 
-  if (
-    !currentState ||
-    getBusinessStatePriority(nextState) > getBusinessStatePriority(currentState)
-  ) {
-    existingBusinessStateMap.set(key, nextState);
+    if (
+      !currentState ||
+      getBusinessStatePriority(nextState) > getBusinessStatePriority(currentState)
+    ) {
+      existingBusinessStateMap.set(key, nextState);
+    }
   }
-}
-  await database.run("DELETE FROM businesses WHERE search_id = ?", search.id);
+
+  await execRun(sql`DELETE FROM businesses WHERE search_id = ${search.id}`);
 
   for (const business of businesses) {
     const businessKey = createBusinessIdentityKey(business);
@@ -615,84 +505,159 @@ for (const existingBusiness of existingBusinesses) {
       business.whatsappStatus ||
       "not_sent";
 
-    await database.run(
-      `
+    await execRun(
+      sql`
       INSERT INTO businesses (
-        search_id,
-        external_id,
-        name,
-        phone,
-        email,
-        instagram,
-        socials,
-        address,
-        website,
-        google_maps_url,
-        rating,
-        user_rating_count,
-        source,
-        status,
-        category,
-        city,
-        district,
-        lat,
-        lng,
-        whatsapp_status,
-        template_sent_at,
-        last_incoming_at,
-        last_message_text,
+        search_id, external_id, name, phone, email, instagram, socials,
+        address, website, google_maps_url, rating, user_rating_count, source,
+        status, category, city, district, lat, lng, whatsapp_status,
+        template_sent_at, last_incoming_at, last_message_text,
         last_whatsapp_message_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      search.id,
-      business.externalId || business.id || null,
-      business.name || null,
-      business.phone || null,
-      business.email || null,
-      business.instagram || null,
-      business.socials || null,
-      business.address || null,
-      business.website || null,
-      business.googleMapsUrl || null,
-      business.rating || null,
-      business.userRatingCount || 0,
-      business.source || "google_places",
-      preservedStatus,
-      business.category || null,
-      business.city || null,
-      business.district || null,
-      business.lat || business.location?.latitude || null,
-      business.lng || business.location?.longitude || null,
-      preservedWhatsAppStatus,
-      previousBusinessState.templateSentAt || business.templateSentAt || null,
-      previousBusinessState.lastIncomingAt || business.lastIncomingAt || null,
-      previousBusinessState.lastMessageText || business.lastMessageText || null,
-      previousBusinessState.lastWhatsappMessageId ||
-        business.lastWhatsappMessageId ||
-        null
+      VALUES (
+        ${search.id},
+        ${business.externalId || business.id || null},
+        ${business.name || null},
+        ${business.phone || null},
+        ${business.email || null},
+        ${business.instagram || null},
+        ${business.socials || null},
+        ${business.address || null},
+        ${business.website || null},
+        ${business.googleMapsUrl || null},
+        ${business.rating || null},
+        ${business.userRatingCount || 0},
+        ${business.source || "google_places"},
+        ${preservedStatus},
+        ${business.category || null},
+        ${business.city || null},
+        ${business.district || null},
+        ${business.lat || business.location?.latitude || null},
+        ${business.lng || business.location?.longitude || null},
+        ${preservedWhatsAppStatus},
+        ${previousBusinessState.templateSentAt || business.templateSentAt || null},
+        ${previousBusinessState.lastIncomingAt || business.lastIncomingAt || null},
+        ${previousBusinessState.lastMessageText || business.lastMessageText || null},
+        ${
+          previousBusinessState.lastWhatsappMessageId ||
+          business.lastWhatsappMessageId ||
+          null
+        }
+      )
+      `
     );
   }
 
   return search.id;
 }
 
-async function getSearchHistory() {
-  const database = await getDb();
+// "Yeni sorgu" (fresh) için: mevcut kayıtları SİLMEDEN, sadece bu sorguya ait
+// işletmelerden DB'de henüz bulunmayan (kimlik anahtarına göre benzersiz) yeni
+// kayıtları ekler. Mevcut işletmelerin durum/WhatsApp state'i korunur.
+// Döndürür: { searchId, addedCount }.
+async function mergeSearchResults({ category, city, district, businesses }) {
+  const searchKey = createSearchKey({ category, city, district });
 
-  return database.all(`
-    SELECT 
+  await execRun(
+    sql`
+    INSERT INTO searches (search_key, category, city, district, last_fetched_at)
+    VALUES (${searchKey}, ${category}, ${city}, ${district}, now())
+    ON CONFLICT(search_key) DO UPDATE SET
+      category = excluded.category,
+      city = excluded.city,
+      district = excluded.district,
+      last_fetched_at = now(),
+      updated_at = now()
+    `
+  );
+
+  const search = await execGet(
+    sql`SELECT * FROM searches WHERE search_key = ${searchKey}`
+  );
+
+  // Bu sorguya ait mevcut işletmelerin kimlik anahtarları (benzersizlik için).
+  const existingRows = await execAll(
+    sql`
+    SELECT id, external_id, name, phone, address, google_maps_url
+    FROM businesses
+    WHERE search_id = ${search.id}
+    `
+  );
+
+  const existingKeys = new Set(
+    existingRows.map((row) => createBusinessIdentityKey(row))
+  );
+
+  let addedCount = 0;
+
+  for (const business of businesses) {
+    const key = createBusinessIdentityKey(business);
+
+    // Zaten varsa atla (yeni veri değil).
+    if (existingKeys.has(key)) {
+      continue;
+    }
+
+    existingKeys.add(key);
+
+    await execRun(
+      sql`
+      INSERT INTO businesses (
+        search_id, external_id, name, phone, email, instagram, socials,
+        address, website, google_maps_url, rating, user_rating_count, source,
+        status, category, city, district, lat, lng, whatsapp_status,
+        template_sent_at, last_incoming_at, last_message_text,
+        last_whatsapp_message_id
+      )
+      VALUES (
+        ${search.id},
+        ${business.externalId || business.id || null},
+        ${business.name || null},
+        ${business.phone || null},
+        ${business.email || null},
+        ${business.instagram || null},
+        ${business.socials || null},
+        ${business.address || null},
+        ${business.website || null},
+        ${business.googleMapsUrl || null},
+        ${business.rating || null},
+        ${business.userRatingCount || 0},
+        ${business.source || "google_places"},
+        ${business.status || "pending"},
+        ${business.category || null},
+        ${business.city || null},
+        ${business.district || null},
+        ${business.lat || business.location?.latitude || null},
+        ${business.lng || business.location?.longitude || null},
+        ${business.whatsappStatus || "not_sent"},
+        ${business.templateSentAt || null},
+        ${business.lastIncomingAt || null},
+        ${business.lastMessageText || null},
+        ${business.lastWhatsappMessageId || null}
+      )
+      `
+    );
+
+    addedCount += 1;
+  }
+
+  return { searchId: search.id, addedCount };
+}
+
+async function getSearchHistory() {
+  return execAll(sql`
+    SELECT
       s.id,
       s.category,
       s.city,
       s.district,
       s.created_at,
       s.updated_at,
-      COUNT(b.id) AS totalBusinesses,
-      SUM(CASE WHEN b.phone IS NOT NULL AND b.phone != '' THEN 1 ELSE 0 END) AS phonesFound,
-      SUM(CASE WHEN b.status = 'approved' THEN 1 ELSE 0 END) AS approvedCount,
-      SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) AS pendingCount,
-      SUM(CASE WHEN b.status = 'rejected' THEN 1 ELSE 0 END) AS rejectedCount
+      COUNT(b.id)::int AS "totalBusinesses",
+      SUM(CASE WHEN b.phone IS NOT NULL AND b.phone != '' THEN 1 ELSE 0 END)::int AS "phonesFound",
+      SUM(CASE WHEN b.status = 'approved' THEN 1 ELSE 0 END)::int AS "approvedCount",
+      SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END)::int AS "pendingCount",
+      SUM(CASE WHEN b.status = 'rejected' THEN 1 ELSE 0 END)::int AS "rejectedCount"
     FROM searches s
     LEFT JOIN businesses b ON b.search_id = s.id
     GROUP BY s.id
@@ -701,51 +666,26 @@ async function getSearchHistory() {
 }
 
 async function getSearchDetailsById(searchId) {
-  const database = await getDb();
-
-  const search = await database.get(
-    "SELECT * FROM searches WHERE id = ?",
-    searchId
+  const search = await execGet(
+    sql`SELECT * FROM searches WHERE id = ${searchId}`
   );
 
   if (!search) {
     return null;
   }
 
-  const rows = await database.all(
-  `
-  SELECT 
-    id,
-    external_id,
-    name,
-    phone,
-    email,
-    instagram,
-    socials,
-    address,
-    website,
-    google_maps_url,
-    rating,
-    user_rating_count,
-    source,
-    status,
-    category,
-    city,
-    district,
-    lat,
-    lng,
-    whatsapp_status,
-    template_sent_at,
-    last_incoming_at,
-    last_message_text,
-    last_whatsapp_message_id,
-    created_at
-  FROM businesses
-  WHERE search_id = ?
-  ORDER BY id ASC
-  `,
-  searchId
-);
+  const rows = await execAll(
+    sql`
+    SELECT
+      id, external_id, name, phone, email, instagram, socials, address,
+      website, google_maps_url, rating, user_rating_count, source, status,
+      category, city, district, lat, lng, whatsapp_status, template_sent_at,
+      last_incoming_at, last_message_text, last_whatsapp_message_id, created_at
+    FROM businesses
+    WHERE search_id = ${searchId}
+    ORDER BY id ASC
+    `
+  );
 
   return {
     search,
@@ -756,55 +696,25 @@ async function getSearchDetailsById(searchId) {
 async function updateBusinessStatus(businessId, status) {
   validateBusinessStatus(status);
 
-  const database = await getDb();
-
-  const result = await database.run(
-    `
-    UPDATE businesses
-    SET status = ?
-    WHERE id = ?
-    `,
-    status,
-    businessId
+  const result = await execRun(
+    sql`UPDATE businesses SET status = ${status} WHERE id = ${businessId}`
   );
 
   if (result.changes === 0) {
     return null;
   }
 
-const updatedBusiness = await database.get(
-  `
-  SELECT
-    id,
-    external_id,
-    name,
-    phone,
-    email,
-    instagram,
-    socials,
-    address,
-    website,
-    google_maps_url,
-    rating,
-    user_rating_count,
-    source,
-    status,
-    category,
-    city,
-    district,
-    lat,
-    lng,
-    whatsapp_status,
-    template_sent_at,
-    last_incoming_at,
-    last_message_text,
-    last_whatsapp_message_id,
-    created_at
-  FROM businesses
-  WHERE id = ?
-  `,
-  businessId
-);
+  const updatedBusiness = await execGet(
+    sql`
+    SELECT
+      id, external_id, name, phone, email, instagram, socials, address,
+      website, google_maps_url, rating, user_rating_count, source, status,
+      category, city, district, lat, lng, whatsapp_status, template_sent_at,
+      last_incoming_at, last_message_text, last_whatsapp_message_id, created_at
+    FROM businesses
+    WHERE id = ${businessId}
+    `
+  );
 
   return mapBusinessRow(updatedBusiness);
 }
@@ -812,75 +722,35 @@ const updatedBusiness = await database.get(
 async function getBusinessesByStatus(status) {
   validateBusinessStatus(status);
 
-  const database = await getDb();
-
-const rows = await database.all(
-  `
-  SELECT
-    b.id,
-    b.external_id,
-    b.name,
-    b.phone,
-    b.address,
-    b.website,
-    b.google_maps_url,
-    b.rating,
-    b.user_rating_count,
-    b.source,
-    b.status,
-    b.lat,
-    b.lng,
-    b.whatsapp_status,
-    b.template_sent_at,
-    b.last_incoming_at,
-    b.last_message_text,
-    b.last_whatsapp_message_id,
-    b.created_at,
-    s.category,
-    s.city,
-    s.district
-  FROM businesses b
-  LEFT JOIN searches s ON s.id = b.search_id
-  WHERE b.status = ?
-  ORDER BY b.created_at DESC, b.id DESC
-  `,
-  status
-);
+  const rows = await execAll(
+    sql`
+    SELECT
+      b.id, b.external_id, b.name, b.phone, b.address, b.website,
+      b.google_maps_url, b.rating, b.user_rating_count, b.source, b.status,
+      b.lat, b.lng, b.whatsapp_status, b.template_sent_at, b.last_incoming_at,
+      b.last_message_text, b.last_whatsapp_message_id, b.created_at,
+      s.category, s.city, s.district
+    FROM businesses b
+    LEFT JOIN searches s ON s.id = b.search_id
+    WHERE b.status = ${status}
+    ORDER BY b.created_at DESC, b.id DESC
+    `
+  );
 
   return rows.map(mapBusinessRow);
 }
-async function getBusinessById(businessId) {
-  const database = await getDb();
 
-  const row = await database.get(
-    `
+async function getBusinessById(businessId) {
+  const row = await execGet(
+    sql`
     SELECT
-      id,
-      external_id,
-      name,
-      phone,
-      address,
-      website,
-      google_maps_url,
-      rating,
-      user_rating_count,
-      source,
-      status,
-      lat,
-      lng,
-      whatsapp_status,
-      template_sent_at,
-      last_incoming_at,
-      last_message_text,
-      last_whatsapp_message_id,
-      category,
-      city,
-      district,
-      created_at
+      id, external_id, name, phone, address, website, google_maps_url, rating,
+      user_rating_count, source, status, lat, lng, whatsapp_status,
+      template_sent_at, last_incoming_at, last_message_text,
+      last_whatsapp_message_id, category, city, district, created_at
     FROM businesses
-    WHERE id = ?
-    `,
-    businessId
+    WHERE id = ${businessId}
+    `
   );
 
   if (!row) {
@@ -891,8 +761,6 @@ async function getBusinessById(businessId) {
 }
 
 async function getBusinessesByWhatsAppStatus(whatsappStatus = "all") {
-  const database = await getDb();
-
   const normalizedStatus = String(whatsappStatus || "all")
     .trim()
     .toLowerCase();
@@ -900,67 +768,28 @@ async function getBusinessesByWhatsAppStatus(whatsappStatus = "all") {
   let rows;
 
   if (normalizedStatus === "all") {
-    rows = await database.all(`
+    rows = await execAll(sql`
       SELECT
-        id,
-        external_id,
-        name,
-        phone,
-        address,
-        website,
-        google_maps_url,
-        rating,
-        user_rating_count,
-        source,
-        status,
-        lat,
-        lng,
-        whatsapp_status,
-        template_sent_at,
-        last_incoming_at,
-        last_message_text,
-        last_whatsapp_message_id,
-        category,
-        city,
-        district,
-        created_at
+        id, external_id, name, phone, address, website, google_maps_url, rating,
+        user_rating_count, source, status, lat, lng, whatsapp_status,
+        template_sent_at, last_incoming_at, last_message_text,
+        last_whatsapp_message_id, category, city, district, created_at
       FROM businesses
       ORDER BY created_at DESC, id DESC
     `);
   } else {
     validateWhatsAppStatus(normalizedStatus);
 
-    rows = await database.all(
-      `
+    rows = await execAll(sql`
       SELECT
-        id,
-        external_id,
-        name,
-        phone,
-        address,
-        website,
-        google_maps_url,
-        rating,
-        user_rating_count,
-        source,
-        status,
-        lat,
-        lng,
-        whatsapp_status,
-        template_sent_at,
-        last_incoming_at,
-        last_message_text,
-        last_whatsapp_message_id,
-        category,
-        city,
-        district,
-        created_at
+        id, external_id, name, phone, address, website, google_maps_url, rating,
+        user_rating_count, source, status, lat, lng, whatsapp_status,
+        template_sent_at, last_incoming_at, last_message_text,
+        last_whatsapp_message_id, category, city, district, created_at
       FROM businesses
-      WHERE whatsapp_status = ?
+      WHERE whatsapp_status = ${normalizedStatus}
       ORDER BY created_at DESC, id DESC
-      `,
-      normalizedStatus
-    );
+    `);
   }
 
   return rows.map(mapBusinessRow);
@@ -969,16 +798,8 @@ async function getBusinessesByWhatsAppStatus(whatsappStatus = "all") {
 async function updateBusinessWhatsAppStatus(businessId, whatsappStatus) {
   validateWhatsAppStatus(whatsappStatus);
 
-  const database = await getDb();
-
-  const result = await database.run(
-    `
-    UPDATE businesses
-    SET whatsapp_status = ?
-    WHERE id = ?
-    `,
-    whatsappStatus,
-    businessId
+  const result = await execRun(
+    sql`UPDATE businesses SET whatsapp_status = ${whatsappStatus} WHERE id = ${businessId}`
   );
 
   if (result.changes === 0) {
@@ -995,20 +816,15 @@ async function markTemplateSent({
 }) {
   validateWhatsAppStatus(whatsappStatus);
 
-  const database = await getDb();
-
-  const result = await database.run(
-    `
+  const result = await execRun(
+    sql`
     UPDATE businesses
     SET
-      whatsapp_status = ?,
-      template_sent_at = CURRENT_TIMESTAMP,
-      last_whatsapp_message_id = ?
-    WHERE id = ?
-    `,
-    whatsappStatus,
-    messageId,
-    businessId
+      whatsapp_status = ${whatsappStatus},
+      template_sent_at = now(),
+      last_whatsapp_message_id = ${messageId}
+    WHERE id = ${businessId}
+    `
   );
 
   if (result.changes === 0) {
@@ -1023,52 +839,44 @@ async function markIncomingWhatsAppReply({
   messageText = "",
   messageId = null,
 }) {
-  const database = await getDb();
-
   const normalizedPhone = String(phone || "").replace(/\D/g, "");
 
   if (!normalizedPhone) {
     return null;
   }
 
-  const row = await database.get(
-    `
+  const row = await execGet(
+    sql`
     SELECT id
     FROM businesses
-    WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '') LIKE ?
+    WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '') LIKE ${
+      "%" + normalizedPhone.slice(-10) + "%"
+    }
     ORDER BY id DESC
     LIMIT 1
-    `,
-    `%${normalizedPhone.slice(-10)}%`
+    `
   );
 
   if (!row) {
     return null;
   }
 
-  await database.run(
-    `
+  await execRun(
+    sql`
     UPDATE businesses
     SET
       whatsapp_status = 'replied',
-      last_incoming_at = CURRENT_TIMESTAMP,
-      last_message_text = ?,
-      last_whatsapp_message_id = ?
-    WHERE id = ?
-    `,
-    messageText,
-    messageId,
-    row.id
+      last_incoming_at = now(),
+      last_message_text = ${messageText},
+      last_whatsapp_message_id = ${messageId}
+    WHERE id = ${row.id}
+    `
   );
 
   return getBusinessById(row.id);
 }
 
-const LIVE_SUPPORT_STATUSES = [
-  "info_requested",
-  "follow_up",
-  "not_interested",
-];
+const LIVE_SUPPORT_STATUSES = ["info_requested", "follow_up", "not_interested"];
 
 async function saveLiveSupportLead({
   phone,
@@ -1076,8 +884,6 @@ async function saveLiveSupportLead({
   status = "info_requested",
   messageId = null,
 }) {
-  const database = await getDb();
-
   const normalizedPhone = String(phone || "").replace(/\D/g, "");
 
   if (!normalizedPhone) {
@@ -1088,72 +894,46 @@ async function saveLiveSupportLead({
     ? status
     : "info_requested";
 
-  await database.run(
-    `
-    INSERT INTO live_support_leads (
-      phone,
-      button_text,
-      status,
-      message_id,
-      seen_at
-    )
-    VALUES (?, ?, ?, ?, NULL)
+  await execRun(
+    sql`
+    INSERT INTO live_support_leads (phone, button_text, status, message_id, seen_at)
+    VALUES (${normalizedPhone}, ${buttonText}, ${safeStatus}, ${messageId}, NULL)
     ON CONFLICT(phone) DO UPDATE SET
       button_text = excluded.button_text,
       status = excluded.status,
       message_id = excluded.message_id,
       seen_at = NULL,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-    normalizedPhone,
-    buttonText,
-    safeStatus,
-    messageId
+      updated_at = now()
+    `
   );
 
-  return database.get(
-    `
-    SELECT
-      id,
-      phone,
-      button_text,
-      status,
-      note,
-      message_id,
-      seen_at,
-      created_at,
-      updated_at
+  return execGet(
+    sql`
+    SELECT id, phone, button_text, status, note, message_id, seen_at,
+           created_at, updated_at
     FROM live_support_leads
-    WHERE phone = ?
-    `,
-    normalizedPhone
+    WHERE phone = ${normalizedPhone}
+    `
   );
 }
 
-// businesses.phone üzerindeki boşluk/işaretleri temizleyen SQL ifadesi.
-const NORMALIZED_BUSINESS_PHONE_SQL = `
-  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(phone, ''),
-    ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')
-`;
-
 // Bir telefon numarasına (son 10 hane) karşılık gelen işletmeyi bulur.
-async function findBusinessByPhone(database, normalizedPhone) {
+async function findBusinessByPhone(normalizedPhone) {
   const last10 = String(normalizedPhone || "").slice(-10);
 
   if (last10.length < 7) {
     return null;
   }
 
-  return database.get(
-    `
+  return execGet(
+    sql`
     SELECT id, name, email, instagram, socials, address, website,
            whatsapp_status, status, source, category, city, district
     FROM businesses
-    WHERE ${NORMALIZED_BUSINESS_PHONE_SQL} LIKE ?
+    WHERE ${normalizedBusinessPhoneSql()} LIKE ${"%" + last10}
     ORDER BY id DESC
     LIMIT 1
-    `,
-    `%${last10}`
+    `
   );
 }
 
@@ -1166,27 +946,19 @@ async function logWhatsAppMessage({
   text = "",
   messageId = null,
 }) {
-  const database = await getDb();
-
   const normalizedPhone = String(phone || "").replace(/\D/g, "");
 
   if (!normalizedPhone || !direction) {
     return null;
   }
 
-  await database.run(
+  await execRun(
+    sql`
+    INSERT INTO whatsapp_messages (phone, business_id, direction, type, text, message_id)
+    VALUES (${normalizedPhone}, ${businessId}, ${direction}, ${type}, ${String(
+      text || ""
+    )}, ${messageId})
     `
-    INSERT INTO whatsapp_messages (
-      phone, business_id, direction, type, text, message_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    normalizedPhone,
-    businessId,
-    direction,
-    type,
-    String(text || ""),
-    messageId
   );
 
   return true;
@@ -1195,8 +967,6 @@ async function logWhatsAppMessage({
 // Bir telefon numarasının (son 10 hane) en son aktif olduğu güne ait
 // WhatsApp konuşmasını (giden + gelen mesajlar) zaman sırasıyla döndürür.
 async function getWhatsAppConversationByPhone(phone) {
-  const database = await getDb();
-
   const last10 = String(phone || "")
     .replace(/\D/g, "")
     .slice(-10);
@@ -1205,29 +975,25 @@ async function getWhatsAppConversationByPhone(phone) {
     return [];
   }
 
-  // En son mesaj atılan günü bul.
-  const lastDayRow = await database.get(
-    `
-    SELECT date(MAX(created_at)) AS lastDay
+  const lastDayRow = await execGet(
+    sql`
+    SELECT (MAX(created_at))::date AS "lastDay"
     FROM whatsapp_messages
-    WHERE phone LIKE ?
-    `,
-    `%${last10}`
+    WHERE phone LIKE ${"%" + last10}
+    `
   );
 
   if (!lastDayRow?.lastDay) {
     return [];
   }
 
-  const rows = await database.all(
-    `
+  const rows = await execAll(
+    sql`
     SELECT id, direction, type, text, message_id, created_at
     FROM whatsapp_messages
-    WHERE phone LIKE ? AND date(created_at) = date(?)
+    WHERE phone LIKE ${"%" + last10} AND created_at::date = ${lastDayRow.lastDay}::date
     ORDER BY created_at ASC, id ASC
-    `,
-    `%${last10}`,
-    lastDayRow.lastDay
+    `
   );
 
   return rows.map((row) => ({
@@ -1248,12 +1014,9 @@ function msSince(createdAt) {
   return Date.now() - t;
 }
 
-// WhatsApp gelen kutusu için sohbet listesi: numara bazında (son 10 hane)
-// son mesaj, okunmamış sayısı, işletme adı ve 24 saat penceresi durumu.
+// WhatsApp gelen kutusu için sohbet listesi.
 async function getWhatsAppConversations() {
-  const database = await getDb();
-
-  const rows = await database.all(`
+  const rows = await execAll(sql`
     SELECT phone, direction, type, text, read_at, created_at
     FROM whatsapp_messages
     ORDER BY created_at ASC, id ASC
@@ -1262,7 +1025,9 @@ async function getWhatsAppConversations() {
   const groups = new Map();
 
   for (const row of rows) {
-    const key = String(row.phone || "").replace(/\D/g, "").slice(-10);
+    const key = String(row.phone || "")
+      .replace(/\D/g, "")
+      .slice(-10);
     if (key.length < 7) continue;
 
     let group = groups.get(key);
@@ -1299,9 +1064,8 @@ async function getWhatsAppConversations() {
     }
   }
 
-  // Geçmiş sohbetler: mesaj logunda olmayan ama WhatsApp geçmişi olan
-  // (template gönderilmiş ya da cevap gelmiş) işletmeleri de listeye ekle.
-  const historyRows = await database.all(`
+  // Geçmiş sohbetler: mesaj logunda olmayan ama WhatsApp geçmişi olan işletmeler.
+  const historyRows = await execAll(sql`
     SELECT name, phone, last_message_text, last_incoming_at, template_sent_at
     FROM businesses
     WHERE phone IS NOT NULL AND TRIM(phone) != ''
@@ -1338,7 +1102,7 @@ async function getWhatsAppConversations() {
     Array.from(groups.values()).map(async (group) => {
       const business = group.historical
         ? null
-        : await findBusinessByPhone(database, group.phone);
+        : await findBusinessByPhone(group.phone);
 
       return {
         contactKey: group.contactKey,
@@ -1356,7 +1120,6 @@ async function getWhatsAppConversations() {
     })
   );
 
-  // En son mesaja göre azalan sırala.
   conversations.sort((a, b) =>
     String(b.lastMessageAt || "").localeCompare(String(a.lastMessageAt || ""))
   );
@@ -1366,32 +1129,30 @@ async function getWhatsAppConversations() {
 
 // Bir numaranın (son 10 hane) TÜM mesaj geçmişini döndürür.
 async function getWhatsAppMessagesForPhone(phone) {
-  const database = await getDb();
-
-  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  const last10 = String(phone || "")
+    .replace(/\D/g, "")
+    .slice(-10);
   if (last10.length < 7) return { messages: [], canSendFreeText: false };
 
-  const rows = await database.all(
-    `
+  const rows = await execAll(
+    sql`
     SELECT id, direction, type, text, message_id, created_at
     FROM whatsapp_messages
-    WHERE phone LIKE ?
+    WHERE phone LIKE ${"%" + last10}
     ORDER BY created_at ASC, id ASC
-    `,
-    `%${last10}`
+    `
   );
 
   // Mesaj logu boşsa (geçmiş sohbet) işletme geçmişinden sentetik baloncuk üret.
   if (rows.length === 0) {
-    const business = await database.get(
-      `
+    const business = await execGet(
+      sql`
       SELECT last_message_text, last_incoming_at, template_sent_at
       FROM businesses
-      WHERE ${NORMALIZED_BUSINESS_PHONE_SQL} LIKE ?
+      WHERE ${normalizedBusinessPhoneSql()} LIKE ${"%" + last10}
       ORDER BY id DESC
       LIMIT 1
-      `,
-      `%${last10}`
+      `
     );
 
     const synthetic = [];
@@ -1448,41 +1209,41 @@ async function getWhatsAppMessagesForPhone(phone) {
 
 // Bir numaraya ait okunmamış gelen mesajları okundu işaretler.
 async function markWhatsAppConversationRead(phone) {
-  const database = await getDb();
-
-  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  const last10 = String(phone || "")
+    .replace(/\D/g, "")
+    .slice(-10);
   if (last10.length < 7) return { updatedCount: 0 };
 
-  const result = await database.run(
-    `
+  const result = await execRun(
+    sql`
     UPDATE whatsapp_messages
-    SET read_at = CURRENT_TIMESTAMP
-    WHERE direction = 'incoming' AND read_at IS NULL AND phone LIKE ?
-    `,
-    `%${last10}`
+    SET read_at = now()
+    WHERE direction = 'incoming' AND read_at IS NULL AND phone LIKE ${
+      "%" + last10
+    }
+    `
   );
 
   return { updatedCount: result.changes || 0 };
 }
 
-// Bir telefon için işletme bilgisi + canlı destek durumunu döndürür
-// (WhatsApp sohbet başlığında ve sonuç kontrollerinde gösterilir).
+// Bir telefon için işletme bilgisi + canlı destek durumunu döndürür.
 async function getWhatsAppContactInfo(phone) {
-  const database = await getDb();
-  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  const last10 = String(phone || "")
+    .replace(/\D/g, "")
+    .slice(-10);
   if (last10.length < 7) return { business: null, lead: null };
 
-  const business = await findBusinessByPhone(database, last10);
+  const business = await findBusinessByPhone(last10);
 
-  const lead = await database.get(
-    `
+  const lead = await execGet(
+    sql`
     SELECT status, result, meeting_at, assigned_to
     FROM live_support_leads
-    WHERE phone LIKE ?
+    WHERE phone LIKE ${"%" + last10}
     ORDER BY id DESC
     LIMIT 1
-    `,
-    `%${last10}`
+    `
   );
 
   return {
@@ -1511,62 +1272,46 @@ async function getWhatsAppContactInfo(phone) {
   };
 }
 
-// WhatsApp sohbetinden sonuç (görüşülecek/kayıt alındı/reddedildi vb.) ve
-// görüşme tarihi belirleyip canlı destek lead'i oluşturur/günceller.
+// WhatsApp sohbetinden sonuç + görüşme tarihi belirleyip lead oluşturur/günceller.
 async function upsertLiveSupportOutcome({
   phone,
   result,
   meetingAt,
   buttonText = "Panelden eklendi",
 }) {
-  const database = await getDb();
   const normalizedPhone = String(phone || "").replace(/\D/g, "");
   if (!normalizedPhone) return null;
 
   const safeResult = LIVE_SUPPORT_RESULTS.includes(result) ? result : "pending";
 
-  await database.run(
-    `
+  await execRun(
+    sql`
     INSERT INTO live_support_leads (phone, button_text, status, result, meeting_at, seen_at)
-    VALUES (?, ?, 'info_requested', ?, ?, NULL)
+    VALUES (${normalizedPhone}, ${buttonText}, 'info_requested', ${safeResult}, ${
+      meetingAt || null
+    }, NULL)
     ON CONFLICT(phone) DO UPDATE SET
       result = excluded.result,
       meeting_at = excluded.meeting_at,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-    normalizedPhone,
-    buttonText,
-    safeResult,
-    meetingAt || null
+      updated_at = now()
+    `
   );
 
   return getWhatsAppContactInfo(normalizedPhone);
 }
 
 async function getLiveSupportLeads() {
-  const database = await getDb();
-
-  const rows = await database.all(`
+  const rows = await execAll(sql`
     SELECT
-      id,
-      phone,
-      button_text,
-      status,
-      result,
-      meeting_at,
-      assigned_to,
-      note,
-      message_id,
-      seen_at,
-      created_at,
-      updated_at
+      id, phone, button_text, status, result, meeting_at, assigned_to, note,
+      message_id, seen_at, created_at, updated_at
     FROM live_support_leads
     ORDER BY updated_at DESC, id DESC
   `);
 
   return Promise.all(
     rows.map(async (row) => {
-      const business = await findBusinessByPhone(database, row.phone);
+      const business = await findBusinessByPhone(row.phone);
       const conversation = await getWhatsAppConversationByPhone(row.phone);
 
       return {
@@ -1583,7 +1328,6 @@ async function getLiveSupportLeads() {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
 
-        // İşletme eşleşmesi (telefon → businesses)
         businessId: business?.id || null,
         businessName: business?.name || null,
         email: business?.email || null,
@@ -1592,7 +1336,6 @@ async function getLiveSupportLeads() {
         address: business?.address || null,
         website: business?.website || null,
 
-        // O güne ait WhatsApp konuşması (giden + gelen)
         conversation,
       };
     })
@@ -1600,28 +1343,20 @@ async function getLiveSupportLeads() {
 }
 
 // Belirli tarih aralığında (created_at, gün bazında dahil) rapor verisi üretir.
-// Kategoriler: ilgilenenler (info_requested), kayıt oluşturanlar (approved
-// işletmeler), daha sonra dönecekler (follow_up), ilgilenmeyenler (not_interested).
 async function getReportData({ from, to }) {
-  const database = await getDb();
-
-  const rangeClause = "date(created_at) BETWEEN date(?) AND date(?)";
-
-  const supportRows = await database.all(
-    `
+  const supportRows = await execAll(
+    sql`
     SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
            note, created_at, updated_at
     FROM live_support_leads
-    WHERE ${rangeClause}
+    WHERE created_at::date BETWEEN ${from}::date AND ${to}::date
     ORDER BY created_at DESC, id DESC
-    `,
-    from,
-    to
+    `
   );
 
   const enrichedSupport = await Promise.all(
     supportRows.map(async (row) => {
-      const business = await findBusinessByPhone(database, row.phone);
+      const business = await findBusinessByPhone(row.phone);
 
       return {
         id: row.id,
@@ -1650,15 +1385,13 @@ async function getReportData({ from, to }) {
     (lead) => lead.status === "not_interested"
   );
 
-  const approvedRows = await database.all(
-    `
+  const approvedRows = await execAll(
+    sql`
     SELECT id, name, phone, email, instagram, socials, address, website, created_at
     FROM businesses
-    WHERE status = 'approved' AND ${rangeClause}
+    WHERE status = 'approved' AND created_at::date BETWEEN ${from}::date AND ${to}::date
     ORDER BY created_at DESC, id DESC
-    `,
-    from,
-    to
+    `
   );
 
   const approved = approvedRows.map((row) => ({
@@ -1690,40 +1423,25 @@ async function getReportData({ from, to }) {
 }
 
 async function updateLiveSupportLeadNote(leadId, note) {
-  const database = await getDb();
-
-  const result = await database.run(
-    `
+  const result = await execRun(
+    sql`
     UPDATE live_support_leads
-    SET
-      note = ?,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-    `,
-    note,
-    leadId
+    SET note = ${note}, updated_at = now()
+    WHERE id = ${leadId}
+    `
   );
 
   if (result.changes === 0) {
     return null;
   }
 
-  const row = await database.get(
-    `
-    SELECT
-      id,
-      phone,
-      button_text,
-      status,
-      note,
-      message_id,
-      seen_at,
-      created_at,
-      updated_at
+  const row = await execGet(
+    sql`
+    SELECT id, phone, button_text, status, note, message_id, seen_at,
+           created_at, updated_at
     FROM live_support_leads
-    WHERE id = ?
-    `,
-    leadId
+    WHERE id = ${leadId}
+    `
   );
 
   return {
@@ -1748,64 +1466,53 @@ const LIVE_SUPPORT_RESULTS = [
   "completed",
 ];
 
-// Bir canlı destek lead'inin sonuç / görüşme tarihi / atanan personel / not
-// alanlarından gönderilenleri günceller ve zenginleştirilmiş kaydı döndürür.
+// Bir canlı destek lead'inin gönderilen alanlarını günceller.
 async function updateLiveSupportLead(leadId, fields = {}) {
-  const database = await getDb();
-
   const sets = [];
-  const params = [];
 
   if (fields.note !== undefined) {
-    sets.push("note = ?");
-    params.push(String(fields.note || ""));
+    sets.push(sql`note = ${String(fields.note || "")}`);
   }
 
   if (fields.result !== undefined) {
     const safeResult = LIVE_SUPPORT_RESULTS.includes(fields.result)
       ? fields.result
       : "pending";
-    sets.push("result = ?");
-    params.push(safeResult);
+    sets.push(sql`result = ${safeResult}`);
   }
 
   if (fields.meetingAt !== undefined) {
-    sets.push("meeting_at = ?");
-    params.push(fields.meetingAt || null);
+    sets.push(sql`meeting_at = ${fields.meetingAt || null}`);
   }
 
   if (fields.assignedTo !== undefined) {
-    sets.push("assigned_to = ?");
-    params.push(fields.assignedTo || null);
+    sets.push(sql`assigned_to = ${fields.assignedTo || null}`);
   }
 
   if (sets.length === 0) {
     return null;
   }
 
-  sets.push("updated_at = CURRENT_TIMESTAMP");
+  sets.push(sql`updated_at = now()`);
 
-  const result = await database.run(
-    `UPDATE live_support_leads SET ${sets.join(", ")} WHERE id = ?`,
-    ...params,
-    leadId
+  const result = await execRun(
+    sql`UPDATE live_support_leads SET ${sql.join(sets, sql`, `)} WHERE id = ${leadId}`
   );
 
   if (result.changes === 0) {
     return null;
   }
 
-  const row = await database.get(
-    `
+  const row = await execGet(
+    sql`
     SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
            note, message_id, seen_at, created_at, updated_at
     FROM live_support_leads
-    WHERE id = ?
-    `,
-    leadId
+    WHERE id = ${leadId}
+    `
   );
 
-  const business = await findBusinessByPhone(database, row.phone);
+  const business = await findBusinessByPhone(row.phone);
 
   return {
     id: row.id,
@@ -1831,10 +1538,8 @@ async function updateLiveSupportLead(leadId, fields = {}) {
 }
 
 async function getLiveSupportUnseenCount() {
-  const database = await getDb();
-
-  const row = await database.get(`
-    SELECT COUNT(*) AS count
+  const row = await execGet(sql`
+    SELECT COUNT(*)::int AS count
     FROM live_support_leads
     WHERE seen_at IS NULL
   `);
@@ -1843,31 +1548,19 @@ async function getLiveSupportUnseenCount() {
 }
 
 async function markLiveSupportLeadsAsSeen() {
-  const database = await getDb();
-
-  const result = await database.run(`
+  const result = await execRun(sql`
     UPDATE live_support_leads
-    SET
-      seen_at = CURRENT_TIMESTAMP,
-      updated_at = CURRENT_TIMESTAMP
+    SET seen_at = now(), updated_at = now()
     WHERE seen_at IS NULL
   `);
 
-  return {
-    updatedCount: result.changes || 0,
-  };
+  return { updatedCount: result.changes || 0 };
 }
 
 async function clearLiveSupportLeads() {
-  const database = await getDb();
+  const result = await execRun(sql`DELETE FROM live_support_leads`);
 
-  const result = await database.run(`
-    DELETE FROM live_support_leads
-  `);
-
-  return {
-    deletedCount: result.changes || 0,
-  };
+  return { deletedCount: result.changes || 0 };
 }
 
 async function upsertManualMessageTestBusiness({
@@ -1876,8 +1569,6 @@ async function upsertManualMessageTestBusiness({
   district,
   phone = "905300448478",
 }) {
-  const database = await getDb();
-
   const normalizedCategory = String(category || "").trim();
   const normalizedCity = String(city || "").trim();
   const normalizedDistrict = String(district || "").trim();
@@ -1889,32 +1580,31 @@ async function upsertManualMessageTestBusiness({
   });
 
   if (!normalizedPhone) {
-    throw new Error("Manual message test business icin gecerli bir telefon gerekli.");
+    throw new Error(
+      "Manual message test business icin gecerli bir telefon gerekli."
+    );
   }
 
-  await database.run(
-    `
+  await execRun(
+    sql`
     INSERT INTO searches (search_key, category, city, district)
-    VALUES (?, ?, ?, ?)
+    VALUES (${searchKey}, ${normalizedCategory}, ${normalizedCity}, ${normalizedDistrict})
     ON CONFLICT(search_key) DO UPDATE SET
       category = excluded.category,
       city = excluded.city,
       district = excluded.district,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-    searchKey,
-    normalizedCategory,
-    normalizedCity,
-    normalizedDistrict
+      updated_at = now()
+    `
   );
 
-  const search = await database.get(
-    "SELECT id FROM searches WHERE search_key = ?",
-    searchKey
+  const search = await execGet(
+    sql`SELECT id FROM searches WHERE search_key = ${searchKey}`
   );
 
   if (!search?.id) {
-    throw new Error("Manual message test business icin search kaydi olusturulamadi.");
+    throw new Error(
+      "Manual message test business icin search kaydi olusturulamadi."
+    );
   }
 
   const externalId = `manual-test-${normalizedPhone}`;
@@ -1922,138 +1612,692 @@ async function upsertManualMessageTestBusiness({
   const address = "Kadıköy / İstanbul - Manuel mesaj test kaydı";
   const lastMessageText = "Bilgi almak istiyorum";
 
-  const existingBusiness = await database.get(
-    `
+  const existingBusiness = await execGet(
+    sql`
     SELECT id
     FROM businesses
-    WHERE external_id = ?
+    WHERE external_id = ${externalId}
     ORDER BY id DESC
     LIMIT 1
-    `,
-    externalId
+    `
   );
 
   let businessId = existingBusiness?.id || null;
 
   if (businessId) {
-    await database.run(
-      `
+    await execRun(
+      sql`
       UPDATE businesses
       SET
-        search_id = ?,
-        external_id = ?,
-        name = ?,
-        phone = ?,
-        address = ?,
+        search_id = ${search.id},
+        external_id = ${externalId},
+        name = ${businessName},
+        phone = ${normalizedPhone},
+        address = ${address},
         website = NULL,
         google_maps_url = NULL,
         rating = NULL,
         user_rating_count = 0,
         source = 'manual',
         status = 'pending',
-        category = ?,
-        city = ?,
-        district = ?,
+        category = ${normalizedCategory},
+        city = ${normalizedCity},
+        district = ${normalizedDistrict},
         lat = NULL,
         lng = NULL,
         whatsapp_status = 'replied',
         template_sent_at = NULL,
-        last_incoming_at = CURRENT_TIMESTAMP,
-        last_message_text = ?,
+        last_incoming_at = now(),
+        last_message_text = ${lastMessageText},
         last_whatsapp_message_id = NULL
-      WHERE id = ?
-      `,
-      search.id,
-      externalId,
-      businessName,
-      normalizedPhone,
-      address,
-      normalizedCategory,
-      normalizedCity,
-      normalizedDistrict,
-      lastMessageText,
-      businessId
+      WHERE id = ${businessId}
+      `
     );
   } else {
-    const insertResult = await database.run(
-      `
+    const insertResult = await execRun(
+      sql`
       INSERT INTO businesses (
-        search_id,
-        external_id,
-        name,
-        phone,
-        address,
-        website,
-        google_maps_url,
-        rating,
-        user_rating_count,
-        source,
-        status,
-        category,
-        city,
-        district,
-        lat,
-        lng,
-        whatsapp_status,
-        template_sent_at,
-        last_incoming_at,
-        last_message_text,
-        last_whatsapp_message_id
+        search_id, external_id, name, phone, address, website, google_maps_url,
+        rating, user_rating_count, source, status, category, city, district,
+        lat, lng, whatsapp_status, template_sent_at, last_incoming_at,
+        last_message_text, last_whatsapp_message_id
       )
-      VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 'manual', 'pending', ?, ?, ?, NULL, NULL, 'replied', NULL, CURRENT_TIMESTAMP, ?, NULL)
-      `,
-      search.id,
-      externalId,
-      businessName,
-      normalizedPhone,
-      address,
-      normalizedCategory,
-      normalizedCity,
-      normalizedDistrict,
-      lastMessageText
+      VALUES (
+        ${search.id}, ${externalId}, ${businessName}, ${normalizedPhone},
+        ${address}, NULL, NULL, NULL, 0, 'manual', 'pending',
+        ${normalizedCategory}, ${normalizedCity}, ${normalizedDistrict},
+        NULL, NULL, 'replied', NULL, now(), ${lastMessageText}, NULL
+      )
+      RETURNING id
+      `
     );
 
-    businessId = insertResult.lastID;
+    businessId = insertResult.rows[0]?.id;
   }
 
-  const row = await database.get(
-    `
+  const row = await execGet(
+    sql`
     SELECT
-      id,
-      external_id,
-      name,
-      phone,
-      address,
-      website,
-      google_maps_url,
-      rating,
-      user_rating_count,
-      source,
-      status,
-      category,
-      city,
-      district,
-      lat,
-      lng,
-      whatsapp_status,
-      template_sent_at,
-      last_incoming_at,
-      last_message_text,
-      last_whatsapp_message_id,
-      created_at
+      id, external_id, name, phone, address, website, google_maps_url, rating,
+      user_rating_count, source, status, category, city, district, lat, lng,
+      whatsapp_status, template_sent_at, last_incoming_at, last_message_text,
+      last_whatsapp_message_id, created_at
     FROM businesses
-    WHERE id = ?
-    `,
-    businessId
+    WHERE id = ${businessId}
+    `
   );
 
   return row ? mapBusinessRow(row) : null;
+}
+
+// ===========================================================================
+// CRM: işletme görüşmesi (interaction) + notlar + atanabilir kullanıcılar.
+// Görüşme: her işletme için tek, güncellenebilir kayıt (kanal + sonuç + personel).
+// Notlar: eklenebilir geçmiş (yazar + zaman). Hepsi tüm kullanıcılarca görünür.
+// ===========================================================================
+function mapInteractionRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    userId: row.user_id,
+    userFullName: row.user_full_name || null,
+    userUsername: row.user_username || null,
+    team: row.team || null,
+    channel: row.channel || null,
+    outcome: row.outcome || null,
+    note: row.note || null,
+    meetingAt: row.meeting_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+function mapNoteRow(row) {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    userId: row.user_id,
+    userFullName: row.user_full_name || null,
+    userUsername: row.user_username || null,
+    team: row.team || null,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+async function getUserTeam(userId) {
+  if (!userId) return null;
+  const u = await execGet(sql`SELECT team FROM users WHERE id = ${userId}`);
+  return u?.team || null;
+}
+
+async function getBusinessInteraction(businessId) {
+  const row = await execGet(
+    sql`
+    SELECT i.id, i.business_id, i.user_id, i.team, i.channel, i.outcome,
+           i.note, i.meeting_at, i.updated_at,
+           u.full_name AS user_full_name, u.username AS user_username
+    FROM interactions i
+    LEFT JOIN users u ON u.id = i.user_id
+    WHERE i.business_id = ${businessId}
+    ORDER BY i.id DESC
+    LIMIT 1
+    `
+  );
+
+  return mapInteractionRow(row);
+}
+
+// İşletmenin görüşme kaydını oluşturur/günceller (kanal + sonuç + iletişime
+// geçen personel). businesses.assigned_to da senkron tutulur.
+async function upsertBusinessInteraction({
+  businessId,
+  userId = null,
+  channel = null,
+  outcome = null,
+}) {
+  if (channel && !INTERACTION_CHANNELS.includes(channel)) {
+    const e = new Error("Geçersiz iletişim kanalı.");
+    e.statusCode = 400;
+    throw e;
+  }
+  if (outcome && !INTERACTION_OUTCOMES.includes(outcome)) {
+    const e = new Error("Geçersiz görüşme sonucu.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const team = await getUserTeam(userId);
+  const safeOutcome = outcome || "pending";
+
+  const existing = await execGet(
+    sql`SELECT id FROM interactions WHERE business_id = ${businessId} ORDER BY id DESC LIMIT 1`
+  );
+
+  if (existing) {
+    await execRun(
+      sql`
+      UPDATE interactions
+      SET user_id = ${userId}, team = ${team}, channel = ${channel},
+          outcome = ${safeOutcome}, updated_at = now()
+      WHERE id = ${existing.id}
+      `
+    );
+  } else {
+    await execRun(
+      sql`
+      INSERT INTO interactions (business_id, user_id, team, channel, outcome)
+      VALUES (${businessId}, ${userId}, ${team}, ${channel}, ${safeOutcome})
+      `
+    );
+  }
+
+  // İletişime geçen personeli işletmeye de ata (gelecekteki "bana atananlar" için).
+  if (userId) {
+    await execRun(
+      sql`UPDATE businesses SET assigned_to = ${userId} WHERE id = ${businessId}`
+    );
+  }
+
+  return getBusinessInteraction(businessId);
+}
+
+async function addBusinessNote({ businessId, userId = null, note }) {
+  const text = String(note || "").trim();
+  if (!text) {
+    const e = new Error("Not boş olamaz.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const team = await getUserTeam(userId);
+
+  const row = await execGet(
+    sql`
+    INSERT INTO business_notes (business_id, user_id, team, note)
+    VALUES (${businessId}, ${userId}, ${team}, ${text})
+    RETURNING id, business_id, user_id, team, note, created_at
+    `
+  );
+
+  const author = userId
+    ? await execGet(
+        sql`SELECT full_name, username FROM users WHERE id = ${userId}`
+      )
+    : null;
+
+  return mapNoteRow({
+    ...row,
+    user_full_name: author?.full_name,
+    user_username: author?.username,
+  });
+}
+
+// Mevcut bir notu düzenler. Yalnızca notu ekleyen kullanıcı veya admin değiştirebilir.
+async function updateBusinessNote({ noteId, note, actorId, actorRole }) {
+  const text = String(note || "").trim();
+  if (!text) {
+    const e = new Error("Not boş olamaz.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const existing = await execGet(
+    sql`SELECT id, user_id FROM business_notes WHERE id = ${noteId}`
+  );
+
+  if (!existing) {
+    const e = new Error("Not bulunamadı.");
+    e.statusCode = 404;
+    throw e;
+  }
+
+  if (actorRole !== "admin" && existing.user_id !== actorId) {
+    const e = new Error("Bu notu düzenleme yetkiniz yok.");
+    e.statusCode = 403;
+    throw e;
+  }
+
+  await execRun(
+    sql`UPDATE business_notes SET note = ${text} WHERE id = ${noteId}`
+  );
+
+  const row = await execGet(
+    sql`
+    SELECT n.id, n.business_id, n.user_id, n.team, n.note, n.created_at,
+           u.full_name AS user_full_name, u.username AS user_username
+    FROM business_notes n
+    LEFT JOIN users u ON u.id = n.user_id
+    WHERE n.id = ${noteId}
+    `
+  );
+
+  return mapNoteRow(row);
+}
+
+async function getBusinessNotes(businessId) {
+  const rows = await execAll(
+    sql`
+    SELECT n.id, n.business_id, n.user_id, n.team, n.note, n.created_at,
+           u.full_name AS user_full_name, u.username AS user_username
+    FROM business_notes n
+    LEFT JOIN users u ON u.id = n.user_id
+    WHERE n.business_id = ${businessId}
+    ORDER BY n.created_at DESC, n.id DESC
+    `
+  );
+
+  return rows.map(mapNoteRow);
+}
+
+// Birden çok işletme için görüşme + notları tek seferde getirir.
+// Döner: { [businessId]: { interaction, notes } }.
+async function getBusinessCrmBatch(businessIds) {
+  const ids = Array.from(
+    new Set((businessIds || []).map((id) => Number(id)).filter(Number.isInteger))
+  );
+
+  const map = {};
+  if (ids.length === 0) return map;
+  for (const id of ids) map[id] = { interaction: null, notes: [] };
+
+  const idList = sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `
+  );
+
+  const interactions = await execAll(
+    sql`
+    SELECT DISTINCT ON (i.business_id)
+      i.id, i.business_id, i.user_id, i.team, i.channel, i.outcome,
+      i.note, i.meeting_at, i.updated_at,
+      u.full_name AS user_full_name, u.username AS user_username
+    FROM interactions i
+    LEFT JOIN users u ON u.id = i.user_id
+    WHERE i.business_id IN (${idList})
+    ORDER BY i.business_id, i.id DESC
+    `
+  );
+
+  for (const row of interactions) {
+    if (map[row.business_id]) {
+      map[row.business_id].interaction = mapInteractionRow(row);
+    }
+  }
+
+  const notes = await execAll(
+    sql`
+    SELECT n.id, n.business_id, n.user_id, n.team, n.note, n.created_at,
+           u.full_name AS user_full_name, u.username AS user_username
+    FROM business_notes n
+    LEFT JOIN users u ON u.id = n.user_id
+    WHERE n.business_id IN (${idList})
+    ORDER BY n.created_at DESC, n.id DESC
+    `
+  );
+
+  for (const row of notes) {
+    if (map[row.business_id]) {
+      map[row.business_id].notes.push(mapNoteRow(row));
+    }
+  }
+
+  return map;
+}
+
+// Personelin sahadan manuel eklediği işletme. source='manual', addedManually=true,
+// createdBy/assignedTo = ekleyen kullanıcı. Görüşme (kanal/sonuç) ve not ayrı
+// fonksiyonlarla eklenir. Yeni işletmenin id'sini döndürür.
+async function createManualBusiness({
+  name,
+  phone = null,
+  email = null,
+  address = null,
+  city = null,
+  district = null,
+  category = null,
+  website = null,
+  socials = null,
+  createdBy = null,
+}) {
+  const normalizedName = String(name || "").trim();
+  if (!normalizedName) {
+    const e = new Error("İşletme adı zorunludur.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  const row = await execGet(
+    sql`
+    INSERT INTO businesses (
+      name, phone, email, address, city, district, category, website, socials,
+      source, status, added_manually, created_by, assigned_to
+    )
+    VALUES (
+      ${normalizedName}, ${phone || null}, ${email || null}, ${address || null},
+      ${city || null}, ${district || null}, ${category || null},
+      ${website || null}, ${socials || null}, 'manual', 'pending', true,
+      ${createdBy}, ${createdBy}
+    )
+    RETURNING id
+    `
+  );
+
+  return row.id;
+}
+
+// İletişime geçilen işletmeler: en az bir görüşme kaydı VEYA notu olan işletmeler.
+// Her biri için son görüşme (kanal/sonuç/personel) + notlar döner.
+//
+// Filtreler:
+//  - from/to (YYYY-MM-DD): aktivite tarihine göre aralık.
+//  - q: isim / adres / telefon / e-posta metin araması.
+//  - Filtre yoksa: son 24 saatteki aktiviteler (o günün verisi).
+// Aktivite zamanı = en son görüşme güncellemesi veya en son not (hangisi yeniyse).
+async function getContactedBusinesses({
+  from = null,
+  to = null,
+  q = null,
+  all = false,
+  userId = null,
+} = {}) {
+  const activityAt = sql`GREATEST(
+    COALESCE((SELECT MAX(i2.updated_at) FROM interactions i2 WHERE i2.business_id = b.id), '1970-01-01 00:00:00'::timestamp),
+    COALESCE((SELECT MAX(n2.created_at) FROM business_notes n2 WHERE n2.business_id = b.id), '1970-01-01 00:00:00'::timestamp)
+  )`;
+
+  // Belirli bir personele kısıtla (Durum Takip: "kendi işletmelerim").
+  const uInt = userId ? sql` AND i.user_id = ${userId}` : sql``;
+  const uNote = userId ? sql` AND n.user_id = ${userId}` : sql``;
+
+  const conditions = [
+    sql`(EXISTS (SELECT 1 FROM interactions i WHERE i.business_id = b.id${uInt})
+        OR EXISTS (SELECT 1 FROM business_notes n WHERE n.business_id = b.id${uNote}))`,
+  ];
+
+  const fromDate = from ? String(from).trim() : null;
+  const toDate = to ? String(to).trim() : null;
+
+  if (all) {
+    // Tüm zamanlar: tarih koşulu yok.
+  } else if (fromDate || toDate) {
+    const f = fromDate || toDate;
+    const t = toDate || fromDate;
+    conditions.push(
+      sql`(${activityAt})::date BETWEEN ${f}::date AND ${t}::date`
+    );
+  } else {
+    // Varsayılan: son 24 saat.
+    conditions.push(sql`${activityAt} >= (now() - interval '24 hours')::timestamp`);
+  }
+
+  const term = q ? String(q).trim() : "";
+  if (term) {
+    const like = `%${term}%`;
+    const digits = term.replace(/\D/g, "");
+    const phoneClause = digits
+      ? sql` OR ${normalizedBusinessPhoneSql()} LIKE ${"%" + digits + "%"}`
+      : sql``;
+    conditions.push(
+      sql`(b.name ILIKE ${like} OR b.address ILIKE ${like} OR b.phone ILIKE ${like} OR b.email ILIKE ${like}${phoneClause})`
+    );
+  }
+
+  const whereClause = sql.join(conditions, sql` AND `);
+
+  const businessRows = await execAll(
+    sql`
+    SELECT b.id, b.name, b.phone, b.email, b.socials, b.instagram, b.address,
+           b.city, b.district, b.category, b.website, b.google_maps_url,
+           ${activityAt} AS activity_at
+    FROM businesses b
+    WHERE ${whereClause}
+    ORDER BY activity_at DESC
+    `
+  );
+
+  if (businessRows.length === 0) return [];
+
+  const ids = businessRows.map((row) => row.id);
+  const crm = await getBusinessCrmBatch(ids);
+
+  return businessRows.map((b) => {
+    const data = crm[b.id] || { interaction: null, notes: [] };
+    return {
+      id: b.id,
+      name: b.name,
+      phone: b.phone,
+      email: b.email,
+      socials: b.socials || b.instagram || null,
+      address: b.address,
+      city: b.city,
+      district: b.district,
+      category: b.category,
+      website: b.website,
+      googleMapsUrl: b.google_maps_url,
+      activityAt: b.activity_at,
+      interaction: data.interaction,
+      notes: data.notes,
+    };
+  });
+}
+
+// Admin dashboard istatistikleri. Varsayılan pencere: son 24 saat ("bugün").
+// from/to verilirse o tarih aralığı. Görüşme sonucu (kanal/sonuç) son güncelleme
+// zamanına; notlar oluşturma zamanına göre sayılır.
+const KNOWN_OUTCOMES = ["record_taken", "to_meet", "follow_up", "rejected"];
+
+function emptyOutcomeCounts() {
+  return {
+    record_taken: 0,
+    to_meet: 0,
+    follow_up: 0,
+    rejected: 0,
+    other: 0,
+    total: 0,
+  };
+}
+
+function addOutcome(counts, outcome, n) {
+  const value = Number(n) || 0;
+  if (KNOWN_OUTCOMES.includes(outcome)) {
+    counts[outcome] += value;
+  } else {
+    counts.other += value;
+  }
+  counts.total += value;
+}
+
+async function getDashboardStats({ from = null, to = null, userId = null } = {}) {
+  const fromDate = from ? String(from).trim() : null;
+  const toDate = to ? String(to).trim() : null;
+  const useRange = Boolean(fromDate || toDate);
+  const f = fromDate || toDate;
+  const t = toDate || fromDate;
+
+  const cond = (col) =>
+    useRange
+      ? sql`(${col})::date BETWEEN ${f}::date AND ${t}::date`
+      : sql`${col} >= (now() - interval '24 hours')::timestamp`;
+
+  // Belirli bir personele kısıtla (Durum Takip için).
+  const userCond = (col) => (userId ? sql` AND ${col} = ${userId}` : sql``);
+
+  // Sonuç bazlı toplam
+  const outcomeRows = await execAll(
+    sql`
+    SELECT outcome, COUNT(*)::int AS count
+    FROM interactions
+    WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
+    GROUP BY outcome
+    `
+  );
+
+  const outcomes = emptyOutcomeCounts();
+  for (const row of outcomeRows) addOutcome(outcomes, row.outcome, row.count);
+
+  // Birim bazlı
+  const teamRows = await execAll(
+    sql`
+    SELECT COALESCE(team, '(birimsiz)') AS team, outcome, COUNT(*)::int AS count
+    FROM interactions
+    WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
+    GROUP BY COALESCE(team, '(birimsiz)'), outcome
+    `
+  );
+
+  const teamMap = new Map();
+  for (const row of teamRows) {
+    if (!teamMap.has(row.team)) {
+      teamMap.set(row.team, { team: row.team, ...emptyOutcomeCounts() });
+    }
+    addOutcome(teamMap.get(row.team), row.outcome, row.count);
+  }
+
+  // Personel bazlı
+  const personnelRows = await execAll(
+    sql`
+    SELECT i.user_id, u.full_name, u.username, i.team, i.outcome,
+           COUNT(*)::int AS count
+    FROM interactions i
+    LEFT JOIN users u ON u.id = i.user_id
+    WHERE ${cond(sql`i.updated_at`)}${userCond(sql`i.user_id`)}
+    GROUP BY i.user_id, u.full_name, u.username, i.team, i.outcome
+    `
+  );
+
+  const personnelMap = new Map();
+  for (const row of personnelRows) {
+    const key = String(row.user_id ?? "none");
+    if (!personnelMap.has(key)) {
+      personnelMap.set(key, {
+        userId: row.user_id,
+        fullName: row.full_name || null,
+        username: row.username || null,
+        team: row.team || null,
+        ...emptyOutcomeCounts(),
+      });
+    }
+    addOutcome(personnelMap.get(key), row.outcome, row.count);
+  }
+
+  // Kanal dağılımı
+  const channelRows = await execAll(
+    sql`
+    SELECT COALESCE(channel, 'other') AS channel, COUNT(*)::int AS count
+    FROM interactions
+    WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
+    GROUP BY COALESCE(channel, 'other')
+    `
+  );
+  const channels = { whatsapp: 0, call: 0, face_to_face: 0, other: 0, total: 0 };
+  for (const row of channelRows) {
+    const value = Number(row.count) || 0;
+    if (row.channel in channels) channels[row.channel] += value;
+    else channels.other += value;
+    channels.total += value;
+  }
+
+  // Notlar
+  const notesRow = await execGet(
+    sql`SELECT COUNT(*)::int AS count FROM business_notes WHERE ${cond(
+      sql`created_at`
+    )}${userCond(sql`user_id`)}`
+  );
+
+  // Son aktiviteler (görüşme güncellemeleri + notlar), zaman sırasıyla.
+  const recentInteractions = await execAll(
+    sql`
+    SELECT i.business_id, b.name AS business_name, i.outcome, i.channel, i.team,
+           i.updated_at AS at, u.full_name AS user_full_name, u.username AS user_username
+    FROM interactions i
+    JOIN businesses b ON b.id = i.business_id
+    LEFT JOIN users u ON u.id = i.user_id
+    WHERE ${cond(sql`i.updated_at`)}${userCond(sql`i.user_id`)}
+    ORDER BY i.updated_at DESC, i.id DESC
+    LIMIT 30
+    `
+  );
+  const recentNotes = await execAll(
+    sql`
+    SELECT n.business_id, b.name AS business_name, n.note, n.team,
+           n.created_at AS at, u.full_name AS user_full_name, u.username AS user_username
+    FROM business_notes n
+    JOIN businesses b ON b.id = n.business_id
+    LEFT JOIN users u ON u.id = n.user_id
+    WHERE ${cond(sql`n.created_at`)}${userCond(sql`n.user_id`)}
+    ORDER BY n.created_at DESC, n.id DESC
+    LIMIT 30
+    `
+  );
+
+  const recentActivity = [
+    ...recentInteractions.map((r) => ({
+      type: "interaction",
+      businessId: r.business_id,
+      businessName: r.business_name || null,
+      userName: r.user_full_name || r.user_username || null,
+      team: r.team || null,
+      outcome: r.outcome || null,
+      channel: r.channel || null,
+      note: null,
+      at: r.at,
+    })),
+    ...recentNotes.map((r) => ({
+      type: "note",
+      businessId: r.business_id,
+      businessName: r.business_name || null,
+      userName: r.user_full_name || r.user_username || null,
+      team: r.team || null,
+      outcome: null,
+      channel: null,
+      note: r.note,
+      at: r.at,
+    })),
+  ]
+    .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")))
+    .slice(0, 30);
+
+  const sortByTotal = (a, b) => b.total - a.total;
+
+  return {
+    range: useRange ? { from: f, to: t } : { window: "24h" },
+    outcomes,
+    channels,
+    totalContacted: outcomes.total,
+    totalNotes: Number(notesRow?.count || 0),
+    recentActivity,
+    byTeam: Array.from(teamMap.values()).sort(sortByTotal),
+    byPersonnel: Array.from(personnelMap.values()).sort(sortByTotal),
+  };
+}
+
+// Görüşme atamasında kullanılacak aktif kullanıcılar (tüm kullanıcılara açık,
+// minimal alanlar).
+async function listAssignableUsers() {
+  const rows = await execAll(
+    sql`
+    SELECT id, username, full_name, role, team
+    FROM users
+    WHERE is_active = true
+    ORDER BY full_name NULLS LAST, username ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    username: row.username,
+    fullName: row.full_name || null,
+    role: row.role || "personnel",
+    team: row.team || null,
+  }));
 }
 
 module.exports = {
   initDatabase,
   getCachedSearchResults,
   saveSearchResults,
+  mergeSearchResults,
   getSearchHistory,
   getSearchDetailsById,
   updateBusinessStatus,
@@ -2085,4 +2329,19 @@ module.exports = {
 
   authenticateUser,
   findUserByUsername,
+  getUserById,
+  listUsers,
+  createUser,
+  setUserPasswordByUsername,
+
+  getBusinessInteraction,
+  upsertBusinessInteraction,
+  addBusinessNote,
+  updateBusinessNote,
+  getBusinessNotes,
+  getBusinessCrmBatch,
+  getContactedBusinesses,
+  getDashboardStats,
+  createManualBusiness,
+  listAssignableUsers,
 };

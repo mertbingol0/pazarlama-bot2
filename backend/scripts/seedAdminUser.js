@@ -1,8 +1,10 @@
-const fs = require("fs");
-const path = require("path");
+// Yerel admin kullanıcısını oluşturur/günceller (PostgreSQL + Drizzle).
+require("dotenv").config();
+
 const crypto = require("crypto");
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
+const { sql } = require("drizzle-orm");
+const { getDb, getPool } = require("../dbClient");
+const { initDatabase } = require("../db");
 
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "jefedes1212";
@@ -10,57 +12,31 @@ const ADMIN_PASSWORD = "jefedes1212";
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
 
-  return {
-    hash,
-    salt,
-  };
+  return { hash, salt };
 }
 
 async function main() {
-  const dbPath = path.join(__dirname, "..", "data", "database.sqlite");
+  // Tabloların var olduğundan emin ol (migration uygula).
+  await initDatabase();
 
-  if (!fs.existsSync(dbPath)) {
-    throw new Error(`Local database bulunamadi: ${dbPath}`);
-  }
+  const { hash, salt } = hashPassword(ADMIN_PASSWORD);
 
-  const database = await open({
-    filename: dbPath,
-    driver: sqlite3.Database,
-  });
+  await getDb().execute(sql`
+    INSERT INTO users (username, password_hash, password_salt, full_name, role)
+    VALUES (${ADMIN_USERNAME}, ${hash}, ${salt}, 'Sistem Yöneticisi', 'admin')
+    ON CONFLICT(username) DO UPDATE SET
+      password_hash = excluded.password_hash,
+      password_salt = excluded.password_salt,
+      role = 'admin',
+      updated_at = now()
+  `);
 
-  try {
-    const usersTable = await database.get(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'"
-    );
+  console.log(`Local admin kullanicisi hazir: ${ADMIN_USERNAME}`);
 
-    if (!usersTable) {
-      throw new Error("users tablosu bulunamadi.");
-    }
-
-    const { hash, salt } = hashPassword(ADMIN_PASSWORD);
-
-    await database.run(
-      `
-      INSERT INTO users (username, password_hash, password_salt, role)
-      VALUES (?, ?, ?, 'admin')
-      ON CONFLICT(username) DO UPDATE SET
-        password_hash = excluded.password_hash,
-        password_salt = excluded.password_salt,
-        role = 'admin',
-        updated_at = CURRENT_TIMESTAMP
-      `,
-      ADMIN_USERNAME,
-      hash,
-      salt
-    );
-
-    console.log(`Local admin kullanicisi hazir: ${ADMIN_USERNAME}`);
-  } finally {
-    await database.close();
-  }
+  await getPool().end();
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error.message);
   process.exit(1);
 });

@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pazarlama-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pazarlama
+      POSTGRES_PASSWORD: pazarlama
+      POSTGRES_DB: pazarlama
+      # Saat dilimini UTC sabitle: created_at/updated_at değerleri UTC olarak saklanır.
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "5433:5432"
+    volumes:
+      - pazarlama_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pazarlama -d pazarlama"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pazarlama_pgdata:
