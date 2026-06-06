@@ -384,7 +384,7 @@ export function ListColumn({
     .join(" ");
 
   return (
-    <Card className="overflow-visible rounded-3xl bg-white shadow-sm">
+    <Card className="overflow-visible rounded-3xl bg-white">
       <CardHeader className="space-y-4 overflow-visible">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>

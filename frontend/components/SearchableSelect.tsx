@@ -72,7 +72,7 @@ export function SearchableSelect({
             disabled={disabled}
             role="combobox"
             aria-expanded={open}
-            className="h-12 w-full justify-between rounded-xl border border-slate-200 bg-white px-4 text-sm font-normal text-slate-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            className="h-12 w-full justify-between rounded-xl border border-slate-200 bg-white px-4 text-sm font-normal text-slate-800 transition hover:border-emerald-200 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
           >
             <span className="truncate">
               {selectedOption ? selectedOption.label : placeholder}

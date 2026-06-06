@@ -249,7 +249,7 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
         <Button
           type="button"
           onClick={() => setIsMessagePanelOpen(true)}
-          className="rounded-full bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
+          className="rounded-full bg-emerald-500 text-white hover:bg-emerald-600"
         >
           Mesaj Gönderim Paneli
           {selectedPhoneCount > 0 && (

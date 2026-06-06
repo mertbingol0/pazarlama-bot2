@@ -113,7 +113,7 @@ export function SocialChip({
       rel="noreferrer"
       title={meta.label}
       aria-label={meta.label}
-      className={`flex items-center justify-center text-white shadow-sm transition ${boxClass} ${meta.className}`}
+      className={`flex items-center justify-center text-white transition ${boxClass} ${meta.className}`}
     >
       <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" aria-hidden="true">
         {ICON_PATHS[provider]}

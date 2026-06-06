@@ -64,7 +64,7 @@ export function PageNavigation() {
 
   return (
     <nav className="flex items-center gap-2">
-      <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-sm">
+      <div className="flex items-center gap-1 rounded-full bg-white p-1">
         {navigationItems.map((item) => {
           const isActive = pathname === item.href;
           const showLiveSupportBadge =
@@ -78,14 +78,14 @@ export function PageNavigation() {
               href={item.href}
               className={`relative rounded-full px-5 py-2 text-sm font-medium transition ${
                 isActive
-                  ? "bg-slate-950 text-white shadow-sm"
+                  ? "bg-slate-950 text-white"
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
               <span>{item.label}</span>
 
               {showLiveSupportBadge && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-none text-white shadow-sm">
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-none text-white">
                   {unseenCount > 99 ? "99+" : unseenCount}
                 </span>
               )}
@@ -97,7 +97,7 @@ export function PageNavigation() {
       <button
         type="button"
         onClick={handleLogout}
-        className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-500 shadow-sm transition hover:text-red-600"
+        className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-500 transition hover:text-red-600"
       >
         Çıkış Yap
       </button>

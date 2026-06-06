@@ -279,7 +279,7 @@ export function AdminDashboard() {
                   className="text-left"
                 >
                   <Card
-                    className={`rounded-2xl bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                    className={`rounded-2xl bg-white transition hover:-translate-y-0.5 hover:shadow-md ${
                       isActive ? "ring-2 ring-slate-900/10" : ""
                     }`}
                   >
@@ -313,7 +313,7 @@ export function AdminDashboard() {
               const tone = OUTCOME_TONE[selectedOutcome] || OUTCOME_TONE.default;
               return (
                 <div
-                  className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm"
+                  className="mt-4 overflow-hidden rounded-2xl bg-white"
                 >
                   <div
                     className={`flex items-center justify-between px-4 py-3 ${tone.headBg}`}
@@ -357,7 +357,7 @@ export function AdminDashboard() {
                         return (
                           <li
                             key={b.id}
-                            className="rounded-xl bg-white p-3 shadow-sm transition hover:shadow-md"
+                            className="rounded-xl bg-white p-3 transition hover:shadow-md"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -454,7 +454,7 @@ export function AdminDashboard() {
 
           {/* Dağılım: sonuç çubuğu + kanal kırılımı */}
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <Card className="rounded-2xl bg-white shadow-sm">
+            <Card className="rounded-2xl bg-white">
               <CardContent className="p-4">
                 <h3 className="text-sm font-semibold text-slate-800">
                   Sonuç Dağılımı
@@ -506,7 +506,7 @@ export function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="rounded-2xl bg-white shadow-sm">
+            <Card className="rounded-2xl bg-white">
               <CardContent className="p-4">
                 <h3 className="text-sm font-semibold text-slate-800">
                   İletişim Kanalı
@@ -558,7 +558,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Son aktiviteler akışı */}
-          <Card className="mt-6 rounded-2xl bg-white shadow-sm">
+          <Card className="mt-6 rounded-2xl bg-white">
             <CardContent className="p-0">
               <div className="px-4 py-3">
                 <h3 className="text-sm font-semibold text-slate-800">
@@ -646,7 +646,7 @@ function SummaryCard({
   value: number | string;
 }) {
   return (
-    <Card className="rounded-2xl bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white">
       <CardContent className="flex items-center gap-3 p-5">
         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
           <Icon className="h-6 w-6" />
@@ -670,7 +670,7 @@ function BreakdownTable({
   rows: { label: string; sub: string | null; counts: OutcomeCounts }[];
 }) {
   return (
-    <Card className="rounded-2xl bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white">
       <CardContent className="p-0">
         <div className="px-4 py-3">
           <h3 className="text-sm font-semibold text-slate-800">{title}</h3>

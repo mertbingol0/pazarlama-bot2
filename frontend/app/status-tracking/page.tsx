@@ -170,7 +170,7 @@ function KpiCard({
 }) {
   const [, text, bg] = accent.split(" ");
   return (
-    <Card className="rounded-2xl bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white">
       <CardContent className="flex items-center justify-between p-4">
         <div>
           <p className="text-xs font-medium text-slate-500">{label}</p>
@@ -285,7 +285,7 @@ function PersonnelView({ period }: { period: Period }) {
             return (
               <li
                 key={b.id}
-                className="rounded-xl bg-white p-3 shadow-sm"
+                className="rounded-xl bg-white p-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -396,7 +396,7 @@ function PersonnelDashCard({ p }: { p: DashboardPersonnelRow }) {
   ];
 
   return (
-    <Card className="rounded-2xl bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white">
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
           <span

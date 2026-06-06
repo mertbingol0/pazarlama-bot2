@@ -9,7 +9,7 @@ export default function DataDeletionPage() {
           <div className="flex items-center justify-between">
             <Link
               href="/"
-              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:text-emerald-600"
+              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-emerald-600"
             >
               ←
             </Link>
@@ -40,7 +40,7 @@ export default function DataDeletionPage() {
           </div>
         </header>
 
-        <Card className="rounded-3xl bg-white shadow-sm">
+        <Card className="rounded-3xl bg-white">
           <CardContent className="space-y-8 p-6 leading-7 text-slate-600 md:p-8">
             <section>
               <h2 className="text-xl font-semibold text-slate-900">

@@ -533,7 +533,7 @@ export default function LiveSupportPage() {
                   result: event.target.value as LiveSupportResult,
                 })
               }
-              className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+              className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
               {RESULT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -556,7 +556,7 @@ export default function LiveSupportPage() {
                       assignedTo: event.target.value,
                     })
                   }
-                  className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 >
                   <option value="">Seçilmedi</option>
                   {PERSONNEL.map((person) => (
@@ -579,7 +579,7 @@ export default function LiveSupportPage() {
                       meetingAt: event.target.value,
                     })
                   }
-                  className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
             </>
@@ -595,7 +595,7 @@ export default function LiveSupportPage() {
             onChange={(event) => handleNoteChange(lead.id, event.target.value)}
             rows={3}
             placeholder="Bu numara için not ekle..."
-            className="mt-1 w-full flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+            className="mt-1 w-full flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
           />
 
           <Button
@@ -632,7 +632,7 @@ export default function LiveSupportPage() {
                     }`}
                   >
                     <div
-                      className={`max-w-[88%] rounded-2xl px-3 py-1.5 text-xs shadow-sm ${
+                      className={`max-w-[88%] rounded-2xl px-3 py-1.5 text-xs ${
                         isOutgoing
                           ? "bg-emerald-500 text-white"
                           : "bg-white text-slate-700"
@@ -695,7 +695,7 @@ export default function LiveSupportPage() {
         </header>
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
-          <Card className="rounded-3xl bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white">
             <CardContent className="p-6">
               <p className="text-sm text-slate-500">Toplam Talep</p>
               <p className="mt-3 text-3xl font-semibold text-slate-900">
@@ -704,7 +704,7 @@ export default function LiveSupportPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white">
             <CardContent className="p-6">
               <p className="text-sm text-slate-500">Yeni / Görülmemiş</p>
               <p className="mt-3 text-3xl font-semibold text-slate-900">
@@ -770,7 +770,7 @@ export default function LiveSupportPage() {
               return (
                 <Card
                   key={category.key}
-                  className="overflow-hidden rounded-3xl bg-white shadow-sm"
+                  className="overflow-hidden rounded-3xl bg-white"
                 >
                   <button
                     type="button"

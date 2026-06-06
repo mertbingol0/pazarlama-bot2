@@ -211,7 +211,7 @@ export default function ReportsPage() {
     return (
       <div
         key={String(record.id)}
-        className="rounded-2xl bg-white p-4 shadow-sm transition hover:shadow-md"
+        className="rounded-2xl bg-white p-4 transition hover:shadow-md"
       >
         <p className="break-words text-base font-semibold text-slate-900">
           {record.businessName || "İşletme eşleştirilemedi"}
@@ -304,7 +304,7 @@ export default function ReportsPage() {
           </div>
         </header>
 
-        <Card className="rounded-3xl bg-white shadow-sm">
+        <Card className="rounded-3xl bg-white">
           <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-wrap items-end gap-4">
               <div>
@@ -316,7 +316,7 @@ export default function ReportsPage() {
                   value={from}
                   max={to}
                   onChange={(event) => setFrom(event.target.value)}
-                  className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
@@ -329,7 +329,7 @@ export default function ReportsPage() {
                   value={to}
                   min={from}
                   onChange={(event) => setTo(event.target.value)}
-                  className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
@@ -367,7 +367,7 @@ export default function ReportsPage() {
               {COLUMNS.map((column) => (
                 <Card
                   key={column.key}
-                  className="rounded-3xl bg-white shadow-sm"
+                  className="rounded-3xl bg-white"
                 >
                   <CardContent className="p-5">
                     <p className="text-sm text-slate-500">{column.title}</p>
@@ -388,7 +388,7 @@ export default function ReportsPage() {
                 return (
                   <Card
                     key={column.key}
-                    className="rounded-3xl bg-white shadow-sm"
+                    className="rounded-3xl bg-white"
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">

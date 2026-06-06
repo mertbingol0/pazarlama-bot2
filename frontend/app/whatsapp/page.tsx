@@ -312,7 +312,7 @@ export default function WhatsAppPage() {
           </div>
         </header>
 
-        <div className="grid gap-0 overflow-hidden rounded-3xl bg-white shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)_17rem] lg:h-[calc(100vh-16rem)]">
+        <div className="grid gap-0 overflow-hidden rounded-3xl bg-white lg:grid-cols-[18rem_minmax(0,1fr)_17rem] lg:h-[calc(100vh-16rem)]">
           {/* Sol: sohbet listesi */}
           <aside className="flex flex-col">
             <div className="px-4 py-3 text-sm font-semibold text-slate-700">
@@ -401,7 +401,7 @@ export default function WhatsAppPage() {
                           }`}
                         >
                           <div
-                            className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                            className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
                               isOutgoing
                                 ? "bg-emerald-500 text-white"
                                 : "bg-white text-slate-700"
@@ -451,7 +451,7 @@ export default function WhatsAppPage() {
                     }}
                     rows={1}
                     placeholder="Mesaj yazın... (Enter ile gönder)"
-                    className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                   />
                   <Button
                     type="button"
@@ -489,7 +489,7 @@ export default function WhatsAppPage() {
                       setOutcomeResult(value);
                       void handleSaveOutcome(value, meetingAt);
                     }}
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                   >
                     {RESULT_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -509,7 +509,7 @@ export default function WhatsAppPage() {
                       setMeetingAt(value);
                       void handleSaveOutcome(outcomeResult, value);
                     }}
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                   />
 
                   <p className="mt-2 text-[11px] text-slate-400">

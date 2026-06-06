@@ -180,7 +180,7 @@ function ContactedCard({
 
   return (
     <div
-      className="rounded-2xl bg-white shadow-sm"
+      className="rounded-2xl bg-white"
     >
       <div className="flex items-start gap-2 p-4">
         <button
@@ -368,7 +368,7 @@ function ContactedCard({
                         </div>
                       )}
 
-                      <div className="flex gap-3 rounded-2xl bg-white p-3 shadow-sm">
+                      <div className="flex gap-3 rounded-2xl bg-white p-3">
                         <div
                           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor(
                             author
@@ -573,7 +573,7 @@ export default function ContactedBusinessesPage() {
         </header>
 
         {/* Filtre / canlı arama */}
-        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="mb-6 rounded-2xl bg-white p-4">
           <div className="grid items-end gap-3 md:grid-cols-[1fr_auto_auto_auto]">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-600">

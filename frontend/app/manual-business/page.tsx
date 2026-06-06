@@ -232,7 +232,7 @@ export default function ManualBusinessPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
           {/* İşletme bilgileri */}
-          <Card className="rounded-3xl bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle className="text-base font-semibold text-slate-900">
@@ -311,7 +311,7 @@ export default function ManualBusinessPage() {
           </Card>
 
           {/* Görüşme */}
-          <Card className="rounded-3xl bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold text-slate-900">
                 Görüşme

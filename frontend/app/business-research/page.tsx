@@ -253,7 +253,7 @@ export default function BusinessResearchPage() {
                       onClick={() => setMode("local")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                         mode === "local"
-                          ? "bg-white text-slate-900 shadow-sm"
+                          ? "bg-white text-slate-900"
                           : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
@@ -264,7 +264,7 @@ export default function BusinessResearchPage() {
                       onClick={() => setMode("fresh")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                         mode === "fresh"
-                          ? "bg-emerald-500 text-white shadow-sm"
+                          ? "bg-emerald-500 text-white"
                           : "text-slate-500 hover:text-slate-700"
                       }`}
                     >

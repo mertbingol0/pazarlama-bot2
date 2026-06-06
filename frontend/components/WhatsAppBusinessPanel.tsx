@@ -349,7 +349,7 @@ const handleSendMessage = async () => {
 };
 
   return (
-    <Card className="rounded-3xl bg-white shadow-sm">
+    <Card className="rounded-3xl bg-white">
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-4">
         <div>
           <CardTitle className="text-base font-semibold text-slate-800">
@@ -392,7 +392,7 @@ const handleSendMessage = async () => {
             <select
               value={templateName}
               onChange={(event) => setTemplateName(event.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
               <option value="jefedes_merhaba">
                 Jefedes Tanıtım Template&apos;i
@@ -491,7 +491,7 @@ const handleSendMessage = async () => {
               value={to}
               onChange={(event) => setTo(event.target.value)}
               placeholder="905313439734"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             />
 
             <p className="text-xs text-slate-400">
@@ -510,7 +510,7 @@ const handleSendMessage = async () => {
               rows={5}
               maxLength={1000}
               placeholder="Mesajınızı buraya yazın..."
-              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             />
 
             <div className="flex justify-end text-xs text-slate-400">

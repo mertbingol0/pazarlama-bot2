@@ -371,7 +371,7 @@ useEffect(() => {
             <div className="flex items-center gap-3">
               <Badge
                 variant="secondary"
-                className="rounded-full bg-white px-4 py-1.5 text-slate-600 shadow-sm"
+                className="rounded-full bg-white px-4 py-1.5 text-slate-600"
               >
                 {leads.length} kayıt
               </Badge>
@@ -392,7 +392,7 @@ useEffect(() => {
         </header>
 
         {errorMessage && (
-          <Card className="mb-6 rounded-3xl bg-red-50 shadow-sm">
+          <Card className="mb-6 rounded-3xl bg-red-50">
             <CardContent className="p-5 text-sm text-red-700">
               {errorMessage}
             </CardContent>
@@ -406,7 +406,7 @@ useEffect(() => {
               variant="outline"
               onClick={handleClearLeads}
               disabled={isClearing}
-              className="rounded-full border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-full border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
             >
               {isClearing ? "Temizleniyor..." : "Temizle"}
             </Button>
@@ -414,7 +414,7 @@ useEffect(() => {
         )}
 
         {isLoading ? (
-          <Card className="rounded-3xl bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white">
             <CardContent className="p-10 text-center">
               <p className="text-xl font-semibold text-slate-900">
                 Kayıtlar yükleniyor...
@@ -422,7 +422,7 @@ useEffect(() => {
             </CardContent>
           </Card>
         ) : leads.length === 0 ? (
-          <Card className="rounded-3xl bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white">
             <CardContent className="p-10 text-center">
               <p className="text-xl font-semibold text-slate-900">
                 Henüz kayıt yok
@@ -447,7 +447,7 @@ useEffect(() => {
                 return (
                   <Card
                     key={`${lead.businessId || lead.businessName}-${lead.value}`}
-                    className="rounded-3xl bg-white shadow-sm transition hover:shadow-md"
+                    className="rounded-3xl bg-white transition hover:shadow-md"
                   >
                     <CardContent className="p-5">
                       <div className="flex items-start justify-between gap-4">
@@ -481,7 +481,7 @@ useEffect(() => {
                               event.target.value as LeadStatus
                             )
                           }
-                          className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
+                          className={`h-8 min-w-[135px] rounded-xl border px-3 pr-7 text-xs font-medium outline-none transition focus:ring-2 focus:ring-emerald-100 ${getStatusClassName(
                             lead.status
                           )}`}
                         >
@@ -596,7 +596,7 @@ useEffect(() => {
                 type="button"
                 variant="outline"
                 onClick={() => downloadStoredLeadsAsCsv(leads, status)}
-                className="rounded-xl border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
+                className="rounded-xl border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               >
                 {status === "approved"
                   ? "Onaylananları CSV İndir"

@@ -262,7 +262,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
 
   return (
     <>
-      <Card className="rounded-3xl bg-white shadow-sm">
+      <Card className="rounded-3xl bg-white">
         <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
           <CardTitle className="text-base font-semibold text-slate-900">
             Haritada Sonuçlar
@@ -273,7 +273,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
             variant="outline"
             size="sm"
             onClick={() => setIsFullscreenOpen(true)}
-            className="rounded-xl border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
+            className="rounded-xl border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
           >
             Tam ekranda aç
           </Button>
