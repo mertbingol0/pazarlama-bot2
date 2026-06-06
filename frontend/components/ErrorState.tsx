@@ -6,7 +6,7 @@ type ErrorStateProps = {
 
 export function ErrorState({ message }: ErrorStateProps) {
   return (
-    <Card className="mt-6 border-red-200 bg-red-50">
+    <Card className="mt-6 bg-red-50">
       <CardContent className="p-6">
         <p className="font-semibold text-red-900">Bir hata oluştu</p>
 

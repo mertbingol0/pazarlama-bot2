@@ -180,7 +180,7 @@ function ContactedCard({
 
   return (
     <div
-      className={`rounded-2xl border border-slate-200 border-l-4 bg-white shadow-sm ${TONE[tone].strip}`}
+      className="rounded-2xl bg-white shadow-sm"
     >
       <div className="flex items-start gap-2 p-4">
         <button
@@ -277,7 +277,7 @@ function ContactedCard({
       </div>
 
       {isOpen && (
-        <div className="border-t border-slate-100 px-4 py-3">
+        <div className="px-4 py-3">
           {/* İletişim bilgileri */}
           <div className="grid gap-1 text-xs text-slate-500 sm:grid-cols-2">
             {business.address && <span>Adres: {business.address}</span>}
@@ -347,7 +347,7 @@ function ContactedCard({
             </div>
 
             {orderedNotes.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-400">
+              <p className="rounded-xl px-3 py-3 text-xs text-slate-400">
                 Bu işletme için henüz not eklenmemiş.
               </p>
             ) : (
@@ -368,7 +368,7 @@ function ContactedCard({
                         </div>
                       )}
 
-                      <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                      <div className="flex gap-3 rounded-2xl bg-white p-3 shadow-sm">
                         <div
                           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor(
                             author
@@ -573,7 +573,7 @@ export default function ContactedBusinessesPage() {
         </header>
 
         {/* Filtre / canlı arama */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
           <div className="grid items-end gap-3 md:grid-cols-[1fr_auto_auto_auto]">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-600">
@@ -651,11 +651,11 @@ export default function ContactedBusinessesPage() {
         {isLoading && businesses.length === 0 ? (
           <p className="text-sm text-slate-500">Yükleniyor...</p>
         ) : error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         ) : businesses.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          <div className="rounded-2xl bg-white p-6 text-sm text-slate-500">
             {isFiltered
               ? "Bu filtreyle eşleşen işletme bulunamadı."
               : "Bugün iletişime geçilen işletme yok. İşletme Araştırması sayfasından bir işletmeyle görüşme kaydedin."}

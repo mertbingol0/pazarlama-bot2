@@ -9,7 +9,7 @@ export default function TermsOfServicePage() {
           <div className="flex items-center justify-between">
             <Link
               href="/"
-              className="rounded-full border border-emerald-100 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:text-emerald-600"
+              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:text-emerald-600"
             >
               ←
             </Link>
@@ -41,7 +41,7 @@ export default function TermsOfServicePage() {
           </div>
         </header>
 
-        <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <Card className="rounded-3xl bg-white shadow-sm">
           <CardContent className="space-y-8 p-6 leading-7 text-slate-600 md:p-8">
             <section>
               <p className="text-sm text-slate-400">
@@ -290,7 +290,7 @@ export default function TermsOfServicePage() {
                 için bizimle iletişime geçebilirsiniz.
               </p>
 
-              <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
                 <p>
                   <span className="font-medium text-slate-800">
                     Proje adı:

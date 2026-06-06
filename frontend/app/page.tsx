@@ -94,7 +94,7 @@ export default function Home() {
             const Icon = link.icon;
             return (
               <Link key={link.href} href={link.href} className="group">
-                <Card className="h-full rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
+                <Card className="h-full rounded-3xl bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                   <CardContent className="flex h-full flex-col gap-3 p-5">
                     <div className="flex items-center justify-between">
                       <span

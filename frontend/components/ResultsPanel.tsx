@@ -219,12 +219,12 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
       </section>
 
       {results.fromCache ? (
-        <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+        <div className="mt-4 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-800">
           Bu sonuçlar yerel veritabanından getirildi (API kullanılmadı). Güncel
           veri için &quot;Yeni Sorgu&quot; seçeneğini kullanın.
         </div>
       ) : results.mode === "fresh" ? (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           Güncel veriler Google&apos;dan çekildi.{" "}
           {typeof results.addedCount === "number" && results.addedCount > 0
             ? `${results.addedCount} yeni işletme veritabanına eklendi.`
@@ -336,7 +336,7 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           }`}
           aria-label="Mesaj gönderim paneli"
         >
-          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+          <div className="flex items-center justify-between bg-white px-4 py-3">
             <h3 className="text-sm font-semibold text-slate-800">
               Manuel Mesaj Gönderimi
             </h3>

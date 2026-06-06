@@ -64,7 +64,7 @@ export function PageNavigation() {
 
   return (
     <nav className="flex items-center gap-2">
-      <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+      <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-sm">
         {navigationItems.map((item) => {
           const isActive = pathname === item.href;
           const showLiveSupportBadge =
@@ -97,7 +97,7 @@ export function PageNavigation() {
       <button
         type="button"
         onClick={handleLogout}
-        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-500 shadow-sm transition hover:border-red-200 hover:text-red-600"
+        className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-500 shadow-sm transition hover:text-red-600"
       >
         Çıkış Yap
       </button>

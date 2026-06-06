@@ -144,7 +144,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
   const renderMap = (heightClassName: string) => {
     if (!apiKey) {
       return (
-        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 px-6 text-center">
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl bg-amber-50 px-6 text-center">
           <div>
             <p className="text-sm font-semibold text-amber-800">
               Google Maps API key bulunamadı.
@@ -160,7 +160,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
 
     if (loadError) {
       return (
-        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-red-100 bg-red-50 px-6 text-center">
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl bg-red-50 px-6 text-center">
           <div>
             <p className="text-sm font-semibold text-red-700">
               Google Maps yüklenemedi.
@@ -177,7 +177,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
 
     if (!isLoaded) {
       return (
-        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 text-sm text-slate-500">
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-500">
           Harita yükleniyor...
         </div>
       );
@@ -185,7 +185,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
 
     if (mapBusinesses.length === 0) {
       return (
-        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 px-6 text-center">
+        <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl bg-slate-50 px-6 text-center">
           <div>
             <p className="text-sm font-semibold text-slate-700">
               Harita için konum verisi bulunamadı.
@@ -262,7 +262,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
 
   return (
     <>
-      <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-sm">
+      <Card className="rounded-3xl bg-white shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
           <CardTitle className="text-base font-semibold text-slate-900">
             Haritada Sonuçlar
@@ -285,7 +285,7 @@ export function ResultsMap({ businesses }: ResultsMapProps) {
       {isFullscreenOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 p-6 backdrop-blur-sm">
           <div className="mx-auto flex h-full max-w-7xl flex-col rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <div className="flex items-center justify-between px-6 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
                   Haritada Sonuçlar

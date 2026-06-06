@@ -42,25 +42,25 @@ const OUTCOME_CARDS: StatCardDef[] = [
     key: "record_taken",
     label: "Kayıt Alındı",
     icon: CheckCircle2,
-    classes: "border-l-emerald-500 text-emerald-600 bg-emerald-50",
+    classes: "text-emerald-600 bg-emerald-50",
   },
   {
     key: "to_meet",
     label: "Yüz Yüze Görüşülecek",
     icon: Handshake,
-    classes: "border-l-orange-500 text-orange-600 bg-orange-50",
+    classes: "text-orange-600 bg-orange-50",
   },
   {
     key: "follow_up",
     label: "Daha Sonra Görüşülecek",
     icon: CalendarClock,
-    classes: "border-l-yellow-400 text-yellow-600 bg-yellow-50",
+    classes: "text-yellow-600 bg-yellow-50",
   },
   {
     key: "rejected",
     label: "Reddedildi",
     icon: XCircle,
-    classes: "border-l-red-500 text-red-600 bg-red-50",
+    classes: "text-red-600 bg-red-50",
   },
 ];
 
@@ -88,38 +88,33 @@ const OUTCOME_DOT: Record<string, string> = {
 // Detay paneli için sonuç bazlı renk tonları.
 const OUTCOME_TONE: Record<
   string,
-  { border: string; headBg: string; headText: string; chip: string; dot: string }
+  { headBg: string; headText: string; chip: string; dot: string }
 > = {
   record_taken: {
-    border: "border-l-emerald-500",
     headBg: "bg-emerald-50",
     headText: "text-emerald-700",
     chip: "bg-emerald-100 text-emerald-700",
     dot: "bg-emerald-500",
   },
   to_meet: {
-    border: "border-l-orange-500",
     headBg: "bg-orange-50",
     headText: "text-orange-700",
     chip: "bg-orange-100 text-orange-700",
     dot: "bg-orange-500",
   },
   follow_up: {
-    border: "border-l-yellow-400",
     headBg: "bg-yellow-50",
     headText: "text-yellow-700",
     chip: "bg-yellow-100 text-yellow-700",
     dot: "bg-yellow-400",
   },
   rejected: {
-    border: "border-l-red-500",
     headBg: "bg-red-50",
     headText: "text-red-700",
     chip: "bg-red-100 text-red-700",
     dot: "bg-red-500",
   },
   default: {
-    border: "border-l-slate-300",
     headBg: "bg-slate-50",
     headText: "text-slate-700",
     chip: "bg-slate-100 text-slate-600",
@@ -258,7 +253,7 @@ export function AdminDashboard() {
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       ) : isLoading && !stats ? (
@@ -270,7 +265,7 @@ export function AdminDashboard() {
             {OUTCOME_CARDS.map((c) => {
               const Icon = c.icon;
               const value = o ? (o[c.key as keyof OutcomeCounts] as number) : 0;
-              const [borderClass, textClass, bgClass] = c.classes.split(" ");
+              const [textClass, bgClass] = c.classes.split(" ");
               const isActive = selectedOutcome === c.key;
               return (
                 <button
@@ -284,10 +279,8 @@ export function AdminDashboard() {
                   className="text-left"
                 >
                   <Card
-                    className={`rounded-2xl border border-l-4 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${borderClass} ${
-                      isActive
-                        ? "border-slate-300 ring-2 ring-slate-900/10"
-                        : "border-slate-200"
+                    className={`rounded-2xl bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                      isActive ? "ring-2 ring-slate-900/10" : ""
                     }`}
                   >
                     <CardContent className="flex items-center justify-between p-5">
@@ -320,7 +313,7 @@ export function AdminDashboard() {
               const tone = OUTCOME_TONE[selectedOutcome] || OUTCOME_TONE.default;
               return (
                 <div
-                  className={`mt-4 overflow-hidden rounded-2xl border ${tone.border} bg-white shadow-sm`}
+                  className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm"
                 >
                   <div
                     className={`flex items-center justify-between px-4 py-3 ${tone.headBg}`}
@@ -364,7 +357,7 @@ export function AdminDashboard() {
                         return (
                           <li
                             key={b.id}
-                            className={`rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm transition hover:shadow-md ${tone.border}`}
+                            className="rounded-xl bg-white p-3 shadow-sm transition hover:shadow-md"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -461,7 +454,7 @@ export function AdminDashboard() {
 
           {/* Dağılım: sonuç çubuğu + kanal kırılımı */}
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Card className="rounded-2xl bg-white shadow-sm">
               <CardContent className="p-4">
                 <h3 className="text-sm font-semibold text-slate-800">
                   Sonuç Dağılımı
@@ -513,7 +506,7 @@ export function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Card className="rounded-2xl bg-white shadow-sm">
               <CardContent className="p-4">
                 <h3 className="text-sm font-semibold text-slate-800">
                   İletişim Kanalı
@@ -525,7 +518,7 @@ export function AdminDashboard() {
                     return (
                       <div
                         key={ch.key}
-                        className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center"
+                        className="rounded-xl bg-slate-50 p-3 text-center"
                       >
                         <p className="text-2xl font-bold text-slate-900">{v}</p>
                         <p className="text-xs font-medium text-slate-500">
@@ -565,9 +558,9 @@ export function AdminDashboard() {
           </div>
 
           {/* Son aktiviteler akışı */}
-          <Card className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <Card className="mt-6 rounded-2xl bg-white shadow-sm">
             <CardContent className="p-0">
-              <div className="border-b border-slate-100 px-4 py-3">
+              <div className="px-4 py-3">
                 <h3 className="text-sm font-semibold text-slate-800">
                   Son Aktiviteler
                 </h3>
@@ -653,7 +646,7 @@ function SummaryCard({
   value: number | string;
 }) {
   return (
-    <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white shadow-sm">
       <CardContent className="flex items-center gap-3 p-5">
         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
           <Icon className="h-6 w-6" />
@@ -677,9 +670,9 @@ function BreakdownTable({
   rows: { label: string; sub: string | null; counts: OutcomeCounts }[];
 }) {
   return (
-    <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white shadow-sm">
       <CardContent className="p-0">
-        <div className="border-b border-slate-100 px-4 py-3">
+        <div className="px-4 py-3">
           <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
         </div>
         {rows.length === 0 ? (

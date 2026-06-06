@@ -232,7 +232,7 @@ export default function BusinessResearchPage() {
           </div>
         </header>
 
-        <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
+        <Card className="rounded-3xl bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
           <CardHeader className="pb-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -247,7 +247,7 @@ export default function BusinessResearchPage() {
 
                 {/* Sorgu modu: Yerel (cache-first) / Yeni sorgu (API + merge) */}
                 <div className="mt-3">
-                  <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                  <div className="inline-flex items-center gap-1 rounded-xl bg-slate-50 p-1">
                     <button
                       type="button"
                       onClick={() => setMode("local")}

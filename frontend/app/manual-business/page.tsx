@@ -232,7 +232,7 @@ export default function ManualBusinessPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
           {/* İşletme bilgileri */}
-          <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white shadow-sm">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle className="text-base font-semibold text-slate-900">
@@ -311,7 +311,7 @@ export default function ManualBusinessPage() {
           </Card>
 
           {/* Görüşme */}
-          <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold text-slate-900">
                 Görüşme
@@ -398,12 +398,12 @@ export default function ManualBusinessPage() {
           </Card>
 
           {submitError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
               {submitError}
             </div>
           )}
           {successMessage && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
               <span>{successMessage}</span>
               <Link
                 href="/contacted-businesses"

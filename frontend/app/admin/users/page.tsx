@@ -207,7 +207,7 @@ export default function AdminUsersPage() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
           {/* Kullanıcı ekleme formu */}
-          <Card className="h-fit rounded-3xl border border-emerald-100/80 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
+          <Card className="h-fit rounded-3xl bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold text-slate-900">
                 Kullanıcı Ekle
@@ -343,12 +343,12 @@ export default function AdminUsersPage() {
                 )}
 
                 {submitError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                  <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                     {submitError}
                   </div>
                 )}
                 {successMessage && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                  <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
                     {successMessage}
                   </div>
                 )}
@@ -365,7 +365,7 @@ export default function AdminUsersPage() {
           </Card>
 
           {/* Mevcut kullanıcılar */}
-          <Card className="rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.25)]">
+          <Card className="rounded-3xl bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.25)]">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold text-slate-900">
                 Kullanıcılar{" "}
@@ -377,13 +377,13 @@ export default function AdminUsersPage() {
 
             <CardContent>
               {usersError ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                   {usersError}
                 </div>
               ) : users.length === 0 ? (
                 <p className="text-sm text-slate-500">Henüz kullanıcı yok.</p>
               ) : (
-                <div className="overflow-hidden rounded-xl border border-slate-100">
+                <div className="overflow-hidden rounded-xl">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>

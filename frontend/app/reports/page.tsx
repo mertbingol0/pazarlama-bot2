@@ -211,14 +211,14 @@ export default function ReportsPage() {
     return (
       <div
         key={String(record.id)}
-        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+        className="rounded-2xl bg-white p-4 shadow-sm transition hover:shadow-md"
       >
         <p className="break-words text-base font-semibold text-slate-900">
           {record.businessName || "İşletme eşleştirilemedi"}
         </p>
 
         {record.phone && (
-          <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-emerald-50 px-3 py-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
               Telefon
             </span>
@@ -304,7 +304,7 @@ export default function ReportsPage() {
           </div>
         </header>
 
-        <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <Card className="rounded-3xl bg-white shadow-sm">
           <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-wrap items-end gap-4">
               <div>
@@ -356,7 +356,7 @@ export default function ReportsPage() {
         </Card>
 
         {errorMessage && (
-          <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+          <p className="mt-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
             {errorMessage}
           </p>
         )}
@@ -367,7 +367,7 @@ export default function ReportsPage() {
               {COLUMNS.map((column) => (
                 <Card
                   key={column.key}
-                  className="rounded-3xl border border-slate-200 bg-white shadow-sm"
+                  className="rounded-3xl bg-white shadow-sm"
                 >
                   <CardContent className="p-5">
                     <p className="text-sm text-slate-500">{column.title}</p>
@@ -388,7 +388,7 @@ export default function ReportsPage() {
                 return (
                   <Card
                     key={column.key}
-                    className="rounded-3xl border border-slate-200 bg-white shadow-sm"
+                    className="rounded-3xl bg-white shadow-sm"
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">

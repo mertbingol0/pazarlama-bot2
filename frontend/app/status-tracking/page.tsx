@@ -53,12 +53,6 @@ const OUTCOME_TONE: Record<string, string> = {
   rejected: "bg-red-500",
 };
 
-const OUTCOME_BORDER: Record<string, string> = {
-  record_taken: "border-l-emerald-500",
-  to_meet: "border-l-orange-500",
-  follow_up: "border-l-yellow-400",
-  rejected: "border-l-red-500",
-};
 
 const AVATAR_COLORS = [
   "bg-emerald-500",
@@ -132,7 +126,7 @@ export default function StatusTrackingPage() {
                   : "Kendi görüşmeleriniz ve işletmeleriniz."}
               </p>
             </div>
-            <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+            <div className="inline-flex items-center gap-1 rounded-xl bg-white p-1">
               {(["month", "all"] as Period[]).map((p) => (
                 <button
                   key={p}
@@ -174,9 +168,9 @@ function KpiCard({
   value: number;
   accent: string;
 }) {
-  const [border, text, bg] = accent.split(" ");
+  const [, text, bg] = accent.split(" ");
   return (
-    <Card className={`rounded-2xl border border-slate-200 border-l-4 bg-white shadow-sm ${border}`}>
+    <Card className="rounded-2xl bg-white shadow-sm">
       <CardContent className="flex items-center justify-between p-4">
         <div>
           <p className="text-xs font-medium text-slate-500">{label}</p>
@@ -221,7 +215,7 @@ function PersonnelView({ period }: { period: Period }) {
 
   if (error)
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
         {error}
       </div>
     );
@@ -278,7 +272,7 @@ function PersonnelView({ period }: { period: Period }) {
         </span>
       </h2>
       {businesses.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+        <div className="rounded-2xl bg-white p-6 text-sm text-slate-500">
           Bu dönemde görüştüğünüz işletme yok.
         </div>
       ) : (
@@ -291,10 +285,7 @@ function PersonnelView({ period }: { period: Period }) {
             return (
               <li
                 key={b.id}
-                className={`rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm ${
-                  (i?.outcome && OUTCOME_BORDER[i.outcome]) ||
-                  "border-l-slate-300"
-                }`}
+                className="rounded-xl bg-white p-3 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -369,7 +360,7 @@ function AdminView({ period }: { period: Period }) {
 
   if (error)
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
         {error}
       </div>
     );
@@ -380,7 +371,7 @@ function AdminView({ period }: { period: Period }) {
 
   if (personnel.length === 0)
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+      <div className="rounded-2xl bg-white p-6 text-sm text-slate-500">
         Bu dönemde personel aktivitesi yok.
       </div>
     );
@@ -405,7 +396,7 @@ function PersonnelDashCard({ p }: { p: DashboardPersonnelRow }) {
   ];
 
   return (
-    <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <Card className="rounded-2xl bg-white shadow-sm">
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
           <span

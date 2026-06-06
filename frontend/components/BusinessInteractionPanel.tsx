@@ -166,7 +166,7 @@ export function BusinessInteractionPanel({
   };
 
   return (
-    <div className="border-b border-slate-200 bg-slate-50/60 px-4 py-4">
+    <div className="bg-slate-50/60 px-4 py-4">
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Kanal */}
         <div className="flex flex-col gap-1.5">
@@ -273,7 +273,7 @@ export function BusinessInteractionPanel({
             {notes.map((note) => (
               <li
                 key={note.id}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+                className="rounded-xl bg-white px-3 py-2"
               >
                 {editingNoteId === note.id ? (
                   <div className="flex flex-col gap-2">

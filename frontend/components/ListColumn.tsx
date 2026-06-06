@@ -384,7 +384,7 @@ export function ListColumn({
     .join(" ");
 
   return (
-    <Card className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <Card className="overflow-visible rounded-3xl bg-white shadow-sm">
       <CardHeader className="space-y-4 overflow-visible">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -499,7 +499,7 @@ export function ListColumn({
             </button>
 
             {isWhatsappFilterOpen && (
-              <div className="absolute right-0 top-8 z-50 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70">
+              <div className="absolute right-0 top-8 z-50 w-60 rounded-2xl bg-white p-2 shadow-xl shadow-slate-200/70">
                 {whatsappStatusFilters.map((filter) => {
                   const isActive = whatsappStatusFilter === filter.value;
 
@@ -536,17 +536,17 @@ export function ListColumn({
               Sonuç bulunamadı.
             </p>
           ) : (
-            <div className="min-w-[34rem] border-t border-slate-200">
+            <div className="min-w-[34rem]">
               {/* Tablo başlığı */}
               <div
-                className="grid border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                className="grid bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
                 style={{ gridTemplateColumns }}
               >
                 {showSelectCol && (
-                  <div className="border-r border-slate-100 px-3 py-2" />
+                  <div className="px-3 py-2" />
                 )}
-                <div className="border-r border-slate-100 px-3 py-2">Firma</div>
-                <div className="border-r border-slate-100 px-3 py-2">
+                <div className="px-3 py-2">Firma</div>
+                <div className="px-3 py-2">
                   {valueHeader}
                 </div>
                 <div className="px-3 py-2">Aksiyon</div>
@@ -603,13 +603,13 @@ export function ListColumn({
                 return (
                   <Fragment key={itemKey}>
                   <div
-                    className={`grid items-start border-b border-slate-200 transition ${
+                    className={`grid items-start transition ${
                       isSelected ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/60"
                     }`}
                     style={{ gridTemplateColumns }}
                   >
                     {showSelectCol && (
-                      <div className="border-r border-slate-100 p-3">
+                      <div className="p-3">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -626,7 +626,7 @@ export function ListColumn({
                     )}
 
                     {/* Firma */}
-                    <div className="min-w-0 border-r border-slate-100 p-3">
+                    <div className="min-w-0 p-3">
                       <div className="flex items-start gap-2">
                         {canInteract && (
                           <button
@@ -707,7 +707,7 @@ export function ListColumn({
                     </div>
 
                     {/* Değer (numara / mail / sosyal) */}
-                    <div className="min-w-0 border-r border-slate-100 p-3">
+                    <div className="min-w-0 p-3">
                       {type === "instagram" ? (
                         <div className="flex flex-wrap gap-2">
                           {(item.socialLinks && item.socialLinks.length > 0

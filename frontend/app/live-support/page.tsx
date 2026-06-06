@@ -442,17 +442,17 @@ export default function LiveSupportPage() {
     return (
       <div
         key={leadId}
-        className={`${GRID_COLS} border-b border-slate-200 transition ${
+        className={`${GRID_COLS} transition ${
           isNewLead ? "bg-amber-50/50" : "bg-white hover:bg-slate-50/60"
         }`}
       >
         {/* 1) İşletme bilgisi */}
-        <div className="min-w-0 border-r border-slate-100 p-3">
+        <div className="min-w-0 p-3">
           <p className="break-words text-base font-semibold text-slate-900">
             {lead.businessName || "İşletme eşleştirilemedi"}
           </p>
 
-          <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5">
+          <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-emerald-50 px-3 py-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
               Telefon
             </span>
@@ -523,7 +523,7 @@ export default function LiveSupportPage() {
         </div>
 
         {/* 2) Sonuç · personel · görüşme tarihi */}
-        <div className="space-y-3 border-r border-slate-100 p-3">
+        <div className="space-y-3 p-3">
           <div>
             <label className="text-xs font-medium text-slate-400">Sonuç</label>
             <select
@@ -587,7 +587,7 @@ export default function LiveSupportPage() {
         </div>
 
         {/* 3) Not */}
-        <div className="flex flex-col border-r border-slate-100 p-3">
+        <div className="flex flex-col p-3">
           <label className="text-xs font-medium text-slate-400">Not</label>
 
           <textarea
@@ -635,7 +635,7 @@ export default function LiveSupportPage() {
                       className={`max-w-[88%] rounded-2xl px-3 py-1.5 text-xs shadow-sm ${
                         isOutgoing
                           ? "bg-emerald-500 text-white"
-                          : "border border-slate-200 bg-white text-slate-700"
+                          : "bg-white text-slate-700"
                       }`}
                     >
                       <p className="whitespace-pre-wrap break-words">
@@ -695,7 +695,7 @@ export default function LiveSupportPage() {
         </header>
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
-          <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white shadow-sm">
             <CardContent className="p-6">
               <p className="text-sm text-slate-500">Toplam Talep</p>
               <p className="mt-3 text-3xl font-semibold text-slate-900">
@@ -704,7 +704,7 @@ export default function LiveSupportPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white shadow-sm">
             <CardContent className="p-6">
               <p className="text-sm text-slate-500">Yeni / Görülmemiş</p>
               <p className="mt-3 text-3xl font-semibold text-slate-900">
@@ -717,13 +717,13 @@ export default function LiveSupportPage() {
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             {!isLoading && successMessage && (
-              <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+              <p className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
                 {successMessage}
               </p>
             )}
 
             {!isLoading && errorMessage && (
-              <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">
+              <p className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700">
                 {errorMessage}
               </p>
             )}
@@ -770,7 +770,7 @@ export default function LiveSupportPage() {
               return (
                 <Card
                   key={category.key}
-                  className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+                  className="overflow-hidden rounded-3xl bg-white shadow-sm"
                 >
                   <button
                     type="button"
@@ -815,7 +815,7 @@ export default function LiveSupportPage() {
                   </button>
 
                   {isOpen && (
-                    <div className="border-t border-slate-100">
+                    <div>
                       {categoryLeads.length === 0 ? (
                         <p className="m-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
                           Bu kategoride kayıt yok.
@@ -825,15 +825,15 @@ export default function LiveSupportPage() {
                           <div className="min-w-[64rem]">
                             {/* Tablo başlığı */}
                             <div
-                              className={`${GRID_COLS} border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500`}
+                              className={`${GRID_COLS} bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500`}
                             >
-                              <div className="border-r border-slate-100 px-3 py-2">
+                              <div className="px-3 py-2">
                                 İşletme Bilgisi
                               </div>
-                              <div className="border-r border-slate-100 px-3 py-2">
+                              <div className="px-3 py-2">
                                 Sonuç & Atama
                               </div>
-                              <div className="border-r border-slate-100 px-3 py-2">
+                              <div className="px-3 py-2">
                                 Not
                               </div>
                               <div className="px-3 py-2">Son Konuşma</div>

@@ -312,10 +312,10 @@ export default function WhatsAppPage() {
           </div>
         </header>
 
-        <div className="grid gap-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)_17rem] lg:h-[calc(100vh-16rem)]">
+        <div className="grid gap-0 overflow-hidden rounded-3xl bg-white shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)_17rem] lg:h-[calc(100vh-16rem)]">
           {/* Sol: sohbet listesi */}
-          <aside className="flex flex-col border-b border-slate-100 lg:border-b-0 lg:border-r">
-            <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+          <aside className="flex flex-col">
+            <div className="px-4 py-3 text-sm font-semibold text-slate-700">
               Sohbetler ({conversations.length})
             </div>
 
@@ -333,7 +333,7 @@ export default function WhatsAppPage() {
                       key={conversation.contactKey}
                       type="button"
                       onClick={() => handleSelect(conversation.phone)}
-                      className={`flex w-full items-start justify-between gap-2 border-b border-slate-50 px-4 py-3 text-left transition ${
+                      className={`flex w-full items-start justify-between gap-2 px-4 py-3 text-left transition ${
                         isActive ? "bg-emerald-50" : "hover:bg-slate-50"
                       }`}
                     >
@@ -374,7 +374,7 @@ export default function WhatsAppPage() {
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="flex items-center justify-between gap-3 px-5 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-800">
                       {business?.name ||
@@ -404,7 +404,7 @@ export default function WhatsAppPage() {
                             className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                               isOutgoing
                                 ? "bg-emerald-500 text-white"
-                                : "border border-slate-200 bg-white text-slate-700"
+                                : "bg-white text-slate-700"
                             }`}
                           >
                             <p className="whitespace-pre-wrap break-words">
@@ -426,7 +426,7 @@ export default function WhatsAppPage() {
                 </div>
 
                 {!canSendFreeText && (
-                  <div className="border-t border-amber-100 bg-amber-50 px-5 py-2 text-xs text-amber-700">
+                  <div className="bg-amber-50 px-5 py-2 text-xs text-amber-700">
                     24 saatlik mesajlaşma penceresi kapalı. Serbest metin Meta
                     tarafından reddedilebilir; bu durumda onaylı template
                     gerekir.
@@ -434,12 +434,12 @@ export default function WhatsAppPage() {
                 )}
 
                 {errorMessage && (
-                  <div className="border-t border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
+                  <div className="bg-red-50 px-5 py-2 text-xs text-red-700">
                     {errorMessage}
                   </div>
                 )}
 
-                <div className="flex items-end gap-2 border-t border-slate-100 p-3">
+                <div className="flex items-end gap-2 p-3">
                   <textarea
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
@@ -467,7 +467,7 @@ export default function WhatsAppPage() {
           </section>
 
           {/* En sağ: talep durumu + işletme detayları (ince panel) */}
-          <aside className="flex flex-col border-t border-slate-100 lg:border-l lg:border-t-0">
+          <aside className="flex flex-col">
             {!selectedPhone ? (
               <div className="flex flex-1 items-center justify-center p-4 text-xs text-slate-400">
                 Detaylar
@@ -520,7 +520,7 @@ export default function WhatsAppPage() {
                 </div>
 
                 {business && (
-                  <div className="space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                  <div className="space-y-1 pt-3 text-xs text-slate-500">
                     <p className="font-semibold text-slate-600">İşletme</p>
                     <p>Kaynak: {formatSource(business.source)}</p>
                     {business.category && <p>Kategori: {business.category}</p>}

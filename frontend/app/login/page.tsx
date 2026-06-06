@@ -85,7 +85,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <Card className="rounded-3xl border border-emerald-100/80 bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
+        <Card className="rounded-3xl bg-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)]">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold text-slate-900">
               Hesabınıza giriş yapın
@@ -135,7 +135,7 @@ export default function LoginPage() {
               </div>
 
               {errorMessage && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                   {errorMessage}
                 </div>
               )}

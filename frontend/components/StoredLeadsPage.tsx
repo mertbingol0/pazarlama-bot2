@@ -371,7 +371,7 @@ useEffect(() => {
             <div className="flex items-center gap-3">
               <Badge
                 variant="secondary"
-                className="rounded-full border border-emerald-100 bg-white px-4 py-1.5 text-slate-600 shadow-sm"
+                className="rounded-full bg-white px-4 py-1.5 text-slate-600 shadow-sm"
               >
                 {leads.length} kayıt
               </Badge>
@@ -392,7 +392,7 @@ useEffect(() => {
         </header>
 
         {errorMessage && (
-          <Card className="mb-6 rounded-3xl border border-red-100 bg-red-50 shadow-sm">
+          <Card className="mb-6 rounded-3xl bg-red-50 shadow-sm">
             <CardContent className="p-5 text-sm text-red-700">
               {errorMessage}
             </CardContent>
@@ -414,7 +414,7 @@ useEffect(() => {
         )}
 
         {isLoading ? (
-          <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white shadow-sm">
             <CardContent className="p-10 text-center">
               <p className="text-xl font-semibold text-slate-900">
                 Kayıtlar yükleniyor...
@@ -422,7 +422,7 @@ useEffect(() => {
             </CardContent>
           </Card>
         ) : leads.length === 0 ? (
-          <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-3xl bg-white shadow-sm">
             <CardContent className="p-10 text-center">
               <p className="text-xl font-semibold text-slate-900">
                 Henüz kayıt yok
@@ -447,7 +447,7 @@ useEffect(() => {
                 return (
                   <Card
                     key={`${lead.businessId || lead.businessName}-${lead.value}`}
-                    className="rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+                    className="rounded-3xl bg-white shadow-sm transition hover:shadow-md"
                   >
                     <CardContent className="p-5">
                       <div className="flex items-start justify-between gap-4">
