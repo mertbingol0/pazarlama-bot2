@@ -38,6 +38,22 @@ const ts = (name) =>
 // ===========================================================================
 // users — admin ve birim personelleri.
 // ===========================================================================
+// ===========================================================================
+// teams — birimler (yönetilebilir). Kullanıcıların team alanı code'a referans verir.
+// ===========================================================================
+const teams = pgTable(
+  "teams",
+  {
+    id: serial("id").primaryKey(),
+    code: text("code").notNull().unique(),
+    label: text("label").notNull(),
+    createdAt: ts("created_at").defaultNow(),
+  },
+  (table) => ({
+    codeIdx: uniqueIndex("idx_teams_code").on(table.code),
+  })
+);
+
 const users = pgTable(
   "users",
   {
@@ -281,6 +297,8 @@ const businessNotes = pgTable(
       onDelete: "set null",
     }),
     team: text("team"),
+    // Hangi birim sütununa ait: 'wp' | 'saha' | 'cagri' | 'admin'.
+    category: text("category"),
     note: text("note").notNull(),
     createdAt: ts("created_at").defaultNow(),
   },
@@ -458,6 +476,7 @@ const activityLogRelations = relations(activityLog, ({ one }) => ({
 
 module.exports = {
   // tablolar
+  teams,
   users,
   searches,
   businesses,

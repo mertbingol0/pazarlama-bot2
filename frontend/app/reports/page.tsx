@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { API_BASE_URL, readJsonResponse } from "@/lib/api";
-import { PageNavigation } from "@/components/PageNavigation";
 import { SocialChip } from "@/components/contact-icons";
 
 import { Button } from "@/components/ui/button";
@@ -288,7 +287,6 @@ export default function ReportsPage() {
               </span>
             </Link>
 
-            <PageNavigation />
           </div>
 
           <div className="mx-auto mt-8 max-w-3xl text-center">

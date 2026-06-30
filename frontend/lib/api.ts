@@ -65,7 +65,15 @@ type WhatsAppTestMessageResponse = BackendErrorResponse & {
 };
 
 export type UserRole = "admin" | "personnel";
-export type Team = "saha_pazarlama" | "reklam_pazarlama" | "cagri_merkezi";
+// Birimler artık panelden yönetilir; code serbest bir slug'dır.
+export type Team = string;
+
+export type TeamItem = {
+  id: number;
+  code: string;
+  label: string;
+  createdAt?: string | null;
+};
 
 export type LoginUser = {
   id: number;
@@ -87,16 +95,84 @@ type LoginResponse = BackendErrorResponse & {
   user: LoginUser;
 };
 
-// Birim (team) etiketleri — UI'da gösterim için.
-export const TEAM_LABELS: Record<Team, string> = {
+// Birim (team) etiketleri — UI gösterimi için dinamik önbellek.
+// Varsayılanlar başlangıç değeri; getTeams() ile güncellenir (applyTeams).
+export const TEAM_LABELS: Record<string, string> = {
   saha_pazarlama: "Saha Pazarlama",
   reklam_pazarlama: "Reklam Pazarlama",
   cagri_merkezi: "Çağrı Merkezi",
 };
 
-export const TEAM_OPTIONS: { value: Team; label: string }[] = (
-  Object.keys(TEAM_LABELS) as Team[]
+export const TEAM_OPTIONS: { value: Team; label: string }[] = Object.keys(
+  TEAM_LABELS
 ).map((value) => ({ value, label: TEAM_LABELS[value] }));
+
+// Sunucudan gelen birimleri etiket önbelleğine işle (uygulama geneli gösterim).
+export function applyTeams(teams: TeamItem[]) {
+  for (const t of teams) TEAM_LABELS[t.code] = t.label;
+}
+
+export async function getTeams(): Promise<TeamItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/teams`, {
+    headers: authHeaders(),
+  });
+  const data = await readJsonResponse<
+    BackendErrorResponse & { success: boolean; teams: TeamItem[] }
+  >(response);
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Birimler getirilemedi.");
+  }
+  applyTeams(data.teams || []);
+  return data.teams || [];
+}
+
+export async function createTeam(label: string): Promise<TeamItem> {
+  const response = await fetch(`${API_BASE_URL}/api/teams`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ label }),
+  });
+  const data = await readJsonResponse<
+    BackendErrorResponse & { success: boolean; team: TeamItem }
+  >(response);
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Birim oluşturulamadı.");
+  }
+  applyTeams([data.team]);
+  return data.team;
+}
+
+export async function updateTeam(
+  id: number,
+  label: string
+): Promise<TeamItem> {
+  const response = await fetch(`${API_BASE_URL}/api/teams/${id}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ label }),
+  });
+  const data = await readJsonResponse<
+    BackendErrorResponse & { success: boolean; team: TeamItem }
+  >(response);
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Birim güncellenemedi.");
+  }
+  applyTeams([data.team]);
+  return data.team;
+}
+
+export async function deleteTeam(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/teams/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  const data = await readJsonResponse<BackendErrorResponse & { success: boolean }>(
+    response
+  );
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Birim silinemedi.");
+  }
+}
 
 export async function loginUser({
   username,
@@ -310,6 +386,8 @@ export type BusinessInteraction = {
   updatedAt: string | null;
 };
 
+export type NoteCategory = "wp" | "saha" | "cagri" | "admin";
+
 export type BusinessNote = {
   id: number;
   businessId: number;
@@ -317,6 +395,7 @@ export type BusinessNote = {
   userFullName: string | null;
   userUsername: string | null;
   team: Team | null;
+  category: NoteCategory;
   note: string;
   createdAt: string;
 };
@@ -599,6 +678,7 @@ export type ContactedBusiness = {
   category: string | null;
   website: string | null;
   googleMapsUrl: string | null;
+  status: LeadStatus;
   activityAt?: string | null;
   interaction: BusinessInteraction | null;
   notes: BusinessNote[];
@@ -638,14 +718,15 @@ export async function getContactedBusinesses(
 
 export async function addBusinessNote(
   businessId: number | string,
-  note: string
+  note: string,
+  category?: NoteCategory
 ): Promise<BusinessNote> {
   const response = await fetch(
     `${API_BASE_URL}/api/businesses/${businessId}/notes`,
     {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ note }),
+      body: JSON.stringify({ note, category }),
     }
   );
   const data = await readJsonResponse<
@@ -754,9 +835,7 @@ export async function updateBusinessStatus(
     `${API_BASE_URL}/api/businesses/${businessId}/status`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         status,
       }),

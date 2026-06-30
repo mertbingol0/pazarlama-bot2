@@ -11,7 +11,6 @@ import {
   StickyNote,
 } from "lucide-react";
 
-import { PageNavigation } from "@/components/PageNavigation";
 import { loadAuth } from "@/lib/auth-storage";
 import {
   getMyStats,
@@ -112,7 +111,6 @@ export default function StatusTrackingPage() {
                 Lead Flow
               </span>
             </Link>
-            <PageNavigation />
           </div>
 
           <div className="mt-8 flex flex-wrap items-end justify-between gap-3">

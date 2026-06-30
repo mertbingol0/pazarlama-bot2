@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 import { Footer } from "@/components/Footer";
 import { Sidebar } from "@/components/Sidebar";
+import { getTeams } from "@/lib/api";
+import { loadAuth } from "@/lib/auth-storage";
 
 // Sidebar gösterilmeyen (giriş / yasal) sayfalar.
 const PUBLIC_PATHS = [
@@ -24,6 +27,11 @@ function isPublicPath(pathname: string | null) {
 // Panel sayfalarında sol sidebar + içerik; public sayfalarda sade düzen.
 export function PanelChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Birim etiketlerini önbelleğe al (uygulama geneli gösterim için).
+  useEffect(() => {
+    if (loadAuth()?.token) void getTeams().catch(() => {});
+  }, [pathname]);
 
   if (isPublicPath(pathname)) {
     return (

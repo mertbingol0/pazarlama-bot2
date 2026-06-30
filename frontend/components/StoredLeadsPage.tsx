@@ -11,8 +11,8 @@ import {
 } from "@/lib/lead-status-storage";
 
 import { API_BASE_URL, getBusinessesByStatus } from "@/lib/api";
+import { loadAuth } from "@/lib/auth-storage";
 
-import { PageNavigation } from "@/components/PageNavigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -179,10 +179,12 @@ async function updateBackendBusinessStatus(
   businessId: string | number,
   nextStatus: LeadStatus
 ) {
+  const token = loadAuth()?.token;
   const response = await fetch(`${API_BASE_URL}/api/businesses/${businessId}/status`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
       status: nextStatus,
@@ -376,7 +378,6 @@ useEffect(() => {
                 {leads.length} kayıt
               </Badge>
 
-              <PageNavigation />
             </div>
           </div>
 

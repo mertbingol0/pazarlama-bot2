@@ -10,7 +10,6 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 
-import { PageNavigation } from "@/components/PageNavigation";
 import { AdminDashboard } from "@/components/AdminDashboard";
 import { loadAuth } from "@/lib/auth-storage";
 import { Card, CardContent } from "@/components/ui/card";
@@ -72,7 +71,6 @@ export default function Home() {
               </span>
             </Link>
 
-            <PageNavigation />
           </div>
 
           <div className="mt-10">

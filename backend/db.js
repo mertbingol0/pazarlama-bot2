@@ -186,8 +186,118 @@ async function initDatabase() {
   });
 
   await seedDefaultAdminUser();
+  await seedDefaultTeams();
 
   console.log("PostgreSQL database hazır.");
+}
+
+// Varsayılan birimleri (idempotent) ekle. Yeni birimler panelden yönetilir.
+async function seedDefaultTeams() {
+  const defaults = [
+    ["saha_pazarlama", "Saha Pazarlama"],
+    ["reklam_pazarlama", "Reklam Pazarlama"],
+    ["cagri_merkezi", "Çağrı Merkezi"],
+  ];
+  for (const [code, label] of defaults) {
+    await execRun(
+      sql`INSERT INTO teams (code, label) VALUES (${code}, ${label})
+          ON CONFLICT (code) DO NOTHING`
+    );
+  }
+}
+
+async function listTeams() {
+  const rows = await execAll(
+    sql`SELECT id, code, label, created_at FROM teams ORDER BY label`
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    label: r.label,
+    createdAt: r.created_at,
+  }));
+}
+
+async function teamExists(code) {
+  if (!code) return false;
+  const row = await execGet(sql`SELECT 1 FROM teams WHERE code = ${code}`);
+  return !!row;
+}
+
+// Etiketten code (slug) üret.
+function slugifyTeam(label) {
+  return String(label || "")
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ı", "i").replaceAll("ğ", "g").replaceAll("ü", "u")
+    .replaceAll("ş", "s").replaceAll("ö", "o").replaceAll("ç", "c")
+    .replaceAll("İ", "i")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+async function createTeam({ label }) {
+  const name = String(label || "").trim();
+  if (!name) {
+    const e = new Error("Birim adı boş olamaz.");
+    e.statusCode = 400;
+    throw e;
+  }
+  const code = slugifyTeam(name);
+  if (!code) {
+    const e = new Error("Geçerli bir birim adı girin.");
+    e.statusCode = 400;
+    throw e;
+  }
+  if (await teamExists(code)) {
+    const e = new Error("Bu birim zaten mevcut.");
+    e.statusCode = 409;
+    throw e;
+  }
+  const row = await execGet(
+    sql`INSERT INTO teams (code, label) VALUES (${code}, ${name})
+        RETURNING id, code, label, created_at`
+  );
+  return { id: row.id, code: row.code, label: row.label, createdAt: row.created_at };
+}
+
+async function updateTeam(id, { label }) {
+  const name = String(label || "").trim();
+  if (!name) {
+    const e = new Error("Birim adı boş olamaz.");
+    e.statusCode = 400;
+    throw e;
+  }
+  const row = await execGet(
+    sql`UPDATE teams SET label = ${name} WHERE id = ${id}
+        RETURNING id, code, label, created_at`
+  );
+  if (!row) {
+    const e = new Error("Birim bulunamadı.");
+    e.statusCode = 404;
+    throw e;
+  }
+  return { id: row.id, code: row.code, label: row.label, createdAt: row.created_at };
+}
+
+async function deleteTeam(id) {
+  const team = await execGet(sql`SELECT code FROM teams WHERE id = ${id}`);
+  if (!team) {
+    const e = new Error("Birim bulunamadı.");
+    e.statusCode = 404;
+    throw e;
+  }
+  const inUse = await execGet(
+    sql`SELECT 1 FROM users WHERE team = ${team.code} LIMIT 1`
+  );
+  if (inUse) {
+    const e = new Error(
+      "Bu birime atanmış kullanıcılar var. Önce kullanıcıların birimini değiştirin."
+    );
+    e.statusCode = 409;
+    throw e;
+  }
+  await execRun(sql`DELETE FROM teams WHERE id = ${id}`);
+  return { id };
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -361,7 +471,7 @@ async function createUser({
   if (role === "admin") {
     normalizedTeam = null;
   } else {
-    if (!normalizedTeam || !TEAMS.includes(normalizedTeam)) {
+    if (!normalizedTeam || !(await teamExists(normalizedTeam))) {
       const err = new Error("Personel için geçerli bir birim seçilmelidir.");
       err.statusCode = 400;
       throw err;
@@ -465,7 +575,7 @@ async function updateUser(userId, patch = {}) {
 
   if (finalRole === "admin") {
     finalTeam = null;
-  } else if (!finalTeam || !TEAMS.includes(finalTeam)) {
+  } else if (!finalTeam || !(await teamExists(finalTeam))) {
     const err = new Error("Personel için geçerli bir birim seçilmelidir.");
     err.statusCode = 400;
     throw err;
@@ -1837,6 +1947,15 @@ function mapInteractionRow(row) {
   };
 }
 
+// Eski (category'siz) notlar için team'den sütun türet.
+function deriveNoteCategory(row) {
+  if (row.category) return row.category;
+  if (row.team === "saha_pazarlama") return "saha";
+  if (row.team === "cagri_merkezi") return "cagri";
+  // ponytail: kalan eski notlar saha sütununa düşer (yerel veri az).
+  return "saha";
+}
+
 function mapNoteRow(row) {
   return {
     id: row.id,
@@ -1845,6 +1964,7 @@ function mapNoteRow(row) {
     userFullName: row.user_full_name || null,
     userUsername: row.user_username || null,
     team: row.team || null,
+    category: deriveNoteCategory(row),
     note: row.note,
     createdAt: row.created_at,
   };
@@ -1927,10 +2047,17 @@ async function upsertBusinessInteraction({
   return getBusinessInteraction(businessId);
 }
 
-async function addBusinessNote({ businessId, userId = null, note }) {
+const NOTE_CATEGORIES = ["wp", "saha", "cagri", "admin"];
+
+async function addBusinessNote({ businessId, userId = null, note, category = "saha" }) {
   const text = String(note || "").trim();
   if (!text) {
     const e = new Error("Not boş olamaz.");
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!NOTE_CATEGORIES.includes(category)) {
+    const e = new Error("Geçersiz not sütunu.");
     e.statusCode = 400;
     throw e;
   }
@@ -1939,9 +2066,9 @@ async function addBusinessNote({ businessId, userId = null, note }) {
 
   const row = await execGet(
     sql`
-    INSERT INTO business_notes (business_id, user_id, team, note)
-    VALUES (${businessId}, ${userId}, ${team}, ${text})
-    RETURNING id, business_id, user_id, team, note, created_at
+    INSERT INTO business_notes (business_id, user_id, team, category, note)
+    VALUES (${businessId}, ${userId}, ${team}, ${category}, ${text})
+    RETURNING id, business_id, user_id, team, category, note, created_at
     `
   );
 
@@ -1989,7 +2116,7 @@ async function updateBusinessNote({ noteId, note, actorId, actorRole }) {
 
   const row = await execGet(
     sql`
-    SELECT n.id, n.business_id, n.user_id, n.team, n.note, n.created_at,
+    SELECT n.id, n.business_id, n.user_id, n.team, n.category, n.note, n.created_at,
            u.full_name AS user_full_name, u.username AS user_username
     FROM business_notes n
     LEFT JOIN users u ON u.id = n.user_id
@@ -2003,7 +2130,7 @@ async function updateBusinessNote({ noteId, note, actorId, actorRole }) {
 async function getBusinessNotes(businessId) {
   const rows = await execAll(
     sql`
-    SELECT n.id, n.business_id, n.user_id, n.team, n.note, n.created_at,
+    SELECT n.id, n.business_id, n.user_id, n.team, n.category, n.note, n.created_at,
            u.full_name AS user_full_name, u.username AS user_username
     FROM business_notes n
     LEFT JOIN users u ON u.id = n.user_id
@@ -2052,7 +2179,7 @@ async function getBusinessCrmBatch(businessIds) {
 
   const notes = await execAll(
     sql`
-    SELECT n.id, n.business_id, n.user_id, n.team, n.note, n.created_at,
+    SELECT n.id, n.business_id, n.user_id, n.team, n.category, n.note, n.created_at,
            u.full_name AS user_full_name, u.username AS user_username
     FROM business_notes n
     LEFT JOIN users u ON u.id = n.user_id
@@ -2173,9 +2300,13 @@ async function getContactedBusinesses({
   const businessRows = await execAll(
     sql`
     SELECT b.id, b.name, b.phone, b.email, b.socials, b.instagram, b.address,
-           b.city, b.district, b.category, b.website, b.google_maps_url,
+           COALESCE(b.city, s.city) AS city,
+           COALESCE(b.district, s.district) AS district,
+           COALESCE(b.category, s.category) AS category,
+           b.website, b.google_maps_url, b.status,
            ${activityAt} AS activity_at
     FROM businesses b
+    LEFT JOIN searches s ON s.id = b.search_id
     WHERE ${whereClause}
     ORDER BY activity_at DESC
     `
@@ -2200,6 +2331,7 @@ async function getContactedBusinesses({
       category: b.category,
       website: b.website,
       googleMapsUrl: b.google_maps_url,
+      status: b.status || "pending",
       activityAt: b.activity_at,
       interaction: data.interaction,
       notes: data.notes,
@@ -2459,6 +2591,10 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  listTeams,
+  createTeam,
+  updateTeam,
+  deleteTeam,
   setUserPasswordByUsername,
 
   getBusinessInteraction,

@@ -11,7 +11,6 @@ import { ErrorState } from "@/components/ErrorState";
 import { SearchForm } from "@/components/SearchForm";
 import { LoadingState } from "@/components/LoadingState";
 import { ResultsPanel } from "@/components/ResultsPanel";
-import { PageNavigation } from "@/components/PageNavigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -216,7 +215,6 @@ export default function BusinessResearchPage() {
               </span>
             </Link>
 
-            <PageNavigation />
           </div>
 
           <div className="mx-auto mt-8 max-w-3xl text-center">

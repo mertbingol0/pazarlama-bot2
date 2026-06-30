@@ -49,6 +49,10 @@ const {
   createUser,
   updateUser,
   deleteUser,
+  listTeams,
+  createTeam,
+  updateTeam,
+  deleteTeam,
 
   upsertBusinessInteraction,
   addBusinessNote,
@@ -199,7 +203,7 @@ app.get("/api/searches/:id", async (req, res) => {
   }
 });
 
-app.patch("/api/businesses/:id/status", async (req, res) => {
+app.patch("/api/businesses/:id/status", requireAdmin, async (req, res) => {
   try {
     const businessId = Number(req.params.id);
     const status = String(req.body.status || "")
@@ -1800,8 +1804,95 @@ const createUserSchema = z.object({
   role: z.enum(USER_ROLES).default("personnel"),
   team: z.preprocess(
     (value) => (value === "" || value === null ? undefined : value),
-    z.enum(TEAMS).optional()
+    z.string().optional()
   ),
+});
+
+// ===========================================================================
+// Birim (team) yönetimi — listeleme herkese, CUD yalnızca admin.
+// ===========================================================================
+const teamSchema = z.object({
+  label: z.string().trim().min(2, "Birim adı en az 2 karakter olmalıdır.").max(60),
+});
+
+app.get("/api/teams", requireAuth, async (_req, res) => {
+  try {
+    const teams = await listTeams();
+    return res.status(200).json({ success: true, teams });
+  } catch (error) {
+    console.error("/api/teams GET hata:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Birimler getirilemedi." });
+  }
+});
+
+app.post("/api/teams", requireAdmin, async (req, res) => {
+  try {
+    const parsed = teamSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+      });
+    }
+    const team = await createTeam({ label: parsed.data.label });
+    return res.status(201).json({ success: true, team });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error("/api/teams POST hata:", error);
+    return res.status(status).json({
+      success: false,
+      message: status >= 500 ? "Birim oluşturulamadı." : error.message,
+    });
+  }
+});
+
+app.patch("/api/teams/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçerli bir birim ID gönderin." });
+    }
+    const parsed = teamSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+      });
+    }
+    const team = await updateTeam(id, { label: parsed.data.label });
+    return res.status(200).json({ success: true, team });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error("/api/teams PATCH hata:", error);
+    return res.status(status).json({
+      success: false,
+      message: status >= 500 ? "Birim güncellenemedi." : error.message,
+    });
+  }
+});
+
+app.delete("/api/teams/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçerli bir birim ID gönderin." });
+    }
+    await deleteTeam(id);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error("/api/teams DELETE hata:", error);
+    return res.status(status).json({
+      success: false,
+      message: status >= 500 ? "Birim silinemedi." : error.message,
+    });
+  }
 });
 
 // Admin: yeni kullanıcı oluşturur (birimiyle birlikte).
@@ -1892,7 +1983,7 @@ const updateUserSchema = z
     role: z.enum(USER_ROLES).optional(),
     team: z.preprocess(
       (value) => (value === "" ? null : value),
-      z.union([z.enum(TEAMS), z.null()]).optional()
+      z.union([z.string(), z.null()]).optional()
     ),
     isActive: z.boolean().optional(),
   })
@@ -2309,7 +2400,18 @@ app.put("/api/businesses/:id/interaction", requireAuth, async (req, res) => {
 
 const noteSchema = z.object({
   note: z.string().trim().min(1, "Not boş olamaz.").max(2000),
+  category: z.enum(["wp", "saha", "cagri", "admin"]).optional(),
 });
+
+// Kullanıcının yazabileceği not sütunu (birim). WP herkese açık (sohbetten gelir),
+// diğer sütunlara yalnızca ilgili birim/admin yazabilir.
+function allowedNoteCategory(user, requested) {
+  if (requested === "wp") return "wp";
+  if (user.role === "admin") return "admin";
+  if (user.team === "saha_pazarlama") return "saha";
+  if (user.team === "cagri_merkezi") return "cagri";
+  return null;
+}
 
 // İşletmeye not ekle (yazar = mevcut kullanıcı).
 app.post("/api/businesses/:id/notes", requireAuth, async (req, res) => {
@@ -2329,10 +2431,19 @@ app.post("/api/businesses/:id/notes", requireAuth, async (req, res) => {
       });
     }
 
+    const category = allowedNoteCategory(req.user, parsed.data.category);
+    if (!category) {
+      return res.status(403).json({
+        success: false,
+        message: "Bu sütuna not ekleme yetkiniz yok.",
+      });
+    }
+
     const note = await addBusinessNote({
       businessId,
       userId: req.user.id,
       note: parsed.data.note,
+      category,
     });
 
     return res.status(201).json({ success: true, note });
