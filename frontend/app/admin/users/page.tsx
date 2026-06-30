@@ -11,14 +11,26 @@ import { PageNavigation } from "@/components/PageNavigation";
 import { loadAuth } from "@/lib/auth-storage";
 import {
   createUser,
+  deleteUser,
   getUsers,
   TEAM_LABELS,
   TEAM_OPTIONS,
+  updateUser,
   type PanelUser,
+  type Team,
+  type UserRole,
 } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -64,11 +76,35 @@ export default function AdminUsersPage() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   const [users, setUsers] = useState<PanelUser[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [editingUser, setEditingUser] = useState<PanelUser | null>(null);
+  const [deletingUser, setDeletingUser] = useState<PanelUser | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [editForm, setEditForm] = useState<{
+    username: string;
+    fullName: string;
+    password: string;
+    role: UserRole;
+    team: Team | "";
+    isActive: boolean;
+  }>({
+    username: "",
+    fullName: "",
+    password: "",
+    role: "personnel",
+    team: "",
+    isActive: true,
+  });
 
   const {
     register,
@@ -103,6 +139,7 @@ export default function AdminUsersPage() {
       return;
     }
     setIsAdmin(true);
+    setCurrentUserId(auth.user.id);
     setAuthChecked(true);
   }, [router]);
 
@@ -126,6 +163,89 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (role === "admin") setValue("team", "");
   }, [role, setValue]);
+
+  const openEditDialog = (user: PanelUser) => {
+    setEditError(null);
+    setEditingUser(user);
+    setEditForm({
+      username: user.username,
+      fullName: user.fullName || "",
+      password: "",
+      role: user.role,
+      team: (user.team || "") as Team | "",
+      isActive: user.isActive !== false,
+    });
+  };
+
+  const closeEditDialog = () => {
+    setEditingUser(null);
+    setEditError(null);
+  };
+
+  const handleEditSave = async () => {
+    if (!editingUser) return;
+    setEditError(null);
+
+    const trimmedUsername = editForm.username.trim();
+    if (trimmedUsername.length < 3) {
+      setEditError("Kullanıcı adı en az 3 karakter olmalıdır.");
+      return;
+    }
+    if (editForm.role === "personnel" && !editForm.team) {
+      setEditError("Personel için bir birim seçilmelidir.");
+      return;
+    }
+    if (editForm.password && editForm.password.length < 6) {
+      setEditError("Şifre en az 6 karakter olmalıdır.");
+      return;
+    }
+
+    const payload = {
+      username: trimmedUsername,
+      fullName: editForm.fullName.trim() || null,
+      role: editForm.role,
+      team:
+        editForm.role === "personnel" ? (editForm.team as Team) : null,
+      isActive: editForm.isActive,
+      ...(editForm.password ? { password: editForm.password } : {}),
+    };
+
+    setIsSavingEdit(true);
+    try {
+      await updateUser(editingUser.id, payload);
+      setSuccessMessage(`"${trimmedUsername}" kullanıcısı güncellendi.`);
+      closeEditDialog();
+      void refreshUsers();
+    } catch (error) {
+      setEditError(
+        error instanceof Error
+          ? error.message
+          : "Kullanıcı güncellenirken bir hata oluştu."
+      );
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingUser) return;
+    setDeleteError(null);
+    setIsDeleting(true);
+    try {
+      await deleteUser(deletingUser.id);
+      setSuccessMessage(`"${deletingUser.username}" kullanıcısı silindi.`);
+      setDeletingUser(null);
+      void refreshUsers();
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error
+          ? error.message
+          : "Kullanıcı silinirken bir hata oluştu."
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
@@ -391,55 +511,90 @@ export default function AdminUsersPage() {
                         <th className="px-4 py-2.5 font-medium">Rol</th>
                         <th className="px-4 py-2.5 font-medium">Birim</th>
                         <th className="px-4 py-2.5 font-medium">Durum</th>
+                        <th className="px-4 py-2.5 text-right font-medium">İşlemler</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {users.map((user) => (
-                        <tr key={user.id} className="hover:bg-slate-50/60">
-                          <td className="px-4 py-2.5">
-                            <div className="font-medium text-slate-900">
-                              {user.username}
-                            </div>
-                            {user.fullName && (
-                              <div className="text-xs text-slate-400">
-                                {user.fullName}
+                      {users.map((user) => {
+                        const isSelf = currentUserId === user.id;
+                        return (
+                          <tr key={user.id} className="hover:bg-slate-50/60">
+                            <td className="px-4 py-2.5">
+                              <div className="font-medium text-slate-900">
+                                {user.username}
                               </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                user.role === "admin"
-                                  ? "bg-slate-950 text-white"
-                                  : "bg-emerald-50 text-emerald-700"
-                              }`}
-                            >
-                              {user.role === "admin" ? "Yönetici" : "Personel"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-slate-600">
-                            {user.team ? TEAM_LABELS[user.team] : "—"}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span
-                              className={`inline-flex items-center gap-1 text-xs font-medium ${
-                                user.isActive !== false
-                                  ? "text-emerald-600"
-                                  : "text-slate-400"
-                              }`}
-                            >
+                              {user.fullName && (
+                                <div className="text-xs text-slate-400">
+                                  {user.fullName}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5">
                               <span
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                  user.isActive !== false
-                                    ? "bg-emerald-500"
-                                    : "bg-slate-300"
+                                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                  user.role === "admin"
+                                    ? "bg-slate-950 text-white"
+                                    : "bg-emerald-50 text-emerald-700"
                                 }`}
-                              />
-                              {user.isActive !== false ? "Aktif" : "Pasif"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                              >
+                                {user.role === "admin" ? "Yönetici" : "Personel"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-600">
+                              {user.team ? TEAM_LABELS[user.team] : "—"}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span
+                                className={`inline-flex items-center gap-1 text-xs font-medium ${
+                                  user.isActive !== false
+                                    ? "text-emerald-600"
+                                    : "text-slate-400"
+                                }`}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${
+                                    user.isActive !== false
+                                      ? "bg-emerald-500"
+                                      : "bg-slate-300"
+                                  }`}
+                                />
+                                {user.isActive !== false ? "Aktif" : "Pasif"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-lg border-slate-200 px-3 text-xs"
+                                  onClick={() => openEditDialog(user)}
+                                >
+                                  Düzenle
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-lg border-red-200 px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                                  disabled={isSelf}
+                                  title={
+                                    isSelf
+                                      ? "Kendi hesabınızı silemezsiniz"
+                                      : "Kullanıcıyı sil"
+                                  }
+                                  onClick={() => {
+                                    setDeleteError(null);
+                                    setDeletingUser(user);
+                                  }}
+                                >
+                                  Sil
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -448,6 +603,212 @@ export default function AdminUsersPage() {
           </Card>
         </div>
       </div>
+
+      {/* Düzenleme dialogu */}
+      <Dialog
+        open={!!editingUser}
+        onOpenChange={(open) => {
+          if (!open) closeEditDialog();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Kullanıcıyı Düzenle</DialogTitle>
+            <DialogDescription>
+              Bilgileri güncelleyin. Şifre boş bırakılırsa değişmez.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-600">
+                Kullanıcı Adı
+              </label>
+              <Input
+                value={editForm.username}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, username: e.target.value }))
+                }
+                className="h-10 rounded-xl"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-600">
+                Ad Soyad <span className="text-slate-400">(opsiyonel)</span>
+              </label>
+              <Input
+                value={editForm.fullName}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, fullName: e.target.value }))
+                }
+                className="h-10 rounded-xl"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-600">
+                Yeni Şifre{" "}
+                <span className="text-slate-400">
+                  (boş bırakılırsa değişmez)
+                </span>
+              </label>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={editForm.password}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, password: e.target.value }))
+                }
+                className="h-10 rounded-xl"
+                placeholder="En az 6 karakter"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-600">Rol</label>
+              <Select
+                value={editForm.role}
+                onValueChange={(value) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    role: value as UserRole,
+                    team: value === "admin" ? "" : f.team,
+                  }))
+                }
+              >
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="personnel">Personel</SelectItem>
+                  <SelectItem value="admin">Yönetici (admin)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {editForm.role === "personnel" && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-600">
+                  Birim
+                </label>
+                <Select
+                  value={editForm.team || ""}
+                  onValueChange={(value) =>
+                    setEditForm((f) => ({ ...f, team: value as Team }))
+                  }
+                >
+                  <SelectTrigger className="h-10 rounded-xl">
+                    <SelectValue placeholder="Birim seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEAM_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={editForm.isActive}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, isActive: e.target.checked }))
+                }
+                disabled={!!editingUser && currentUserId === editingUser.id}
+              />
+              Aktif
+            </label>
+
+            {editError && (
+              <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                {editError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={closeEditDialog}
+              disabled={isSavingEdit}
+            >
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl bg-emerald-500 text-white hover:bg-emerald-600"
+              onClick={handleEditSave}
+              disabled={isSavingEdit}
+            >
+              {isSavingEdit ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Silme onay dialogu */}
+      <Dialog
+        open={!!deletingUser}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingUser(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Kullanıcıyı sil?</DialogTitle>
+            <DialogDescription>
+              {deletingUser ? (
+                <>
+                  <span className="font-medium text-slate-900">
+                    {deletingUser.username}
+                  </span>{" "}
+                  kullanıcısı kalıcı olarak silinecek. Bu işlem geri alınamaz.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              {deleteError}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => {
+                setDeletingUser(null);
+                setDeleteError(null);
+              }}
+              disabled={isDeleting}
+            >
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl bg-red-600 text-white hover:bg-red-700"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Siliniyor..." : "Evet, sil"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
