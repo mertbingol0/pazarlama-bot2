@@ -47,6 +47,8 @@ const {
   getUserById,
   listUsers,
   createUser,
+  updateUser,
+  deleteUser,
 
   upsertBusinessInteraction,
   addBusinessNote,
@@ -1863,6 +1865,140 @@ app.get("/api/users", requireAdmin, async (req, res) => {
       success: false,
       message: "Kullanıcılar getirilirken bir hata oluştu.",
       error: error.message,
+    });
+  }
+});
+
+// Kullanıcı güncelleme şeması (kısmi). Her alan opsiyoneldir; verilen alanlar
+// güncellenir. Şifre verilirse 6+ karakter olmalıdır. team boş string ise
+// "temizle" olarak yorumlanır (admin'e çevirme akışı için).
+const updateUserSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(3, "Kullanıcı adı en az 3 karakter olmalıdır.")
+      .max(50, "Kullanıcı adı en fazla 50 karakter olabilir.")
+      .optional(),
+    password: z
+      .union([
+        z.string().min(6, "Şifre en az 6 karakter olmalıdır.").max(100),
+        z.literal(""),
+      ])
+      .optional(),
+    fullName: z
+      .union([z.string().trim().max(120), z.literal(""), z.null()])
+      .optional(),
+    role: z.enum(USER_ROLES).optional(),
+    team: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z.union([z.enum(TEAMS), z.null()]).optional()
+    ),
+    isActive: z.boolean().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Güncellenecek alan belirtilmedi.",
+  });
+
+// Admin: mevcut kullanıcıyı günceller.
+app.patch("/api/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçersiz kullanıcı id." });
+    }
+
+    const parsed = updateUserSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.issues[0]?.message || "Geçersiz veri.",
+        errors: parsed.error.issues,
+      });
+    }
+
+    const patch = { ...parsed.data };
+
+    // Kendi rolünü "personnel" yapıp veya kendini pasife alıp paneli kilitlemesini engelle.
+    if (id === req.user.id) {
+      if (patch.role !== undefined && patch.role !== "admin") {
+        return res.status(400).json({
+          success: false,
+          message: "Kendi admin rolünüzü kaldıramazsınız.",
+        });
+      }
+      if (patch.isActive === false) {
+        return res.status(400).json({
+          success: false,
+          message: "Kendinizi pasife alamazsınız.",
+        });
+      }
+    }
+
+    // Boş şifre alanı "değişiklik yok" anlamına gelir.
+    if (patch.password === "") delete patch.password;
+    // Boş fullName "temizle" → null
+    if (patch.fullName === "") patch.fullName = null;
+
+    const user = await updateUser(id, patch);
+
+    return res.status(200).json({
+      success: true,
+      message: "Kullanıcı güncellendi.",
+      user,
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) {
+      console.error("/api/users/:id (PATCH) hata:", error);
+    }
+    return res.status(status).json({
+      success: false,
+      message:
+        status >= 500 ? "Kullanıcı güncellenirken bir hata oluştu." : error.message,
+    });
+  }
+});
+
+// Admin: kullanıcıyı siler. Kendini silemez.
+app.delete("/api/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Geçersiz kullanıcı id." });
+    }
+
+    if (id === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: "Kendi hesabınızı silemezsiniz.",
+      });
+    }
+
+    const removed = await deleteUser(id);
+    if (!removed) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Kullanıcı bulunamadı." });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Kullanıcı silindi.",
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) {
+      console.error("/api/users/:id (DELETE) hata:", error);
+    }
+    return res.status(status).json({
+      success: false,
+      message:
+        status >= 500 ? "Kullanıcı silinirken bir hata oluştu." : error.message,
     });
   }
 });

@@ -210,6 +210,60 @@ export async function getUsers(): Promise<PanelUser[]> {
   return data.users;
 }
 
+export type UpdateUserInput = {
+  username?: string;
+  password?: string;
+  fullName?: string | null;
+  role?: UserRole;
+  team?: Team | null;
+  isActive?: boolean;
+};
+
+type UpdateUserResponse = BackendErrorResponse & {
+  success: boolean;
+  user: PanelUser;
+};
+
+// Admin: kullanıcıyı günceller (kısmi).
+export async function updateUser(
+  id: number,
+  input: UpdateUserInput
+): Promise<PanelUser> {
+  const response = await fetch(`${API_BASE_URL}/api/users/${id}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(input),
+  });
+
+  const data = await readJsonResponse<UpdateUserResponse>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Kullanıcı güncellenirken bir hata oluştu."
+    );
+  }
+
+  return data.user;
+}
+
+// Admin: kullanıcıyı siler.
+export async function deleteUser(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/users/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+
+  const data = await readJsonResponse<BackendErrorResponse & { success: boolean }>(
+    response
+  );
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Kullanıcı silinirken bir hata oluştu."
+    );
+  }
+}
+
 // ===========================================================================
 // CRM: işletme görüşmesi (kanal/sonuç/personel) + notlar.
 // ===========================================================================

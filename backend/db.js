@@ -408,6 +408,131 @@ async function setUserPasswordByUsername(username, password) {
   return result.changes > 0;
 }
 
+// Admin tarafından mevcut kullanıcıyı kısmi olarak günceller. Yalnızca verilen
+// alanlar uygulanır. role/team kuralları createUser ile aynıdır (admin'in team'i
+// olmaz; personnel için geçerli bir team gereklidir).
+async function updateUser(userId, patch = {}) {
+  const id = Number(userId);
+  if (!Number.isInteger(id) || id <= 0) {
+    const err = new Error("Geçersiz kullanıcı id.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const current = await execGet(
+    sql`SELECT id, username, role, team FROM users WHERE id = ${id}`
+  );
+  if (!current) {
+    const err = new Error("Kullanıcı bulunamadı.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const updates = {};
+
+  if (patch.username !== undefined) {
+    const normalized = String(patch.username || "").trim();
+    if (!normalized || normalized.length < 3) {
+      const err = new Error("Kullanıcı adı en az 3 karakter olmalıdır.");
+      err.statusCode = 400;
+      throw err;
+    }
+    updates.username = normalized;
+  }
+
+  if (patch.fullName !== undefined) {
+    const value = patch.fullName === null ? null : String(patch.fullName).trim();
+    updates.fullName = value || null;
+  }
+
+  // role/team birlikte değerlendirilir: nihai role admin ise team null'a çekilir;
+  // nihai role personnel ise team zorunludur (mevcut team korunabilir).
+  let finalRole = current.role;
+  let finalTeam = current.team;
+
+  if (patch.role !== undefined) {
+    if (!USER_ROLES.includes(patch.role)) {
+      const err = new Error("Geçersiz rol.");
+      err.statusCode = 400;
+      throw err;
+    }
+    finalRole = patch.role;
+  }
+
+  if (patch.team !== undefined) {
+    finalTeam = patch.team || null;
+  }
+
+  if (finalRole === "admin") {
+    finalTeam = null;
+  } else if (!finalTeam || !TEAMS.includes(finalTeam)) {
+    const err = new Error("Personel için geçerli bir birim seçilmelidir.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (patch.role !== undefined) updates.role = finalRole;
+  if (patch.role !== undefined || patch.team !== undefined) updates.team = finalTeam;
+
+  if (patch.isActive !== undefined) {
+    updates.isActive = Boolean(patch.isActive);
+  }
+
+  if (patch.password !== undefined && patch.password !== null && patch.password !== "") {
+    if (String(patch.password).length < 6) {
+      const err = new Error("Şifre en az 6 karakter olmalıdır.");
+      err.statusCode = 400;
+      throw err;
+    }
+    const { salt, hash } = hashPassword(patch.password);
+    updates.passwordHash = hash;
+    updates.passwordSalt = salt;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return getUserById(id);
+  }
+
+  try {
+    await execRun(sql`
+      UPDATE users SET
+        username       = ${updates.username       ?? current.username},
+        full_name      = ${updates.fullName       !== undefined ? updates.fullName       : sql`full_name`},
+        role           = ${updates.role           ?? finalRole},
+        team           = ${updates.team           !== undefined ? updates.team           : sql`team`},
+        is_active      = ${updates.isActive       !== undefined ? updates.isActive       : sql`is_active`},
+        password_hash  = ${updates.passwordHash   !== undefined ? updates.passwordHash   : sql`password_hash`},
+        password_salt  = ${updates.passwordSalt   !== undefined ? updates.passwordSalt   : sql`password_salt`},
+        updated_at     = now()
+      WHERE id = ${id}
+    `);
+  } catch (error) {
+    const pgCode = error?.code || error?.cause?.code;
+    if (pgCode === "23505") {
+      const err = new Error("Bu kullanıcı adı zaten kullanılıyor.");
+      err.statusCode = 409;
+      throw err;
+    }
+    throw error;
+  }
+
+  return getUserById(id);
+}
+
+// Admin tarafından kullanıcı silinir. İlgili FK'ler `ON DELETE SET NULL`
+// olduğundan veri kaybı olmadan satır kaldırılır.
+async function deleteUser(userId) {
+  const id = Number(userId);
+  if (!Number.isInteger(id) || id <= 0) {
+    const err = new Error("Geçersiz kullanıcı id.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const result = await execRun(sql`DELETE FROM users WHERE id = ${id}`);
+  return (result?.changes ?? result?.rowCount ?? 0) > 0;
+}
+
 async function getCachedSearchResults({ category, city, district }) {
   const searchKey = createSearchKey({ category, city, district });
 
@@ -2332,6 +2457,8 @@ module.exports = {
   getUserById,
   listUsers,
   createUser,
+  updateUser,
+  deleteUser,
   setUserPasswordByUsername,
 
   getBusinessInteraction,
