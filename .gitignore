@@ -12,3 +12,5 @@ frontend/out/
 frontend/dist/
 frontend/build/
 backend/data/
+# Local-only docker port overrides
+docker-compose.override.yml

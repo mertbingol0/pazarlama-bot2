@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { API_BASE_URL, readJsonResponse } from "@/lib/api";
-import { PageNavigation } from "@/components/PageNavigation";
+import { API_BASE_URL, addBusinessNote, readJsonResponse } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 type ConversationSummary = {
@@ -98,6 +97,10 @@ export default function WhatsAppPage() {
   const [outcomeResult, setOutcomeResult] = useState("pending");
   const [meetingAt, setMeetingAt] = useState("");
   const [outcomeSaved, setOutcomeSaved] = useState(false);
+  // WP notu (görüşülen/kayıt alınan tablosundaki "WP" sütununa düşer).
+  const [wpNote, setWpNote] = useState("");
+  const [wpSaving, setWpSaving] = useState(false);
+  const [wpSaved, setWpSaved] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const initializedPhoneRef = useRef<string | null>(null);
@@ -223,12 +226,29 @@ export default function WhatsAppPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleAddWpNote = async () => {
+    const text = wpNote.trim();
+    if (!text || !business?.id) return;
+    setWpSaving(true);
+    try {
+      await addBusinessNote(business.id, text, "wp");
+      setWpNote("");
+      setWpSaved(true);
+      window.setTimeout(() => setWpSaved(false), 2000);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Not eklenemedi.");
+    } finally {
+      setWpSaving(false);
+    }
+  };
+
   const handleSelect = (phone: string) => {
     setSelectedPhone(phone);
     setErrorMessage("");
     initializedPhoneRef.current = null; // yeni sohbette sonuç kontrolleri yeniden yüklensin
     setBusiness(null);
     setLead(null);
+    setWpNote("");
     // Okundu işaretlenince listedeki rozet güncellensin.
     setConversations((current) =>
       current.map((conversation) =>
@@ -299,7 +319,6 @@ export default function WhatsAppPage() {
               </span>
             </Link>
 
-            <PageNavigation />
           </div>
 
           <div className="mx-auto mt-8 max-w-3xl text-center">
@@ -543,6 +562,31 @@ export default function WhatsAppPage() {
                         {business.website}
                       </a>
                     )}
+
+                    {/* WP notu: Görüşülen/Kayıt Alınan tablosundaki WP sütununa işlenir. */}
+                    <div className="pt-3">
+                      <p className="font-semibold text-slate-600">WP Notu</p>
+                      <textarea
+                        value={wpNote}
+                        onChange={(event) => setWpNote(event.target.value)}
+                        placeholder="Bu firmaya not bırak..."
+                        rows={2}
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                      />
+                      <div className="mt-1 flex items-center justify-between">
+                        <span className="text-[11px] text-emerald-600">
+                          {wpSaved ? "✓ Not eklendi" : ""}
+                        </span>
+                        <Button
+                          type="button"
+                          onClick={handleAddWpNote}
+                          disabled={wpSaving || !wpNote.trim()}
+                          className="h-7 rounded-lg bg-emerald-500 px-3 text-xs text-white hover:bg-emerald-600"
+                        >
+                          {wpSaving ? "..." : "Not Ekle"}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

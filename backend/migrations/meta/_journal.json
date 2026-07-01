@@ -15,6 +15,20 @@
       "when": 1780557197126,
       "tag": "0001_late_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782827377111,
+      "tag": "0002_absurd_nebula",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782833821802,
+      "tag": "0003_noisy_mojo",
+      "breakpoints": true
     }
   ]
 }

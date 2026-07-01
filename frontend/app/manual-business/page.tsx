@@ -6,7 +6,6 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { PageNavigation } from "@/components/PageNavigation";
 import { loadAuth } from "@/lib/auth-storage";
 import {
   createManualBusiness,
@@ -216,7 +215,6 @@ export default function ManualBusinessPage() {
                 Lead Flow
               </span>
             </Link>
-            <PageNavigation />
           </div>
 
           <div className="mt-8">

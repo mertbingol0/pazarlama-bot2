@@ -7,17 +7,17 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { PageNavigation } from "@/components/PageNavigation";
 import { loadAuth } from "@/lib/auth-storage";
 import {
   createUser,
   deleteUser,
   getUsers,
+  getTeams,
   TEAM_LABELS,
-  TEAM_OPTIONS,
   updateUser,
   type PanelUser,
   type Team,
+  type TeamItem,
   type UserRole,
 } from "@/lib/api";
 
@@ -40,11 +40,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const TEAM_VALUES = TEAM_OPTIONS.map((option) => option.value) as [
-  string,
-  ...string[]
-];
-
 const formSchema = z
   .object({
     username: z
@@ -58,7 +53,8 @@ const formSchema = z
       .max(100, "Şifre çok uzun."),
     fullName: z.string().trim().max(120).optional(),
     role: z.enum(["admin", "personnel"]),
-    team: z.union([z.enum(TEAM_VALUES), z.literal("")]).optional(),
+    // Birimler dinamik; sunucu doğrular.
+    team: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.role === "personnel" && !value.team) {
@@ -79,6 +75,7 @@ export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   const [users, setUsers] = useState<PanelUser[]>([]);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -156,7 +153,12 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    if (isAdmin) void refreshUsers();
+    if (isAdmin) {
+      void refreshUsers();
+      void getTeams()
+        .then(setTeams)
+        .catch(() => {});
+    }
   }, [isAdmin]);
 
   // Rol admin'e çevrilince birim alanını temizle.
@@ -311,7 +313,6 @@ export default function AdminUsersPage() {
               </span>
             </Link>
 
-            <PageNavigation />
           </div>
 
           <div className="mt-8">
@@ -445,9 +446,9 @@ export default function AdminUsersPage() {
                             <SelectValue placeholder="Birim seçin" />
                           </SelectTrigger>
                           <SelectContent>
-                            {TEAM_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
+                            {teams.map((t) => (
+                              <SelectItem key={t.code} value={t.code}>
+                                {t.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -702,9 +703,9 @@ export default function AdminUsersPage() {
                     <SelectValue placeholder="Birim seçin" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TEAM_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                    {teams.map((t) => (
+                      <SelectItem key={t.code} value={t.code}>
+                        {t.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
