@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
+import { loadAuth } from "@/lib/auth-storage";
 import { searchBusinesses } from "@/lib/api";
 import type { SearchLimit, SearchMode, SearchResult } from "@/types/business";
 
@@ -26,6 +28,15 @@ type SavedSearchState = {
 };
 
 export default function BusinessResearchPage() {
+  const router = useRouter();
+
+  // İşletme Araştırması sadece admin erişimine açık.
+  useEffect(() => {
+    const auth = loadAuth();
+    if (!auth) router.replace("/login");
+    else if (auth.user.role !== "admin") router.replace("/");
+  }, [router]);
+
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");

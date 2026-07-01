@@ -102,7 +102,6 @@ export default function WhatsAppPage() {
   const [wpSaving, setWpSaving] = useState(false);
   const [wpSaved, setWpSaved] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const initializedPhoneRef = useRef<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
@@ -221,11 +220,6 @@ export default function WhatsAppPage() {
     };
   }, [selectedPhone, fetchConversations, fetchMessages]);
 
-  // Yeni mesaj gelince en alta kaydır.
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   const handleAddWpNote = async () => {
     const text = wpNote.trim();
     if (!text || !business?.id) return;
@@ -333,12 +327,12 @@ export default function WhatsAppPage() {
 
         <div className="grid gap-0 overflow-hidden rounded-3xl bg-white lg:grid-cols-[18rem_minmax(0,1fr)_17rem] lg:h-[calc(100vh-16rem)]">
           {/* Sol: sohbet listesi */}
-          <aside className="flex flex-col">
+          <aside className="flex min-h-0 flex-col">
             <div className="px-4 py-3 text-sm font-semibold text-slate-700">
               Sohbetler ({conversations.length})
             </div>
 
-            <div className="max-h-[24rem] flex-1 overflow-y-auto lg:max-h-none">
+            <div className="min-h-0 max-h-[24rem] flex-1 overflow-y-auto lg:max-h-none">
               {conversations.length === 0 ? (
                 <p className="p-4 text-sm text-slate-400">
                   Henüz konuşma yok. Gelen/giden mesajlar burada listelenir.
@@ -441,7 +435,6 @@ export default function WhatsAppPage() {
                       );
                     })
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
 
                 {!canSendFreeText && (

@@ -1443,6 +1443,15 @@ async function getWhatsAppMessagesForPhone(phone) {
 }
 
 // Bir numaraya ait okunmamış gelen mesajları okundu işaretler.
+// Sidebar bildirimi: okunmamış gelen WhatsApp mesajı sayısı.
+async function getWhatsAppUnreadCount() {
+  const row = await execGet(
+    sql`SELECT COUNT(*)::int AS count FROM whatsapp_messages
+        WHERE direction = 'incoming' AND read_at IS NULL`
+  );
+  return row?.count || 0;
+}
+
 async function markWhatsAppConversationRead(phone) {
   const last10 = String(phone || "")
     .replace(/\D/g, "")
@@ -2569,6 +2578,7 @@ module.exports = {
   logWhatsAppMessage,
   getWhatsAppConversationByPhone,
   getWhatsAppConversations,
+  getWhatsAppUnreadCount,
   getWhatsAppMessagesForPhone,
   markWhatsAppConversationRead,
   getWhatsAppContactInfo,

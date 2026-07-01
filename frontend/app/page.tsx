@@ -21,6 +21,7 @@ const quickLinks = [
     href: "/business-research",
     icon: Search,
     accent: "text-emerald-600 bg-emerald-50",
+    adminOnly: true,
   },
   {
     label: "WhatsApp",
@@ -88,7 +89,9 @@ export default function Home() {
         {isAdmin && <AdminDashboard />}
 
         <section className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {quickLinks.map((link) => {
+          {quickLinks
+            .filter((link) => !("adminOnly" in link) || !link.adminOnly || isAdmin)
+            .map((link) => {
             const Icon = link.icon;
             return (
               <Link key={link.href} href={link.href} className="group">

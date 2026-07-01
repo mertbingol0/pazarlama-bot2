@@ -66,6 +66,7 @@ const workspaceLinks: SidebarLink[] = [
     label: "İşletme Araştırması",
     href: "/business-research",
     icon: Search,
+    adminOnly: true,
   },
   {
     label: "Görüşülen İşletmeler",
@@ -142,14 +143,14 @@ export function Sidebar() {
     const fetchUnseenCount = async () => {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/live-support-leads/unseen-count`
+          `${API_BASE_URL}/api/whatsapp/unread-count`
         );
         const data = await response.json();
         if (response.ok && data.success) {
           setUnseenCount(Number(data.count || 0));
         }
       } catch (error) {
-        console.warn("Canlı destek bildirim sayısı alınamadı:", error);
+        console.warn("WhatsApp bildirim sayısı alınamadı:", error);
       }
     };
 
@@ -159,7 +160,13 @@ export function Sidebar() {
   }, []);
 
   const isAdmin = user?.role === "admin";
+  const canSeeLiveSupport = isAdmin || user?.team === "cagri_merkezi";
 
+  const visibleWorkspace = workspaceLinks.filter((link) => {
+    if (link.adminOnly && !isAdmin) return false;
+    if (link.href === "/live-support" && !canSeeLiveSupport) return false;
+    return true;
+  });
   const visibleFeatures = featureLinks.filter(
     (link) => !link.adminOnly || isAdmin
   );
@@ -248,7 +255,7 @@ export function Sidebar() {
             </p>
           )}
           <div className="flex flex-col gap-1">
-            {workspaceLinks.map(renderLink)}
+            {visibleWorkspace.map(renderLink)}
           </div>
         </div>
 

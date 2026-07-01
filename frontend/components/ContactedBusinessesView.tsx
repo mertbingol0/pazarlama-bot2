@@ -458,7 +458,7 @@ export function ContactedBusinessesView({
 
         {/* Filtre / canlı arama */}
         <div className="mb-6 rounded-2xl bg-white p-4">
-          <div className="grid items-end gap-3 md:grid-cols-[1fr_auto_auto]">
+          <div className="grid items-end gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-600">
                 İsim / adres / telefon / e-posta
@@ -492,8 +492,7 @@ export function ContactedBusinessesView({
             </div>
           </div>
 
-          {/* İstemci tarafı filtreler: şehir / ilçe / personel / sıralama */}
-          <div className="mt-3 grid items-end gap-3 md:grid-cols-[repeat(5,minmax(0,1fr))_auto]">
+          <div className="mt-2 grid items-end gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-600">Şehir</label>
               <Select
@@ -594,24 +593,27 @@ export function ContactedBusinessesView({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-xs text-slate-400">
+              <span>
+                Yazdıkça otomatik aranır. Filtre girilmezse son 24 saatteki
+                işletmeler gösterilir; tarih aralığıyla geçmişte arayabilirsiniz.
+              </span>
+              {isLoading && visibleBusinesses.length > 0 && (
+                <span className="shrink-0 text-emerald-600">Aranıyor...</span>
+              )}
+            </p>
             <Button
               type="button"
               variant="outline"
               onClick={handleClearFilters}
-              className="h-9 rounded-xl"
+              className="h-9 shrink-0 rounded-xl"
             >
               Temizle
             </Button>
           </div>
-          <p className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-            <span>
-              Yazdıkça otomatik aranır. Filtre girilmezse son 24 saatteki
-              işletmeler gösterilir; tarih aralığıyla geçmişte arayabilirsiniz.
-            </span>
-            {isLoading && visibleBusinesses.length > 0 && (
-              <span className="shrink-0 text-emerald-600">Aranıyor...</span>
-            )}
-          </p>
         </div>
 
         {/* CSV indirme */}

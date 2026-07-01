@@ -28,6 +28,7 @@ const {
 
   logWhatsAppMessage,
   getWhatsAppConversations,
+  getWhatsAppUnreadCount,
   getWhatsAppMessagesForPhone,
   markWhatsAppConversationRead,
   getWhatsAppContactInfo,
@@ -358,6 +359,17 @@ app.get("/api/whatsapp/conversations", async (req, res) => {
       message: "Sohbetler getirilemedi.",
       error: error.message,
     });
+  }
+});
+
+// Sidebar bildirimi: okunmamış gelen WhatsApp mesaj sayısı.
+app.get("/api/whatsapp/unread-count", async (_req, res) => {
+  try {
+    const count = await getWhatsAppUnreadCount();
+    return res.status(200).json({ success: true, count });
+  } catch (error) {
+    console.error("/api/whatsapp/unread-count hata:", error);
+    return res.status(500).json({ success: false, message: "Sayı alınamadı." });
   }
 });
 
@@ -2280,19 +2292,24 @@ app.post("/api/businesses/manual", requireAuth, async (req, res) => {
       createdBy: personnelId,
     });
 
-    // Görüşme kaydı (kanal/sonuç) — biri bile verildiyse oluştur.
-    if (d.channel || d.outcome) {
-      await upsertBusinessInteraction({
-        businessId,
-        userId: personnelId,
-        channel: d.channel ?? null,
-        outcome: d.outcome ?? null,
-      });
-    }
+    // Manuel eklenen işletme = sahada iletişime geçilmiş işletme. Kanal/sonuç
+    // verilmese bile görüşme kaydı oluştur ki "görüşülenler"e düşsün (pending).
+    await upsertBusinessInteraction({
+      businessId,
+      userId: personnelId,
+      channel: d.channel ?? "manual",
+      outcome: d.outcome ?? null,
+    });
 
-    // Not (yazar = ekleyen kullanıcı).
+    // Not (yazar = ekleyen kullanıcı) — ekleyenin birimine göre sütunla.
     if (d.note && d.note.trim()) {
-      await addBusinessNote({ businessId, userId: actorId, note: d.note });
+      const category = allowedNoteCategory(req.user, undefined) || "saha";
+      await addBusinessNote({
+        businessId,
+        userId: actorId,
+        note: d.note,
+        category,
+      });
     }
 
     return res.status(201).json({ success: true, businessId });
