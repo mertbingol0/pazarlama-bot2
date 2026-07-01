@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import {
   getContactedBusinesses,
+  getWhatsAppConversation,
   saveBusinessInteraction,
   addBusinessNote,
   updateBusinessStatus,
@@ -18,6 +19,7 @@ import {
   type OutcomeTone,
   type Team,
   type LoginUser,
+  type WhatsAppChatMessage,
 } from "@/lib/api";
 import type { LeadStatus } from "@/types/business";
 import { loadAuth } from "@/lib/auth-storage";
@@ -222,6 +224,126 @@ function NoteCell({
             {error && <p className="text-[11px] text-red-600">{error}</p>}
           </div>
         )}
+      </div>
+    </td>
+  );
+}
+
+// WP sütunu: WhatsApp / Notlar geçişli hücre. WhatsApp'ta o işletmenin sohbet
+// geçmişi (baloncuklar) gösterilir; Notlar'da mevcut WP notları listelenir.
+function WpCell({
+  notes,
+  phone,
+}: {
+  notes: BusinessNote[];
+  phone: string | null;
+}) {
+  const [view, setView] = useState<"whatsapp" | "notes">("notes");
+  const [messages, setMessages] = useState<WhatsAppChatMessage[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ordered = [...notes].sort((a, b) =>
+    String(a.createdAt || "").localeCompare(String(b.createdAt || ""))
+  );
+
+  // WhatsApp sekmesi ilk kez açıldığında sohbeti çek (istek anında, sayfa yükünde değil).
+  const showWhatsApp = () => {
+    setView("whatsapp");
+    if (messages !== null || loading || !phone) return;
+    setLoading(true);
+    setError(null);
+    getWhatsAppConversation(phone)
+      .then(setMessages)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Sohbet getirilemedi.")
+      )
+      .finally(() => setLoading(false));
+  };
+
+  const tab = (active: boolean) =>
+    `flex-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition ${
+      active ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500"
+    }`;
+
+  return (
+    <td className="min-w-[220px] max-w-[280px] border-l border-slate-100 p-2 align-top">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex gap-1">
+          <button type="button" onClick={showWhatsApp} className={tab(view === "whatsapp")}>
+            WhatsApp
+          </button>
+          <button type="button" onClick={() => setView("notes")} className={tab(view === "notes")}>
+            Notlar
+          </button>
+        </div>
+
+        <div className="flex h-36 flex-col gap-1.5 overflow-y-auto pr-1">
+          {view === "notes" ? (
+            ordered.length === 0 ? (
+              <p className="px-1 py-0.5 text-[11px] text-slate-300">Not yok</p>
+            ) : (
+              ordered.map((n) => {
+                const author = n.userFullName || n.userUsername || "Bilinmeyen";
+                return (
+                  <div key={n.id} className="rounded-lg bg-slate-50 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${avatarColor(
+                            author
+                          )}`}
+                          aria-hidden
+                        >
+                          {initials(author)}
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-700">
+                          {author}
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {formatDateTime(n.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+                      {n.note}
+                    </p>
+                  </div>
+                );
+              })
+            )
+          ) : !phone ? (
+            <p className="px-1 py-0.5 text-[11px] text-slate-300">Telefon yok</p>
+          ) : loading ? (
+            <p className="px-1 py-0.5 text-[11px] text-slate-400">Yükleniyor...</p>
+          ) : error ? (
+            <p className="px-1 py-0.5 text-[11px] text-red-500">{error}</p>
+          ) : messages && messages.length === 0 ? (
+            <p className="px-1 py-0.5 text-[11px] text-slate-300">Mesaj yok</p>
+          ) : (
+            (messages || []).map((m) => {
+              const isOut = m.direction === "outgoing";
+              return (
+                <div key={m.id} className={`flex ${isOut ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-2.5 py-1.5 text-xs ${
+                      isOut ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                    <p
+                      className={`mt-0.5 text-right text-[9px] ${
+                        isOut ? "text-emerald-50" : "text-slate-400"
+                      }`}
+                    >
+                      {formatDateTime(m.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </td>
   );
@@ -764,19 +886,32 @@ export function ContactedBusinessesView({
                       </td>
 
                       {/* Birim not sütunları */}
-                      {NOTE_COLUMNS.map((col) => (
-                        <NoteCell
-                          key={col.category}
-                          category={col.category}
-                          notes={business.notes.filter(
-                            (n) => n.category === col.category
-                          )}
-                          canAdd={myCategory === col.category}
-                          onAdd={(category, text) =>
-                            handleAddNote(business, category, text)
-                          }
-                        />
-                      ))}
+                      {NOTE_COLUMNS.map((col) => {
+                        const colNotes = business.notes.filter(
+                          (n) => n.category === col.category
+                        );
+                        // WP sütunu: WhatsApp sohbeti / Notlar geçişli özel hücre.
+                        if (col.category === "wp") {
+                          return (
+                            <WpCell
+                              key={col.category}
+                              notes={colNotes}
+                              phone={business.phone}
+                            />
+                          );
+                        }
+                        return (
+                          <NoteCell
+                            key={col.category}
+                            category={col.category}
+                            notes={colNotes}
+                            canAdd={myCategory === col.category}
+                            onAdd={(category, text) =>
+                              handleAddNote(business, category, text)
+                            }
+                          />
+                        );
+                      })}
 
                       {/* İşletme durumu flag'i (en sonda, sadece admin değiştirir) */}
                       <td className="min-w-[150px] border-l border-slate-100 p-3 text-center align-top">

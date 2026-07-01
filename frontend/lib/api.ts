@@ -1088,3 +1088,31 @@ export async function updateLiveSupportLeadNote(
 
   return data;
 }
+
+export type WhatsAppChatMessage = {
+  id: number | string;
+  direction: "outgoing" | "incoming";
+  type?: string;
+  text: string;
+  createdAt?: string;
+};
+
+// Bir telefon numarasının WhatsApp mesaj geçmişi (görüşülen tablosunun WP sütunu için).
+// ponytail: bu endpoint sohbeti okundu işaretler (upgrade: gerekirse ?peek eklenip atlanır).
+export async function getWhatsAppConversation(
+  phone: string
+): Promise<WhatsAppChatMessage[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/whatsapp/conversations/${encodeURIComponent(phone)}`
+  );
+  const data = await readJsonResponse<{
+    success: boolean;
+    messages?: WhatsAppChatMessage[];
+  }>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error("WhatsApp konuşması getirilemedi.");
+  }
+
+  return data.messages || [];
+}
