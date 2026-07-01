@@ -662,7 +662,7 @@ async function getCachedSearchResults({ category, city, district }) {
       category, city, district, lat, lng, whatsapp_status, template_sent_at,
       last_incoming_at, last_message_text, last_whatsapp_message_id, created_at
     FROM businesses
-    WHERE search_id = ${search.id}
+    WHERE search_id = ${search.id} AND status <> 'rejected'
     ORDER BY id ASC
     `
   );
@@ -917,7 +917,7 @@ async function getSearchDetailsById(searchId) {
       category, city, district, lat, lng, whatsapp_status, template_sent_at,
       last_incoming_at, last_message_text, last_whatsapp_message_id, created_at
     FROM businesses
-    WHERE search_id = ${searchId}
+    WHERE search_id = ${searchId} AND status <> 'rejected'
     ORDER BY id ASC
     `
   );
@@ -2348,6 +2348,42 @@ async function getContactedBusinesses({
   });
 }
 
+// Sidebar bildirim rozeti: `since`'ten sonra aktivitesi (görüşme/not) olan
+// işletmeleri say; son görüşme sonucu record_taken ise "recorded", değilse
+// "talked" kovasına düşer (görüşülen/kayıt alınan sayfalarıyla aynı mantık).
+async function getContactedActivityCounts(since) {
+  const sinceTs = since ? String(since).trim() : null;
+  if (!sinceTs) return { talked: 0, recorded: 0 };
+
+  const activityAt = sql`GREATEST(
+    COALESCE((SELECT MAX(i2.updated_at) FROM interactions i2 WHERE i2.business_id = b.id), '1970-01-01 00:00:00'::timestamp),
+    COALESCE((SELECT MAX(n2.created_at) FROM business_notes n2 WHERE n2.business_id = b.id), '1970-01-01 00:00:00'::timestamp)
+  )`;
+
+  const rows = await execAll(
+    sql`
+    SELECT
+      CASE WHEN li.outcome = 'record_taken' THEN 'recorded' ELSE 'talked' END AS bucket,
+      COUNT(*)::int AS count
+    FROM businesses b
+    LEFT JOIN LATERAL (
+      SELECT outcome FROM interactions i WHERE i.business_id = b.id ORDER BY i.id DESC LIMIT 1
+    ) li ON true
+    WHERE (${activityAt}) > ${sinceTs}::timestamp
+      AND (EXISTS (SELECT 1 FROM interactions i WHERE i.business_id = b.id)
+           OR EXISTS (SELECT 1 FROM business_notes n WHERE n.business_id = b.id))
+    GROUP BY bucket
+    `
+  );
+
+  const counts = { talked: 0, recorded: 0 };
+  for (const row of rows) {
+    if (row.bucket === "recorded") counts.recorded = row.count;
+    else counts.talked = row.count;
+  }
+  return counts;
+}
+
 // Admin dashboard istatistikleri. Varsayılan pencere: son 24 saat ("bugün").
 // from/to verilirse o tarih aralığı. Görüşme sonucu (kanal/sonuç) son güncelleme
 // zamanına; notlar oluşturma zamanına göre sayılır.
@@ -2614,6 +2650,7 @@ module.exports = {
   getBusinessNotes,
   getBusinessCrmBatch,
   getContactedBusinesses,
+  getContactedActivityCounts,
   getDashboardStats,
   createManualBusiness,
   listAssignableUsers,

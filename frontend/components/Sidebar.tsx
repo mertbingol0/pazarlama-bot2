@@ -27,7 +27,7 @@ type SidebarLink = {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
-  badge?: "liveSupport";
+  badge?: "liveSupport" | "contacted" | "recorded";
 };
 
 const AVATAR_COLORS = [
@@ -72,11 +72,13 @@ const workspaceLinks: SidebarLink[] = [
     label: "Görüşülen İşletmeler",
     href: "/contacted-businesses",
     icon: Handshake,
+    badge: "contacted",
   },
   {
     label: "Kayıt Alınan İşletmeler",
     href: "/recorded-businesses",
     icon: ClipboardCheck,
+    badge: "recorded",
   },
   {
     label: "Manuel İşletme Ekle",
@@ -120,6 +122,8 @@ export function Sidebar() {
   const router = useRouter();
   const [user, setUser] = useState<LoginUser | null>(null);
   const [unseenCount, setUnseenCount] = useState(0);
+  const [contactedCount, setContactedCount] = useState(0);
+  const [recordedCount, setRecordedCount] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -159,6 +163,57 @@ export function Sidebar() {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  // Görüşülen/Kayıt Alınan bildirim rozeti: son ziyaretten (localStorage) sonra
+  // aktivitesi olan işletmeleri say. İlk açılışta "görüldü" = now (rozet 0 başlar).
+  useEffect(() => {
+    const getSince = (key: string) => {
+      let value = localStorage.getItem(key);
+      if (!value) {
+        value = new Date().toISOString();
+        localStorage.setItem(key, value);
+      }
+      return value;
+    };
+
+    const fetchCounts = async () => {
+      try {
+        const [talkedRes, recordedRes] = await Promise.all([
+          fetch(
+            `${API_BASE_URL}/api/businesses/contacted-counts?since=${encodeURIComponent(
+              getSince("contacted-seen")
+            )}`
+          ).then((r) => r.json()),
+          fetch(
+            `${API_BASE_URL}/api/businesses/contacted-counts?since=${encodeURIComponent(
+              getSince("recorded-seen")
+            )}`
+          ).then((r) => r.json()),
+        ]);
+        if (talkedRes?.success) setContactedCount(Number(talkedRes.talked || 0));
+        if (recordedRes?.success)
+          setRecordedCount(Number(recordedRes.recorded || 0));
+      } catch (error) {
+        console.warn("Bildirim sayıları alınamadı:", error);
+      }
+    };
+
+    void fetchCounts();
+    const intervalId = window.setInterval(fetchCounts, 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  // Sayfaya girilince o kategoriyi "görüldü" işaretle, rozeti sıfırla.
+  useEffect(() => {
+    if (pathname.startsWith("/contacted-businesses")) {
+      localStorage.setItem("contacted-seen", new Date().toISOString());
+      setContactedCount(0);
+    }
+    if (pathname.startsWith("/recorded-businesses")) {
+      localStorage.setItem("recorded-seen", new Date().toISOString());
+      setRecordedCount(0);
+    }
+  }, [pathname]);
+
   const isAdmin = user?.role === "admin";
   const canSeeLiveSupport = isAdmin || user?.team === "cagri_merkezi";
 
@@ -180,8 +235,15 @@ export function Sidebar() {
     const Icon = link.icon;
     const isActive =
       pathname === link.href || pathname.startsWith(`${link.href}/`);
-    const showBadge =
-      link.badge === "liveSupport" && !isActive && unseenCount > 0;
+    const badgeCount =
+      link.badge === "liveSupport"
+        ? unseenCount
+        : link.badge === "contacted"
+          ? contactedCount
+          : link.badge === "recorded"
+            ? recordedCount
+            : 0;
+    const showBadge = Boolean(link.badge) && !isActive && badgeCount > 0;
 
     return (
       <Link
@@ -203,7 +265,7 @@ export function Sidebar() {
             <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
           ) : (
             <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-none text-white">
-              {unseenCount > 99 ? "99+" : unseenCount}
+              {badgeCount > 99 ? "99+" : badgeCount}
             </span>
           ))}
       </Link>
