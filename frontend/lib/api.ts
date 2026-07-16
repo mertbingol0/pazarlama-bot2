@@ -85,6 +85,7 @@ export type LoginUser = {
 
 export type PanelUser = LoginUser & {
   isActive?: boolean;
+  assignedCategories?: string[] | null;
   createdAt?: string | null;
   lastLoginAt?: string | null;
 };
@@ -293,6 +294,7 @@ export type UpdateUserInput = {
   role?: UserRole;
   team?: Team | null;
   isActive?: boolean;
+  assignedCategories?: string[] | null;
 };
 
 type UpdateUserResponse = BackendErrorResponse & {

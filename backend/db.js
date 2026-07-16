@@ -347,6 +347,19 @@ async function seedDefaultAdminUser() {
   );
 }
 
+// JS string dizisini Postgres text[] literaline çevirir ('{"a","b"}').
+// Drizzle sql template'i dizi paramı olduğu gibi geçirmediği için gerekli.
+function toPgTextArray(values) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  return (
+    "{" +
+    values
+      .map((v) => '"' + String(v).replace(/[\\"]/g, (m) => "\\" + m) + '"')
+      .join(",") +
+    "}"
+  );
+}
+
 function mapUserRow(row) {
   if (!row) return null;
   return {
@@ -355,6 +368,7 @@ function mapUserRow(row) {
     fullName: row.full_name || null,
     role: row.role || "personnel",
     team: row.team || null,
+    assignedCategories: row.assigned_categories || null,
     isActive: row.is_active !== false,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
@@ -416,7 +430,7 @@ async function authenticateUser({ username, password }) {
 async function getUserById(userId) {
   const row = await execGet(
     sql`
-    SELECT id, username, full_name, role, team, is_active, created_at, last_login_at
+    SELECT id, username, full_name, role, team, assigned_categories, is_active, created_at, last_login_at
     FROM users
     WHERE id = ${userId}
     `
@@ -428,7 +442,7 @@ async function getUserById(userId) {
 async function listUsers() {
   const rows = await execAll(
     sql`
-    SELECT id, username, full_name, role, team, is_active, created_at, last_login_at
+    SELECT id, username, full_name, role, team, assigned_categories, is_active, created_at, last_login_at
     FROM users
     ORDER BY created_at ASC, id ASC
     `
@@ -588,6 +602,11 @@ async function updateUser(userId, patch = {}) {
     updates.isActive = Boolean(patch.isActive);
   }
 
+  // Kategori ataması: dolu dizi → kaydet, boş dizi/null → temizle.
+  if (patch.assignedCategories !== undefined) {
+    updates.assignedCategories = toPgTextArray(patch.assignedCategories);
+  }
+
   if (patch.password !== undefined && patch.password !== null && patch.password !== "") {
     if (String(patch.password).length < 6) {
       const err = new Error("Şifre en az 6 karakter olmalıdır.");
@@ -610,6 +629,7 @@ async function updateUser(userId, patch = {}) {
         full_name      = ${updates.fullName       !== undefined ? updates.fullName       : sql`full_name`},
         role           = ${updates.role           ?? finalRole},
         team           = ${updates.team           !== undefined ? updates.team           : sql`team`},
+        assigned_categories = ${updates.assignedCategories !== undefined ? sql`${updates.assignedCategories}::text[]` : sql`assigned_categories`},
         is_active      = ${updates.isActive       !== undefined ? updates.isActive       : sql`is_active`},
         password_hash  = ${updates.passwordHash   !== undefined ? updates.passwordHash   : sql`password_hash`},
         password_salt  = ${updates.passwordSalt   !== undefined ? updates.passwordSalt   : sql`password_salt`},
@@ -2287,6 +2307,9 @@ async function getContactedBusinesses({
   q = null,
   all = false,
   userId = null,
+  // Personele atanan kategori kısıtı (slug listesi). Dolu ise yalnız bu
+  // kategorilerdeki işletmeler döner.
+  categories = null,
 } = {}) {
   // Aktivite penceresi: from/to varsa o aralık, yoksa (all değilse) son 24 saat.
   // Filtreyi tek ifade olarak inşa edip her UNION dalına ekliyoruz. Böylece
@@ -2370,6 +2393,13 @@ async function getContactedBusinesses({
       sql`(b.name ILIKE ${like} OR b.address ILIKE ${like} OR b.phone ILIKE ${like} OR b.email ILIKE ${like}${phoneClause})`
     );
   }
+  const categoriesLiteral = toPgTextArray(categories);
+  if (categoriesLiteral) {
+    searchConditions.push(
+      sql`COALESCE(b.category, s.category) = ANY(${categoriesLiteral}::text[])`
+    );
+  }
+
   const searchWhere = searchConditions.length
     ? sql` WHERE ${sql.join(searchConditions, sql` AND `)}`
     : sql``;

@@ -66,6 +66,8 @@ const users = pgTable(
     role: text("role").notNull().default("personnel"),
     // Personelin birimi: saha_pazarlama | reklam_pazarlama | cagri_merkezi (admin'de null)
     team: text("team"),
+    // Personele atanan işletme kategorileri (slug listesi). null/boş → kısıt yok.
+    assignedCategories: text("assigned_categories").array(),
     isActive: boolean("is_active").notNull().default(true),
     // Bu kullanıcıyı oluşturan admin (self-reference).
     createdBy: integer("created_by").references(() => users.id, {

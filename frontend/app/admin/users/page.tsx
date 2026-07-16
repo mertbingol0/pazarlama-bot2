@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import { loadAuth } from "@/lib/auth-storage";
+import { categories } from "@/lib/categories";
 import {
   createUser,
   deleteUser,
@@ -82,6 +83,11 @@ export default function AdminUsersPage() {
 
   const [editingUser, setEditingUser] = useState<PanelUser | null>(null);
   const [deletingUser, setDeletingUser] = useState<PanelUser | null>(null);
+  // Kategori atama pop-up'ı
+  const [categoryUser, setCategoryUser] = useState<PanelUser | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [isSavingCategories, setIsSavingCategories] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -226,6 +232,44 @@ export default function AdminUsersPage() {
       );
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  const openCategoryDialog = (user: PanelUser) => {
+    setCategoryError(null);
+    setSelectedCategories(user.assignedCategories || []);
+    setCategoryUser(user);
+  };
+
+  const toggleCategory = (value: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(value)
+        ? prev.filter((v) => v !== value)
+        : [...prev, value]
+    );
+  };
+
+  const handleCategorySave = async () => {
+    if (!categoryUser) return;
+    setCategoryError(null);
+    setIsSavingCategories(true);
+    try {
+      await updateUser(categoryUser.id, {
+        assignedCategories: selectedCategories,
+      });
+      setSuccessMessage(
+        `"${categoryUser.username}" kullanıcısına ${selectedCategories.length} kategori atandı.`
+      );
+      setCategoryUser(null);
+      void refreshUsers();
+    } catch (error) {
+      setCategoryError(
+        error instanceof Error
+          ? error.message
+          : "Kategoriler kaydedilirken bir hata oluştu."
+      );
+    } finally {
+      setIsSavingCategories(false);
     }
   };
 
@@ -577,6 +621,25 @@ export default function AdminUsersPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
+                                  className="h-8 rounded-lg border-emerald-200 px-3 text-xs text-emerald-700 hover:bg-emerald-50"
+                                  title={
+                                    user.assignedCategories?.length
+                                      ? `${user.assignedCategories.length} kategori atanmış`
+                                      : "Kategori ata"
+                                  }
+                                  onClick={() => openCategoryDialog(user)}
+                                >
+                                  Kategori Ata
+                                  {user.assignedCategories?.length ? (
+                                    <span className="ml-1 rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold">
+                                      {user.assignedCategories.length}
+                                    </span>
+                                  ) : null}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
                                   className="h-8 rounded-lg border-red-200 px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
                                   disabled={isSelf}
                                   title={
@@ -750,6 +813,89 @@ export default function AdminUsersPage() {
               disabled={isSavingEdit}
             >
               {isSavingEdit ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Kategori atama dialogu */}
+      <Dialog
+        open={!!categoryUser}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCategoryUser(null);
+            setCategoryError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Kategori Ata</DialogTitle>
+            <DialogDescription>
+              {categoryUser ? (
+                <>
+                  <span className="font-medium text-slate-900">
+                    {categoryUser.username}
+                  </span>{" "}
+                  kullanıcısı yalnızca seçilen kategorilerdeki görüşme
+                  kayıtlarını görüntüleyebilir. Hiçbiri seçilmezse kısıt
+                  uygulanmaz.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span>{selectedCategories.length} kategori seçili</span>
+            <button
+              type="button"
+              className="font-medium text-emerald-600 hover:underline"
+              onClick={() => setSelectedCategories([])}
+            >
+              Temizle
+            </button>
+          </div>
+
+          <div className="grid max-h-80 grid-cols-1 gap-1 overflow-y-auto rounded-xl border border-slate-100 p-2 sm:grid-cols-2">
+            {categories.map((cat) => (
+              <label
+                key={cat.value}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={selectedCategories.includes(cat.value)}
+                  onChange={() => toggleCategory(cat.value)}
+                />
+                {cat.label}
+              </label>
+            ))}
+          </div>
+
+          {categoryError && (
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              {categoryError}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setCategoryUser(null)}
+              disabled={isSavingCategories}
+            >
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl bg-emerald-500 text-white hover:bg-emerald-600"
+              onClick={handleCategorySave}
+              disabled={isSavingCategories}
+            >
+              {isSavingCategories ? "Kaydediliyor..." : "Kaydet"}
             </Button>
           </DialogFooter>
         </DialogContent>

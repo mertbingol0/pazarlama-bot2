@@ -2061,6 +2061,8 @@ const updateUserSchema = z
       z.union([z.string(), z.null()]).optional()
     ),
     isActive: z.boolean().optional(),
+    // Atanan kategori slug'ları; boş dizi veya null → kısıt kaldırılır.
+    assignedCategories: z.array(z.string().trim().min(1)).max(200).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Güncellenecek alan belirtilmedi.",
@@ -2221,6 +2223,7 @@ app.get("/api/me/contacted", requireAuth, async (req, res) => {
       q: req.query.q || null,
       all: req.query.all === "1" || req.query.all === "true",
       userId: req.user.id,
+      categories: await getUserCategoryRestriction(req.user),
     });
     return res
       .status(200)
@@ -2387,7 +2390,15 @@ app.post("/api/businesses/manual", requireAuth, async (req, res) => {
   }
 });
 
+// Personelin atanmış kategori kısıtını döndürür (admin veya atama yoksa null).
+async function getUserCategoryRestriction(reqUser) {
+  if (!reqUser || reqUser.role === "admin") return null;
+  const user = await getUserById(reqUser.id);
+  return user?.assignedCategories?.length ? user.assignedCategories : null;
+}
+
 // İletişime geçilen işletmeler (görüşme veya notu olanlar) — sonuçla birlikte.
+// Personele kategori atanmışsa yalnız o kategorilerdeki kayıtlar döner.
 app.get("/api/businesses/contacted", requireAuth, async (req, res) => {
   try {
     const businesses = await getContactedBusinesses({
@@ -2395,6 +2406,7 @@ app.get("/api/businesses/contacted", requireAuth, async (req, res) => {
       to: req.query.to || null,
       q: req.query.q || null,
       all: req.query.all === "1" || req.query.all === "true",
+      categories: await getUserCategoryRestriction(req.user),
     });
     return res
       .status(200)
