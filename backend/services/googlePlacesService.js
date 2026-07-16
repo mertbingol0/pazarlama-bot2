@@ -211,6 +211,416 @@ const CATEGORY_KEYWORD_MAP = {
     "pet kuaförü",
     "pet otel",
   ],
+
+  // 1. Doğa, Macera & Aksiyon
+  macera_adrenalin: [
+    "rafting",
+    "zipline",
+    "bungee jumping",
+    "macera parkı",
+    "yüksek ip parkuru",
+    "adrenalin parkı",
+  ],
+  atv_buggy_offroad: [
+    "atv safari",
+    "buggy turu",
+    "jeep safari",
+    "off-road",
+    "atv kiralama",
+    "safari turu",
+  ],
+  doga_outdoor: [
+    "trekking turu",
+    "doğa yürüyüşü",
+    "kanyon turu",
+    "mağara turu",
+    "şelale turu",
+    "doğa turu",
+  ],
+  kamp_karavan_glamping: [
+    "kamp alanı",
+    "çadır kampı",
+    "karavan kampı",
+    "glamping",
+    "bungalov",
+    "doğa konaklama",
+  ],
+  kis_sporlari: [
+    "kayak merkezi",
+    "kayak okulu",
+    "snowboard eğitimi",
+    "kayak ekipman kiralama",
+    "kızak pisti",
+  ],
+  hava_ucus_deneyimleri: [
+    "balon turu",
+    "yamaç paraşütü",
+    "paraşüt atlayışı",
+    "helikopter turu",
+    "gyrocopter turu",
+  ],
+  paintball_airsoft_lazer_tag: [
+    "paintball",
+    "paintball sahası",
+    "airsoft",
+    "lazer tag",
+  ],
+
+  // 2. Deniz & Su Aktiviteleri
+  su_sporlari: [
+    "su sporları merkezi",
+    "kano turu",
+    "sup kiralama",
+    "sörf okulu",
+    "jet ski kiralama",
+    "wakeboard",
+  ],
+  dalis_sualti: [
+    "dalış merkezi",
+    "tüplü dalış",
+    "dalış okulu",
+    "şnorkel turu",
+    "serbest dalış eğitimi",
+  ],
+  tekne_yat_deneyimleri: [
+    "tekne turu",
+    "yat kiralama",
+    "tekne kiralama",
+    "koy turu",
+    "gulet turu",
+  ],
+  balikcilik: [
+    "balık avı turu",
+    "tekne balıkçılığı",
+    "olta balıkçılığı",
+    "balıkçılık turu",
+  ],
+
+  // 3. Seyahat, Kültür & Sürüş
+  sehir_kesif_turlari: [
+    "şehir turu",
+    "yürüyüş turu",
+    "rehberli tur",
+    "tur operatörü",
+    "gezi turu",
+  ],
+  kultur_tarih_arkeoloji: [
+    "müze",
+    "antik kent",
+    "tarihi tur",
+    "kültür turu",
+    "ören yeri",
+  ],
+  yerel_otantik_deneyimler: [
+    "köy kahvaltısı",
+    "yöresel ürünler",
+    "yerel deneyim turu",
+    "el yapımı üretim atölyesi",
+  ],
+  bisiklet_deneyimleri: [
+    "bisiklet turu",
+    "bisiklet kiralama",
+    "dağ bisikleti turu",
+  ],
+  motor_surus_deneyimleri: [
+    "motosiklet turu",
+    "motosiklet kiralama",
+    "spor araç kiralama",
+    "sürüş deneyimi",
+  ],
+  go_kart_yaris: [
+    "go kart",
+    "karting pisti",
+    "yarış simülasyonu",
+    "yarış pisti",
+  ],
+  binicilik: [
+    "at binme",
+    "binicilik kulübü",
+    "at çiftliği",
+    "at safari",
+  ],
+
+  // 4. Gastronomi (Yeme & İçme)
+  gastronomi_lezzet_turlari: [
+    "gastronomi turu",
+    "yemek turu",
+    "lezzet turu",
+    "sokak lezzetleri turu",
+  ],
+  yemek_atolyeleri: [
+    "yemek atölyesi",
+    "yemek kursu",
+    "mutfak atölyesi",
+    "aşçılık kursu",
+  ],
+  cikolata_pasta_tatli_atolyeleri: [
+    "çikolata atölyesi",
+    "pasta atölyesi",
+    "pasta kursu",
+    "tatlı atölyesi",
+    "kurabiye atölyesi",
+  ],
+  kahve_cay_deneyimleri: [
+    "barista atölyesi",
+    "barista eğitimi",
+    "kahve atölyesi",
+    "kahve tadımı",
+    "çay tadımı",
+  ],
+  bag_tadim_deneyimleri: [
+    "bağ turu",
+    "şarap tadımı",
+    "şarap evi",
+    "üzüm bağı",
+    "bağ evi",
+  ],
+
+  // 5. Sanat, Zanaat & Hobi Atölyeleri
+  seramik_comlek_atolyeleri: [
+    "seramik atölyesi",
+    "çömlek atölyesi",
+    "seramik kursu",
+    "çömlek kursu",
+  ],
+  resim_gorsel_sanatlar: [
+    "resim atölyesi",
+    "resim kursu",
+    "çizim atölyesi",
+    "sanat atölyesi",
+  ],
+  heykel_uc_boyutlu_tasarim: [
+    "heykel atölyesi",
+    "heykel kursu",
+    "3d tasarım atölyesi",
+  ],
+  taki_aksesuar_tasarimi: [
+    "takı atölyesi",
+    "takı tasarım kursu",
+    "gümüş takı atölyesi",
+  ],
+  mum_sabun_dogal_urun_atolyeleri: [
+    "mum atölyesi",
+    "kokulu mum yapımı",
+    "sabun atölyesi",
+    "doğal ürün atölyesi",
+  ],
+  el_sanatlari: [
+    "el sanatları atölyesi",
+    "örgü atölyesi",
+    "nakış kursu",
+    "hobi atölyesi",
+  ],
+  ahsap_tasarim_isleme: [
+    "ahşap atölyesi",
+    "ahşap oyma atölyesi",
+    "marangoz atölyesi",
+    "ahşap tasarım",
+  ],
+  cam_sanati: [
+    "cam atölyesi",
+    "cam üfleme atölyesi",
+    "vitray atölyesi",
+    "cam boyama",
+  ],
+  moda_tekstil_tasarim: [
+    "dikiş kursu",
+    "moda tasarım kursu",
+    "tekstil atölyesi",
+    "terzilik kursu",
+  ],
+  fotograf_deneyimleri: [
+    "fotoğrafçılık kursu",
+    "fotoğraf turu",
+    "fotoğraf atölyesi",
+  ],
+
+  // 6. Eğlence, Sahne & Dijital
+  dans_deneyimleri: [
+    "dans kursu",
+    "dans okulu",
+    "salsa kursu",
+    "tango kursu",
+    "bale okulu",
+  ],
+  muzik_atolyeleri: [
+    "müzik kursu",
+    "müzik okulu",
+    "gitar kursu",
+    "piyano kursu",
+    "vokal eğitimi",
+  ],
+  dj_muzik_produksiyon: [
+    "dj kursu",
+    "dj akademi",
+    "müzik prodüksiyon kursu",
+    "kayıt stüdyosu",
+  ],
+  konser_canli_muzik: [
+    "konser salonu",
+    "canlı müzik mekanı",
+    "performans sahnesi",
+  ],
+  tiyatro_sahne_sanatlari: [
+    "tiyatro",
+    "tiyatro sahnesi",
+    "sahne sanatları merkezi",
+    "tiyatro kursu",
+    "opera",
+  ],
+  standup_komedi: [
+    "stand up",
+    "komedi kulübü",
+    "gösteri merkezi",
+  ],
+  festival_senlikler: [
+    "festival alanı",
+    "etkinlik alanı",
+    "fuar alanı",
+    "etkinlik organizasyonu",
+  ],
+  gece_hayati_eglence: [
+    "gece kulübü",
+    "eğlence mekanı",
+    "beach club",
+    "bar",
+  ],
+  escape_room_bulmaca: [
+    "escape room",
+    "kaçış oyunu",
+    "kaçış evi",
+  ],
+  vr_dijital_deneyimler: [
+    "vr deneyim merkezi",
+    "sanal gerçeklik merkezi",
+    "vr oyun salonu",
+  ],
+  gaming_espor: [
+    "e-spor merkezi",
+    "oyun salonu",
+    "internet kafe",
+    "playstation kafe",
+  ],
+  bowling_salon_eglenceleri: [
+    "bowling salonu",
+    "bilardo salonu",
+    "oyun merkezi",
+  ],
+
+  // 7. Sağlık, İyi Yaşam & Kişisel Gelişim
+  spor_fitness: [
+    "spor salonu",
+    "fitness merkezi",
+    "kişisel antrenör",
+    "crossfit salonu",
+    "açık hava spor alanı",
+  ],
+  yoga_pilates_wellness: [
+    "yoga stüdyosu",
+    "pilates stüdyosu",
+    "wellness merkezi",
+    "yoga kampı",
+  ],
+  meditasyon_nefes: [
+    "meditasyon merkezi",
+    "nefes koçluğu",
+    "mindfulness atölyesi",
+  ],
+  kisisel_gelisim_farkindalik: [
+    "kişisel gelişim merkezi",
+    "yaşam koçluğu",
+    "koçluk merkezi",
+    "farkındalık atölyesi",
+  ],
+  egitim_beceri_atolyeleri: [
+    "eğitim merkezi",
+    "kurs merkezi",
+    "beceri atölyesi",
+    "uygulamalı eğitim",
+  ],
+  dil_kultur_bulusmalari: [
+    "dil kursu",
+    "konuşma kulübü",
+    "dil okulu",
+  ],
+  astroloji_spirituel: [
+    "astroloji danışmanlığı",
+    "astrolog",
+    "spiritüel merkez",
+  ],
+
+  // 8. Çocuk, Aile & Özel Konseptler
+  cocuk_atolyeleri: [
+    "çocuk atölyesi",
+    "çocuk sanat atölyesi",
+    "çocuk mutfak atölyesi",
+    "çocuk aktivite merkezi",
+  ],
+  cocuk_eglence_oyun: [
+    "çocuk oyun alanı",
+    "çocuk eğlence merkezi",
+    "oyun merkezi",
+    "trambolin park",
+  ],
+  aile_aktiviteleri: [
+    "aile eğlence merkezi",
+    "aktivite merkezi",
+    "aile aktivite parkı",
+  ],
+  bilim_teknoloji_robotik: [
+    "robotik kodlama kursu",
+    "kodlama kursu",
+    "bilim merkezi",
+    "maker atölyesi",
+  ],
+  uzay_astronomi: [
+    "gözlemevi",
+    "planetaryum",
+    "astronomi merkezi",
+  ],
+  ciftlik_hayvan_deneyimleri: [
+    "çiftlik",
+    "çiftlik kafe",
+    "hayvanat bahçesi",
+    "at çiftliği",
+  ],
+  ekolojik_yasam_tarim: [
+    "organik çiftlik",
+    "ekolojik çiftlik",
+    "permakültür çiftliği",
+    "hobi bahçesi",
+  ],
+  romantik_cift_deneyimleri: [
+    "romantik restoran",
+    "romantik organizasyon",
+    "çiftlere özel aktivite",
+  ],
+  dogum_gunu_kutlama: [
+    "doğum günü organizasyonu",
+    "parti evi",
+    "kutlama organizasyonu",
+  ],
+  grup_arkadas_aktiviteleri: [
+    "eğlence merkezi",
+    "grup aktiviteleri",
+    "aktivite merkezi",
+  ],
+  kurumsal_takim_aktiviteleri: [
+    "team building",
+    "kurumsal etkinlik firması",
+    "kurumsal organizasyon",
+  ],
+  luks_premium_deneyimler: [
+    "vip transfer",
+    "lüks araç kiralama",
+    "özel tur",
+    "lüks yat kiralama",
+  ],
+  gizli_surpriz_deneyimler: [
+    "sürpriz organizasyon",
+    "evlilik teklifi organizasyonu",
+    "sürpriz kutlama",
+  ],
 };
 
 function normalizeCategoryKey(category = "") {
