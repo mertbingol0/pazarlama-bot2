@@ -967,6 +967,45 @@ export async function updateBusinessWhatsAppStatus(
   return data;
 }
 
+export type MultisportBusiness = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  district: string | null;
+  website: string | null;
+  whatsappStatus: string;
+  templateSentAt: string | null;
+};
+
+// Multisport (Benefit Systems) üyesi işletmeler.
+export async function getMultisportBusinesses(params?: {
+  q?: string;
+  city?: string;
+}): Promise<MultisportBusiness[]> {
+  const query = new URLSearchParams();
+  if (params?.q) query.set("q", params.q);
+  if (params?.city) query.set("city", params.city);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/businesses/multisport${query.size ? `?${query}` : ""}`,
+    { headers: authHeaders() }
+  );
+
+  const data = await readJsonResponse<
+    BackendErrorResponse & { success: boolean; businesses: MultisportBusiness[] }
+  >(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message || data.error || "Multisport işletmeleri getirilemedi."
+    );
+  }
+
+  return data.businesses;
+}
+
 export async function sendWhatsAppTemplate({
   businessIds,
   templateName,

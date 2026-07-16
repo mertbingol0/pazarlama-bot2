@@ -17,6 +17,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Boxes,
+  Dumbbell,
   Menu,
   X,
 } from "lucide-react";
@@ -81,6 +82,11 @@ const workspaceLinks: SidebarLink[] = [
     href: "/recorded-businesses",
     icon: ClipboardCheck,
     badge: "recorded",
+  },
+  {
+    label: "Multisport İşletmeleri",
+    href: "/multisport",
+    icon: Dumbbell,
   },
   {
     label: "Manuel İşletme Ekle",

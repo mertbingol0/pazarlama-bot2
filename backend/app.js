@@ -61,6 +61,7 @@ const {
   getBusinessNotes,
   getBusinessCrmBatch,
   getContactedBusinesses,
+  listMultisportBusinesses,
   getContactedActivityCounts,
   getDashboardStats,
   createManualBusiness,
@@ -2416,6 +2417,26 @@ app.get("/api/businesses/contacted", requireAuth, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "İletişime geçilen işletmeler getirilemedi.",
+      error: error.message,
+    });
+  }
+});
+
+// Multisport (Benefit Systems) üyesi işletmeler.
+app.get("/api/businesses/multisport", requireAuth, async (req, res) => {
+  try {
+    const businesses = await listMultisportBusinesses({
+      q: req.query.q || null,
+      city: req.query.city || null,
+    });
+    return res
+      .status(200)
+      .json({ success: true, count: businesses.length, businesses });
+  } catch (error) {
+    console.error("/api/businesses/multisport hata:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Multisport işletmeleri getirilemedi.",
       error: error.message,
     });
   }

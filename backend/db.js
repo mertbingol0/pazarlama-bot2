@@ -2452,6 +2452,43 @@ async function getContactedBusinesses({
   });
 }
 
+// Multisport (Benefit Systems) import'u ile gelen işletmeler.
+// scripts/importMultisportBusinesses.js ile doldurulur (source='multisport').
+async function listMultisportBusinesses({ q = null, city = null } = {}) {
+  const conditions = [sql`b.source = 'multisport'`];
+
+  const term = q ? String(q).trim() : "";
+  if (term) {
+    const like = `%${term}%`;
+    conditions.push(
+      sql`(b.name ILIKE ${like} OR b.address ILIKE ${like} OR b.phone ILIKE ${like} OR b.district ILIKE ${like})`
+    );
+  }
+  if (city && String(city).trim()) {
+    conditions.push(sql`b.city = ${String(city).trim()}`);
+  }
+
+  const rows = await execAll(sql`
+    SELECT b.id, b.name, b.phone, b.address, b.city, b.district, b.website,
+           b.whatsapp_status, b.template_sent_at
+    FROM businesses b
+    WHERE ${sql.join(conditions, sql` AND `)}
+    ORDER BY b.city ASC, b.district ASC, b.name ASC
+  `);
+
+  return rows.map((b) => ({
+    id: b.id,
+    name: b.name,
+    phone: b.phone,
+    address: b.address,
+    city: b.city,
+    district: b.district,
+    website: b.website,
+    whatsappStatus: b.whatsapp_status || "not_sent",
+    templateSentAt: b.template_sent_at,
+  }));
+}
+
 // Sidebar bildirim rozeti: `since`'ten sonra aktivitesi (görüşme/not) olan
 // işletmeleri say; son görüşme sonucu record_taken ise "recorded", değilse
 // "talked" kovasına düşer (görüşülen/kayıt alınan sayfalarıyla aynı mantık).
@@ -2780,6 +2817,7 @@ module.exports = {
   getBusinessNotes,
   getBusinessCrmBatch,
   getContactedBusinesses,
+  listMultisportBusinesses,
   getContactedActivityCounts,
   getDashboardStats,
   createManualBusiness,

@@ -23,6 +23,8 @@ type WhatsAppBusinessPanelProps = {
   selectedBusinesses?: Business[];
   selectedPhoneCount?: number;
   onClearSelections?: () => void;
+  // Toplu template gönderimi tamamlandığında çağrılır (liste tazeleme için).
+  onTemplateSent?: () => void;
 };
 
 type BusinessForWhatsApp = Business & {
@@ -100,6 +102,7 @@ export function WhatsAppBusinessPanel({
   selectedBusinesses = [],
   selectedPhoneCount = 0,
   onClearSelections,
+  onTemplateSent,
 }: WhatsAppBusinessPanelProps) {
   const [to, setTo] = useState(TEST_PHONE_NUMBER);
   const [templateName, setTemplateName] = useState("jefedes_kuafor");
@@ -199,6 +202,7 @@ const manualTargetBusiness = manualMessageBusinesses[0];
       setSuccessMessage(
         `Template gönderimi tamamlandı. Başarılı: ${response.sentCount}, Atlanan: ${skippedCount}, Başarısız: ${response.failedCount}.`
       );
+      onTemplateSent?.();
     } catch (error) {
       console.error("WhatsApp template send error:", error);
 
@@ -407,6 +411,7 @@ const handleSendMessage = async () => {
               </option>
               <option value="spor">Spor (spor)</option>
               <option value="saglik">Sağlık (saglik)</option>
+              <option value="multisport">Multisport (multisport)</option>
             </select>
           </div>
 
@@ -531,6 +536,7 @@ const handleSendMessage = async () => {
               </option>
               <option value="spor">Spor (spor)</option>
               <option value="saglik">Sağlık (saglik)</option>
+              <option value="multisport">Multisport (multisport)</option>
             </select>
           </div>
 
