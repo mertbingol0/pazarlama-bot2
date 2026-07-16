@@ -29,5 +29,6 @@ jobs:
             cd /home/pazarlama/pazarlama-bot2/backend
             npm install
             npm run db:migrate
+            node scripts/importMultisportBusinesses.js
             pm2 restart pazarlamabot
             pm2 restart pazarlamabot-frontend
