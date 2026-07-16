@@ -26,7 +26,8 @@ function getPool() {
       connectionString: process.env.DATABASE_URL,
       // Oturum zaman dilimini bağlantı başlangıcında UTC'ye sabitle
       // (created_at/updated_at değerleri UTC olarak saklanır ve okunur).
-      options: "-c timezone=UTC",
+      // jit=off: küçük veri hacminde JIT derleme (>1s) net kayıp; kapatıyoruz.
+      options: "-c timezone=UTC -c jit=off",
     });
   }
 

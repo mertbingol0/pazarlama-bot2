@@ -46,7 +46,8 @@ export function PanelChrome({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex-1">{children}</div>
+        {/* Mobil hamburger butonun (Sidebar içinde fixed) sayfa içeriğini örtmemesi için üst boşluk. */}
+        <div className="flex-1 pt-14 md:pt-0">{children}</div>
         <Footer />
       </div>
     </div>

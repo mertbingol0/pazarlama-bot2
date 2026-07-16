@@ -102,7 +102,8 @@ export function WhatsAppBusinessPanel({
   onClearSelections,
 }: WhatsAppBusinessPanelProps) {
   const [to, setTo] = useState(TEST_PHONE_NUMBER);
-  const [templateName, setTemplateName] = useState("jefedes_merhaba");
+  const [templateName, setTemplateName] = useState("jefedes_kuafor");
+  const [manualTemplateName, setManualTemplateName] = useState("jefedes_kuafor");
   const [targetMode, setTargetMode] =
     useState<TemplateTargetMode>("selected_only");
 
@@ -225,10 +226,10 @@ const manualTargetBusiness = manualMessageBusinesses[0];
 
       const response = await sendWhatsAppTestMessage({
         to: to.trim(),
-        message: "jefedes_merhaba",
+        message: manualTemplateName,
         mode: "template",
-        templateName: "jefedes_merhaba",
-        languageCode: "tr",
+        templateName: manualTemplateName,
+        languageCode: TEMPLATE_LANGUAGE_CODE,
       });
 
       const normalizedTo = response.result?.to || to.trim();
@@ -263,9 +264,9 @@ const manualTargetBusiness = manualMessageBusinesses[0];
 
       const response = await sendWhatsAppTestMessage({
         to: BUTTON_WEBHOOK_TEST_PHONE,
-        message: "jefedes_merhaba",
+        message: templateName,
         mode: "template",
-        templateName: "jefedes_merhaba",
+        templateName,
         languageCode: TEMPLATE_LANGUAGE_CODE,
       });
 
@@ -394,9 +395,18 @@ const handleSendMessage = async () => {
               onChange={(event) => setTemplateName(event.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
-              <option value="jefedes_merhaba">
-                Jefedes Tanıtım Template&apos;i
+              <option value="jefedes_kuafor">
+                Jefedes Kuaför (jefedes_kuafor)
               </option>
+              <option value="otel">Otel (otel)</option>
+              <option value="restoran_kafe">
+                Restoran &amp; Kafe (restoran_kafe)
+              </option>
+              <option value="dugun_davet">
+                Düğün &amp; Davet (dugun_davet)
+              </option>
+              <option value="spor">Spor (spor)</option>
+              <option value="saglik">Sağlık (saglik)</option>
             </select>
           </div>
 
@@ -501,6 +511,31 @@ const handleSendMessage = async () => {
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-500">
+              Template Seçimi (Test Template Gönder için)
+            </label>
+
+            <select
+              value={manualTemplateName}
+              onChange={(event) => setManualTemplateName(event.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="jefedes_kuafor">
+                Jefedes Kuaför (jefedes_kuafor)
+              </option>
+              <option value="otel">Otel (otel)</option>
+              <option value="restoran_kafe">
+                Restoran &amp; Kafe (restoran_kafe)
+              </option>
+              <option value="dugun_davet">
+                Düğün &amp; Davet (dugun_davet)
+              </option>
+              <option value="spor">Spor (spor)</option>
+              <option value="saglik">Sağlık (saglik)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-500">
               Mesaj İçeriği
             </label>
 
@@ -570,9 +605,10 @@ const handleSendMessage = async () => {
 
               <p className="text-xs text-slate-500">
                 <span className="font-mono">{BUTTON_WEBHOOK_TEST_PHONE}</span>{" "}
-                numarasına <span className="font-mono">jefedes_merhaba</span>{" "}
-                template&apos;i gönderir. Telefondan butona basıp backend
-                log&apos;larında button reply payload&apos;unu doğrulamak için.
+                numarasına yukarıda seçili{" "}
+                <span className="font-mono">{templateName}</span> template&apos;i
+                gönderir. Telefondan butona basıp backend log&apos;larında button
+                reply payload&apos;unu doğrulamak için.
               </p>
             </div>
           </div>

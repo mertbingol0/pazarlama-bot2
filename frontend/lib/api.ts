@@ -637,6 +637,8 @@ export async function saveBusinessInteraction(
     channel?: InteractionChannel | null;
     outcome?: string | null;
     assignedUserId?: number | null;
+    // "YYYY-MM-DD HH:MM:SS" (UTC) — undefined bırakırsanız değiştirilmez, null gönderirseniz silinir.
+    meetingAt?: string | null;
   }
 ): Promise<BusinessInteraction> {
   const response = await fetch(

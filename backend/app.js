@@ -453,6 +453,56 @@ app.post("/api/whatsapp/conversations/:phone/send", async (req, res) => {
   }
 });
 
+app.post(
+  "/api/whatsapp/conversations/:phone/send-template",
+  async (req, res) => {
+    try {
+      const phone = String(req.params.phone || "");
+      const templateName =
+        String(req.body.templateName || "").trim() || "jefedes_kuafor";
+      const languageCode =
+        String(req.body.languageCode || "").trim() || "tr";
+
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          message: "Telefon zorunludur.",
+        });
+      }
+
+      const whatsappResult = await sendWhatsAppTemplateMessage({
+        to: phone,
+        templateName,
+        languageCode,
+      });
+
+      await logWhatsAppMessage({
+        phone,
+        direction: "outgoing",
+        type: "template",
+        text: `Template gönderildi: ${templateName}`,
+        messageId: whatsappResult.messageId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Template gönderildi.",
+        result: whatsappResult,
+      });
+    } catch (error) {
+      console.error(
+        "/api/whatsapp/conversations/:phone/send-template hata:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Template gönderilemedi.",
+      });
+    }
+  }
+);
+
 // WhatsApp sohbetinden sonuç/görüşme planı belirle → canlı desteğe işle
 app.post("/api/whatsapp/conversations/:phone/outcome", async (req, res) => {
   try {
@@ -2386,6 +2436,11 @@ const interactionSchema = z.object({
   ),
   // İletişime geçen personel (değiştirilebilir). Gönderilmezse mevcut kullanıcı.
   assignedUserId: z.coerce.number().int().positive().nullish(),
+  // Planlanan görüşme tarihi. undefined → dokunma; null/"" → temizle.
+  meetingAt: z.preprocess(
+    (v) => (v === "" ? null : v),
+    z.string().min(1).nullable().optional()
+  ),
 });
 
 // İşletmenin görüşme kaydını (kanal/sonuç/personel) oluştur/güncelle.
@@ -2406,7 +2461,7 @@ app.put("/api/businesses/:id/interaction", requireAuth, async (req, res) => {
       });
     }
 
-    const { channel, outcome, assignedUserId } = parsed.data;
+    const { channel, outcome, assignedUserId, meetingAt } = parsed.data;
 
     const interaction = await upsertBusinessInteraction({
       businessId,
@@ -2414,6 +2469,8 @@ app.put("/api/businesses/:id/interaction", requireAuth, async (req, res) => {
       userId: assignedUserId ?? req.user.id,
       channel: channel ?? null,
       outcome: outcome ?? null,
+      // undefined ise mevcut değere dokunma; null ise temizle.
+      ...(meetingAt === undefined ? {} : { meetingAt }),
     });
 
     return res.status(200).json({ success: true, interaction });

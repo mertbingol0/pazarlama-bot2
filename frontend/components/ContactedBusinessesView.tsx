@@ -4,14 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import {
+  getAssignableUsers,
   getContactedBusinesses,
   getWhatsAppConversation,
   saveBusinessInteraction,
+  sendWhatsAppMessage,
   addBusinessNote,
   updateBusinessStatus,
   OUTCOME_LABELS,
   OUTCOME_OPTIONS,
   TEAM_LABELS,
+  type AssignableUser,
   type ContactedBusiness,
   type ContactedFilters,
   type BusinessNote,
@@ -105,6 +108,29 @@ function formatDateTime(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// interaction.meetingAt (UTC "YYYY-MM-DD HH:MM:SS") -> datetime-local ("YYYY-MM-DDTHH:MM")
+function utcToLocalInput(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(String(value).replace(" ", "T") + "Z");
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// datetime-local ("YYYY-MM-DDTHH:MM") -> UTC "YYYY-MM-DD HH:MM:SS"
+function localInputToUtc(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().replace("T", " ").slice(0, 19);
+}
+
+function userLabel(user: AssignableUser) {
+  return user.fullName ? `${user.fullName} (${user.username})` : user.username;
 }
 
 const AVATAR_COLORS = [
@@ -231,17 +257,25 @@ function NoteCell({
 
 // WP sütunu: WhatsApp / Notlar geçişli hücre. WhatsApp'ta o işletmenin sohbet
 // geçmişi (baloncuklar) gösterilir; Notlar'da mevcut WP notları listelenir.
+// canSend true iken (yalnızca admin) WhatsApp sekmesinde manuel mesaj kutusu açılır.
 function WpCell({
   notes,
   phone,
+  businessId,
+  canSend,
 }: {
   notes: BusinessNote[];
   phone: string | null;
+  businessId: number;
+  canSend: boolean;
 }) {
   const [view, setView] = useState<"whatsapp" | "notes">("notes");
   const [messages, setMessages] = useState<WhatsAppChatMessage[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const ordered = [...notes].sort((a, b) =>
     String(a.createdAt || "").localeCompare(String(b.createdAt || ""))
@@ -259,6 +293,37 @@ function WpCell({
         setError(err instanceof Error ? err.message : "Sohbet getirilemedi.")
       )
       .finally(() => setLoading(false));
+  };
+
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      await sendWhatsAppMessage({ businessId, message: text });
+      setDraft("");
+      // Baloncuğu anında göster; arka planda sohbeti yeniden çekerek gerçek kayıtla eşitle.
+      const optimistic: WhatsAppChatMessage = {
+        id: `local-${Date.now()}`,
+        direction: "outgoing",
+        type: "text",
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => (prev ? [...prev, optimistic] : [optimistic]));
+      if (phone) {
+        getWhatsAppConversation(phone)
+          .then(setMessages)
+          .catch(() => {
+            // yenileme başarısızsa iyimser mesaj listede kalır
+          });
+      }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Mesaj gönderilemedi.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const tab = (active: boolean) =>
@@ -344,6 +409,33 @@ function WpCell({
             })
           )}
         </div>
+
+        {view === "whatsapp" && canSend && phone && (
+          <div className="mt-1 flex flex-col gap-1">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Mesaj yaz..."
+              className="min-h-[36px] rounded-lg bg-white text-xs"
+              rows={2}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || !draft.trim()}
+              className="h-7 self-end rounded-lg bg-emerald-500 px-3 text-xs text-white hover:bg-emerald-600"
+            >
+              {sending ? "..." : "Gönder"}
+            </Button>
+            {sendError && <p className="text-[11px] text-red-600">{sendError}</p>}
+          </div>
+        )}
       </div>
     </td>
   );
@@ -363,6 +455,7 @@ export function ContactedBusinessesView({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<LoginUser | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
 
   // Filtre alanları (tarih/metin sunucuda; şehir/ilçe/kullanıcı/sıralama istemcide)
   const [fromDate, setFromDate] = useState("");
@@ -372,7 +465,9 @@ export function ContactedBusinessesView({
   const [districtFilter, setDistrictFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState(""); // işletme kategorisi
   const [userFilter, setUserFilter] = useState(""); // interaction.userId (string)
-  const [sortOrder, setSortOrder] = useState<"recent" | "oldest">("recent");
+  const [sortOrder, setSortOrder] = useState<
+    "recent" | "oldest" | "last_note"
+  >("recent");
   const [isFiltered, setIsFiltered] = useState(false);
 
   useEffect(() => {
@@ -381,6 +476,22 @@ export function ContactedBusinessesView({
 
   const myCategory = myNoteCategory(user);
   const isAdmin = user?.role === "admin";
+
+  // Personel atama listesi — yalnızca admin ilk açılışta çeker.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    getAssignableUsers()
+      .then((users) => {
+        if (active) setAssignableUsers(users);
+      })
+      .catch(() => {
+        /* sessizce yoksay; dropdown boş kalır */
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
 
   const loadData = useCallback(
     (filters: ContactedFilters, filtered: boolean) => {
@@ -457,6 +568,16 @@ export function ContactedBusinessesView({
   const contactTime = (b: ContactedBusiness) =>
     b.interaction?.updatedAt || b.activityAt || "";
 
+  // İşletmenin son not oluşturma zamanı; not yoksa boş string (en sona düşer).
+  const lastNoteTime = (b: ContactedBusiness) => {
+    let max = "";
+    for (const n of b.notes) {
+      const t = n.createdAt || "";
+      if (t > max) max = t;
+    }
+    return max;
+  };
+
   const visibleBusinesses = modeBusinesses
     .filter((b) => {
       // İl/ilçe: adres + (varsa) yapısal alanlar üzerinde metin eşleşmesi.
@@ -472,6 +593,15 @@ export function ContactedBusinessesView({
       return true;
     })
     .sort((a, b) => {
+      if (sortOrder === "last_note") {
+        const ta = lastNoteTime(a);
+        const tb = lastNoteTime(b);
+        // Notu olmayanlar en sona; aynı olanlar arasında görüşme zamanına göre.
+        if (!ta && !tb) return contactTime(b).localeCompare(contactTime(a));
+        if (!ta) return 1;
+        if (!tb) return -1;
+        return tb.localeCompare(ta);
+      }
       const ta = contactTime(a);
       const tb = contactTime(b);
       return sortOrder === "recent" ? tb.localeCompare(ta) : ta.localeCompare(tb);
@@ -512,6 +642,51 @@ export function ContactedBusinessesView({
         b.id === business.id ? { ...b, interaction: updated } : b
       )
     );
+  };
+
+  // Admin: bir işletmeye personel ata (mevcut kanal/sonuç korunur).
+  const handleAssignedUserChange = async (
+    business: ContactedBusiness,
+    assignedUserId: number | null
+  ) => {
+    try {
+      const updated = await saveBusinessInteraction(business.id, {
+        channel: business.interaction?.channel ?? null,
+        outcome: business.interaction?.outcome ?? null,
+        assignedUserId,
+      });
+      setBusinesses((prev) =>
+        prev.map((b) =>
+          b.id === business.id ? { ...b, interaction: updated } : b
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Personel atanamadı.");
+    }
+  };
+
+  // Admin: randevu (görüşme) tarihini kaydet. Boş string temizler.
+  const handleMeetingAtChange = async (
+    business: ContactedBusiness,
+    localValue: string
+  ) => {
+    try {
+      const updated = await saveBusinessInteraction(business.id, {
+        channel: business.interaction?.channel ?? null,
+        outcome: business.interaction?.outcome ?? null,
+        assignedUserId: business.interaction?.userId ?? null,
+        meetingAt: localValue ? localInputToUtc(localValue) : null,
+      });
+      setBusinesses((prev) =>
+        prev.map((b) =>
+          b.id === business.id ? { ...b, interaction: updated } : b
+        )
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Randevu tarihi kaydedilemedi."
+      );
+    }
   };
 
   // İşletme durumunu değiştir (yalnızca admin). İyimser güncelle, hatada geri al.
@@ -704,7 +879,9 @@ export function ContactedBusinessesView({
               </label>
               <Select
                 value={sortOrder}
-                onValueChange={(v) => setSortOrder(v as "recent" | "oldest")}
+                onValueChange={(v) =>
+                  setSortOrder(v as "recent" | "oldest" | "last_note")
+                }
               >
                 <SelectTrigger className="h-9 rounded-xl">
                   <SelectValue />
@@ -712,6 +889,7 @@ export function ContactedBusinessesView({
                 <SelectContent>
                   <SelectItem value="recent">Son görüşülen</SelectItem>
                   <SelectItem value="oldest">İlk görüşülen</SelectItem>
+                  <SelectItem value="last_note">Son not bırakılan</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -816,8 +994,8 @@ export function ContactedBusinessesView({
                       key={business.id}
                       className="border-b border-slate-100 align-top"
                     >
-                      {/* Görüşmeyi başlatan personel */}
-                      <td className="min-w-[150px] p-3 align-top">
+                      {/* Görüşmeyi başlatan personel + (admin) atama/randevu */}
+                      <td className="min-w-[190px] p-3 align-top">
                         {personnel ? (
                           <div className="flex items-center gap-2">
                             <span
@@ -841,6 +1019,63 @@ export function ContactedBusinessesView({
                           </div>
                         ) : (
                           <span className="text-xs text-slate-300">—</span>
+                        )}
+
+                        {/* Randevu tarihi (herkes görür; admin değiştirir) */}
+                        {interaction?.meetingAt && (
+                          <p className="mt-2 text-[11px] text-slate-500">
+                            Randevu: {formatDateTime(interaction.meetingAt)}
+                          </p>
+                        )}
+
+                        {isAdmin && (
+                          <div className="mt-2 flex flex-col gap-1.5">
+                            <Select
+                              value={
+                                interaction?.userId
+                                  ? String(interaction.userId)
+                                  : ""
+                              }
+                              onValueChange={(value) =>
+                                handleAssignedUserChange(
+                                  business,
+                                  value ? Number(value) : null
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-full rounded-lg bg-white text-xs">
+                                <SelectValue placeholder="Personel ata" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {assignableUsers.map((u) => (
+                                  <SelectItem key={u.id} value={String(u.id)}>
+                                    {userLabel(u)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-medium text-slate-500">
+                                Randevu tarihi
+                              </label>
+                              <Input
+                                type="datetime-local"
+                                defaultValue={utcToLocalInput(
+                                  interaction?.meetingAt
+                                )}
+                                onBlur={(e) => {
+                                  const next = e.currentTarget.value;
+                                  const current = utcToLocalInput(
+                                    interaction?.meetingAt
+                                  );
+                                  if (next !== current) {
+                                    handleMeetingAtChange(business, next);
+                                  }
+                                }}
+                                className="h-8 rounded-lg bg-white text-xs"
+                              />
+                            </div>
+                          </div>
                         )}
                       </td>
 
@@ -891,12 +1126,15 @@ export function ContactedBusinessesView({
                           (n) => n.category === col.category
                         );
                         // WP sütunu: WhatsApp sohbeti / Notlar geçişli özel hücre.
+                        // Manuel mesaj kutusu yalnızca admin için açılır.
                         if (col.category === "wp") {
                           return (
                             <WpCell
                               key={col.category}
                               notes={colNotes}
                               phone={business.phone}
+                              businessId={business.id}
+                              canSend={isAdmin}
                             />
                           );
                         }

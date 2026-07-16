@@ -2003,12 +2003,14 @@ async function getBusinessInteraction(businessId) {
 }
 
 // İşletmenin görüşme kaydını oluşturur/günceller (kanal + sonuç + iletişime
-// geçen personel). businesses.assigned_to da senkron tutulur.
+// geçen personel + planlanan görüşme tarihi). businesses.assigned_to da senkron
+// tutulur. meetingAt undefined ise mevcut değer korunur; null ise silinir.
 async function upsertBusinessInteraction({
   businessId,
   userId = null,
   channel = null,
   outcome = null,
+  meetingAt,
 }) {
   if (channel && !INTERACTION_CHANNELS.includes(channel)) {
     const e = new Error("Geçersiz iletişim kanalı.");
@@ -2023,25 +2025,45 @@ async function upsertBusinessInteraction({
 
   const team = await getUserTeam(userId);
   const safeOutcome = outcome || "pending";
+  const includeMeetingAt = meetingAt !== undefined;
+  const meetingAtValue = meetingAt || null;
 
   const existing = await execGet(
     sql`SELECT id FROM interactions WHERE business_id = ${businessId} ORDER BY id DESC LIMIT 1`
   );
 
   if (existing) {
-    await execRun(
-      sql`
-      UPDATE interactions
-      SET user_id = ${userId}, team = ${team}, channel = ${channel},
-          outcome = ${safeOutcome}, updated_at = now()
-      WHERE id = ${existing.id}
-      `
-    );
+    // channel NOT NULL: caller null gönderirse mevcut değeri koru (personel/sonuç
+    // değişikliği kanalı silmesin).
+    if (includeMeetingAt) {
+      await execRun(
+        sql`
+        UPDATE interactions
+        SET user_id = ${userId}, team = ${team},
+            channel = COALESCE(${channel}, channel),
+            outcome = ${safeOutcome}, meeting_at = ${meetingAtValue},
+            updated_at = now()
+        WHERE id = ${existing.id}
+        `
+      );
+    } else {
+      await execRun(
+        sql`
+        UPDATE interactions
+        SET user_id = ${userId}, team = ${team},
+            channel = COALESCE(${channel}, channel),
+            outcome = ${safeOutcome}, updated_at = now()
+        WHERE id = ${existing.id}
+        `
+      );
+    }
   } else {
+    // Yeni kayıt: kanal belirtilmemişse "manual" (admin/personel manuel CRM aksiyonu).
+    const insertChannel = channel || "manual";
     await execRun(
       sql`
-      INSERT INTO interactions (business_id, user_id, team, channel, outcome)
-      VALUES (${businessId}, ${userId}, ${team}, ${channel}, ${safeOutcome})
+      INSERT INTO interactions (business_id, user_id, team, channel, outcome, meeting_at)
+      VALUES (${businessId}, ${userId}, ${team}, ${insertChannel}, ${safeOutcome}, ${meetingAtValue})
       `
     );
   }
@@ -2247,14 +2269,18 @@ async function createManualBusiness({
   return row.id;
 }
 
-// İletişime geçilen işletmeler: en az bir görüşme kaydı VEYA notu olan işletmeler.
-// Her biri için son görüşme (kanal/sonuç/personel) + notlar döner.
+// İletişime geçilen işletmeler: en az bir görüşme kaydı, notu, WhatsApp
+// template gönderimi VEYA giden WhatsApp mesajı olan işletmeler. Her biri
+// için son görüşme (kanal/sonuç/personel) + notlar döner.
 //
 // Filtreler:
 //  - from/to (YYYY-MM-DD): aktivite tarihine göre aralık.
 //  - q: isim / adres / telefon / e-posta metin araması.
 //  - Filtre yoksa: son 24 saatteki aktiviteler (o günün verisi).
-// Aktivite zamanı = en son görüşme güncellemesi veya en son not (hangisi yeniyse).
+// Aktivite zamanı = en son görüşme güncellemesi, en son not, template
+// gönderim zamanı veya son giden WhatsApp mesajı (hangisi yeniyse).
+// userId verildiğinde template gönderimi ve WhatsApp mesajları filtreye
+// dahil edilmez; bu aktiviteler belirli bir personele bağlı saklanmıyor.
 async function getContactedBusinesses({
   from = null,
   to = null,
@@ -2262,36 +2288,77 @@ async function getContactedBusinesses({
   all = false,
   userId = null,
 } = {}) {
-  const activityAt = sql`GREATEST(
-    COALESCE((SELECT MAX(i2.updated_at) FROM interactions i2 WHERE i2.business_id = b.id), '1970-01-01 00:00:00'::timestamp),
-    COALESCE((SELECT MAX(n2.created_at) FROM business_notes n2 WHERE n2.business_id = b.id), '1970-01-01 00:00:00'::timestamp)
-  )`;
-
-  // Belirli bir personele kısıtla (Durum Takip: "kendi işletmelerim").
-  const uInt = userId ? sql` AND i.user_id = ${userId}` : sql``;
-  const uNote = userId ? sql` AND n.user_id = ${userId}` : sql``;
-
-  const conditions = [
-    sql`(EXISTS (SELECT 1 FROM interactions i WHERE i.business_id = b.id${uInt})
-        OR EXISTS (SELECT 1 FROM business_notes n WHERE n.business_id = b.id${uNote}))`,
-  ];
-
+  // Aktivite penceresi: from/to varsa o aralık, yoksa (all değilse) son 24 saat.
+  // Filtreyi tek ifade olarak inşa edip her UNION dalına ekliyoruz. Böylece
+  // sürücü tablo businesses değil, çok daha küçük aktivite tabloları oluyor.
   const fromDate = from ? String(from).trim() : null;
   const toDate = to ? String(to).trim() : null;
 
-  if (all) {
-    // Tüm zamanlar: tarih koşulu yok.
-  } else if (fromDate || toDate) {
-    const f = fromDate || toDate;
-    const t = toDate || fromDate;
-    conditions.push(
-      sql`(${activityAt})::date BETWEEN ${f}::date AND ${t}::date`
-    );
-  } else {
-    // Varsayılan: son 24 saat.
-    conditions.push(sql`${activityAt} >= (now() - interval '24 hours')::timestamp`);
+  const timeCol = (col) => {
+    if (all) return sql``;
+    if (fromDate || toDate) {
+      const f = fromDate || toDate;
+      const t = toDate || fromDate;
+      return sql` AND (${col})::date BETWEEN ${f}::date AND ${t}::date`;
+    }
+    return sql` AND ${col} >= (now() - interval '24 hours')::timestamp`;
+  };
+
+  // Telefon karşılaştırması (whatsapp_messages.phone yalnızca rakam saklanır;
+  // businesses.phone karışık formatta olabilir).
+  const bPhoneNorm = sql`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(b.phone, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
+  const bPhoneLast10 = sql`RIGHT(${bPhoneNorm}, 10)`;
+
+  // userId verildiğinde: yalnız o personele ait interactions/notes; template ve
+  // WhatsApp aktiviteleri (belirli bir kullanıcıya bağlı olmadıklarından) dahil
+  // edilmez.
+  const iUserFilter = userId ? sql` AND i.user_id = ${userId}` : sql``;
+  const nUserFilter = userId ? sql` AND n.user_id = ${userId}` : sql``;
+
+  const branches = [
+    sql`
+      SELECT i.business_id AS id, MAX(i.updated_at) AS ts
+        FROM interactions i
+       WHERE TRUE${iUserFilter}${timeCol(sql`i.updated_at`)}
+       GROUP BY i.business_id
+    `,
+    sql`
+      SELECT n.business_id AS id, MAX(n.created_at) AS ts
+        FROM business_notes n
+       WHERE TRUE${nUserFilter}${timeCol(sql`n.created_at`)}
+       GROUP BY n.business_id
+    `,
+  ];
+
+  if (!userId) {
+    branches.push(sql`
+      SELECT b.id AS id, b.template_sent_at AS ts
+        FROM businesses b
+       WHERE b.template_sent_at IS NOT NULL${timeCol(sql`b.template_sent_at`)}
+    `);
+    branches.push(sql`
+      SELECT wm.business_id AS id, MAX(wm.created_at) AS ts
+        FROM whatsapp_messages wm
+       WHERE wm.direction = 'outgoing'
+         AND wm.business_id IS NOT NULL${timeCol(sql`wm.created_at`)}
+       GROUP BY wm.business_id
+    `);
+    // Legacy giden WhatsApp mesajları (business_id set edilmemiş) için telefon
+    // son-10-hane eşleşmesi. Küçük veri hacminde nested-loop join hızlı çalışır.
+    branches.push(sql`
+      SELECT b.id AS id, MAX(wm.created_at) AS ts
+        FROM whatsapp_messages wm
+        JOIN businesses b ON wm.phone LIKE ('%' || ${bPhoneLast10})
+       WHERE wm.direction = 'outgoing'
+         AND LENGTH(${bPhoneNorm}) >= 10${timeCol(sql`wm.created_at`)}
+       GROUP BY b.id
+    `);
   }
 
+  const unionBranches = sql.join(branches, sql` UNION ALL `);
+
+  // Metin araması (isim/adres/telefon/e-posta) — dış SELECT'te uygulanır.
+  const searchConditions = [];
   const term = q ? String(q).trim() : "";
   if (term) {
     const like = `%${term}%`;
@@ -2299,25 +2366,32 @@ async function getContactedBusinesses({
     const phoneClause = digits
       ? sql` OR ${normalizedBusinessPhoneSql()} LIKE ${"%" + digits + "%"}`
       : sql``;
-    conditions.push(
+    searchConditions.push(
       sql`(b.name ILIKE ${like} OR b.address ILIKE ${like} OR b.phone ILIKE ${like} OR b.email ILIKE ${like}${phoneClause})`
     );
   }
-
-  const whereClause = sql.join(conditions, sql` AND `);
+  const searchWhere = searchConditions.length
+    ? sql` WHERE ${sql.join(searchConditions, sql` AND `)}`
+    : sql``;
 
   const businessRows = await execAll(
     sql`
+    WITH act AS (
+      ${unionBranches}
+    ),
+    act_agg AS (
+      SELECT id, MAX(ts) AS activity_at FROM act GROUP BY id
+    )
     SELECT b.id, b.name, b.phone, b.email, b.socials, b.instagram, b.address,
            COALESCE(b.city, s.city) AS city,
            COALESCE(b.district, s.district) AS district,
            COALESCE(b.category, s.category) AS category,
            b.website, b.google_maps_url, b.status,
-           ${activityAt} AS activity_at
-    FROM businesses b
-    LEFT JOIN searches s ON s.id = b.search_id
-    WHERE ${whereClause}
-    ORDER BY activity_at DESC
+           aa.activity_at
+    FROM act_agg aa
+    JOIN businesses b ON b.id = aa.id
+    LEFT JOIN searches s ON s.id = b.search_id${searchWhere}
+    ORDER BY aa.activity_at DESC
     `
   );
 
@@ -2355,23 +2429,49 @@ async function getContactedActivityCounts(since) {
   const sinceTs = since ? String(since).trim() : null;
   if (!sinceTs) return { talked: 0, recorded: 0 };
 
-  const activityAt = sql`GREATEST(
-    COALESCE((SELECT MAX(i2.updated_at) FROM interactions i2 WHERE i2.business_id = b.id), '1970-01-01 00:00:00'::timestamp),
-    COALESCE((SELECT MAX(n2.created_at) FROM business_notes n2 WHERE n2.business_id = b.id), '1970-01-01 00:00:00'::timestamp)
-  )`;
+  const bPhoneNorm = sql`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(b.phone, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
+  const bPhoneLast10 = sql`RIGHT(${bPhoneNorm}, 10)`;
 
+  // getContactedBusinesses ile aynı aktivite-tabanlı UNION deseni; her dal
+  // kendi timestamp'ini sinceTs sınırıyla filtreler, sonra business_id başına
+  // aggregate edilir.
   const rows = await execAll(
     sql`
+    WITH act AS (
+      SELECT i.business_id AS id
+        FROM interactions i
+       WHERE i.updated_at > ${sinceTs}::timestamp
+      UNION ALL
+      SELECT n.business_id AS id
+        FROM business_notes n
+       WHERE n.created_at > ${sinceTs}::timestamp
+      UNION ALL
+      SELECT b.id
+        FROM businesses b
+       WHERE b.template_sent_at IS NOT NULL
+         AND b.template_sent_at > ${sinceTs}::timestamp
+      UNION ALL
+      SELECT wm.business_id AS id
+        FROM whatsapp_messages wm
+       WHERE wm.direction = 'outgoing'
+         AND wm.business_id IS NOT NULL
+         AND wm.created_at > ${sinceTs}::timestamp
+      UNION ALL
+      SELECT b.id
+        FROM whatsapp_messages wm
+        JOIN businesses b ON wm.phone LIKE ('%' || ${bPhoneLast10})
+       WHERE wm.direction = 'outgoing'
+         AND wm.created_at > ${sinceTs}::timestamp
+         AND LENGTH(${bPhoneNorm}) >= 10
+    ),
+    act_agg AS (SELECT DISTINCT id FROM act)
     SELECT
       CASE WHEN li.outcome = 'record_taken' THEN 'recorded' ELSE 'talked' END AS bucket,
       COUNT(*)::int AS count
-    FROM businesses b
+    FROM act_agg aa
     LEFT JOIN LATERAL (
-      SELECT outcome FROM interactions i WHERE i.business_id = b.id ORDER BY i.id DESC LIMIT 1
+      SELECT outcome FROM interactions i WHERE i.business_id = aa.id ORDER BY i.id DESC LIMIT 1
     ) li ON true
-    WHERE (${activityAt}) > ${sinceTs}::timestamp
-      AND (EXISTS (SELECT 1 FROM interactions i WHERE i.business_id = b.id)
-           OR EXISTS (SELECT 1 FROM business_notes n WHERE n.business_id = b.id))
     GROUP BY bucket
     `
   );

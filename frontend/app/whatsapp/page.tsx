@@ -52,6 +52,16 @@ const RESULT_OPTIONS: { value: string; label: string }[] = [
   { value: "completed", label: "Tamamlandı" },
 ];
 
+const TEMPLATE_OPTIONS: { value: string; label: string }[] = [
+  { value: "jefedes_kuafor", label: "Jefedes Kuaför (jefedes_kuafor)" },
+  { value: "otel", label: "Otel (otel)" },
+  { value: "restoran_kafe", label: "Restoran & Kafe (restoran_kafe)" },
+  { value: "dugun_davet", label: "Düğün & Davet (dugun_davet)" },
+  { value: "spor", label: "Spor (spor)" },
+  { value: "saglik", label: "Sağlık (saglik)" },
+];
+const TEMPLATE_LANGUAGE_CODE = "tr";
+
 function formatSource(source?: string | null) {
   if (source === "google_places") return "Google Places";
   if (source === "google_maps") return "Google Maps";
@@ -86,6 +96,7 @@ function formatDateTime(value?: string | null) {
 
 export default function WhatsAppPage() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationQuery, setConversationQuery] = useState("");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [canSendFreeText, setCanSendFreeText] = useState(true);
@@ -101,6 +112,8 @@ export default function WhatsAppPage() {
   const [wpNote, setWpNote] = useState("");
   const [wpSaving, setWpSaving] = useState(false);
   const [wpSaved, setWpSaved] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [isSendingTemplate, setIsSendingTemplate] = useState(false);
 
   const initializedPhoneRef = useRef<string | null>(null);
 
@@ -243,6 +256,7 @@ export default function WhatsAppPage() {
     setBusiness(null);
     setLead(null);
     setWpNote("");
+    setSelectedTemplate("");
     // Okundu işaretlenince listedeki rozet güncellensin.
     setConversations((current) =>
       current.map((conversation) =>
@@ -251,6 +265,47 @@ export default function WhatsAppPage() {
           : conversation
       )
     );
+  };
+
+  const handleSendTemplate = async () => {
+    if (!selectedPhone || !selectedTemplate) return;
+
+    setIsSendingTemplate(true);
+    setErrorMessage("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/whatsapp/conversations/${encodeURIComponent(
+          selectedPhone
+        )}/send-template`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            templateName: selectedTemplate,
+            languageCode: TEMPLATE_LANGUAGE_CODE,
+          }),
+        }
+      );
+
+      const data = await readJsonResponse<{ success: boolean; message?: string }>(
+        response
+      );
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Template gönderilemedi.");
+      }
+
+      setSelectedTemplate("");
+      await fetchMessages(selectedPhone);
+      await fetchConversations();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Template gönderilemedi."
+      );
+    } finally {
+      setIsSendingTemplate(false);
+    }
   };
 
   const handleSend = async () => {
@@ -295,6 +350,23 @@ export default function WhatsAppPage() {
     (conversation) => conversation.phone === selectedPhone
   );
 
+  // Arama: işletme adı veya telefon (rakam-dışı karakterler yok sayılır) üzerinde eşleşme.
+  const searchTerm = conversationQuery.trim().toLocaleLowerCase("tr-TR");
+  const searchDigits = conversationQuery.replace(/\D+/g, "");
+  const filteredConversations = searchTerm
+    ? conversations.filter((conversation) => {
+        const name = (conversation.businessName || "").toLocaleLowerCase("tr-TR");
+        const nameHit = name.includes(searchTerm);
+        const phoneDigits = (conversation.phone || "").replace(/\D+/g, "");
+        const phoneHit = searchDigits
+          ? phoneDigits.includes(searchDigits)
+          : (conversation.phone || "")
+              .toLocaleLowerCase("tr-TR")
+              .includes(searchTerm);
+        return nameHit || phoneHit;
+      })
+    : conversations;
+
   return (
     <main className="min-h-screen bg-[#f7fbf9] px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl">
@@ -329,7 +401,19 @@ export default function WhatsAppPage() {
           {/* Sol: sohbet listesi */}
           <aside className="flex min-h-0 flex-col">
             <div className="px-4 py-3 text-sm font-semibold text-slate-700">
-              Sohbetler ({conversations.length})
+              Sohbetler ({searchTerm
+                ? `${filteredConversations.length}/${conversations.length}`
+                : conversations.length})
+            </div>
+
+            <div className="px-4 pb-3">
+              <input
+                type="search"
+                value={conversationQuery}
+                onChange={(event) => setConversationQuery(event.target.value)}
+                placeholder="İşletme adı veya telefon ara..."
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+              />
             </div>
 
             <div className="min-h-0 max-h-[24rem] flex-1 overflow-y-auto lg:max-h-none">
@@ -337,8 +421,12 @@ export default function WhatsAppPage() {
                 <p className="p-4 text-sm text-slate-400">
                   Henüz konuşma yok. Gelen/giden mesajlar burada listelenir.
                 </p>
+              ) : filteredConversations.length === 0 ? (
+                <p className="p-4 text-sm text-slate-400">
+                  Aramayla eşleşen sohbet yok.
+                </p>
               ) : (
-                conversations.map((conversation) => {
+                filteredConversations.map((conversation) => {
                   const isActive = conversation.phone === selectedPhone;
 
                   return (
@@ -451,28 +539,54 @@ export default function WhatsAppPage() {
                   </div>
                 )}
 
-                <div className="flex items-end gap-2 p-3">
-                  <textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void handleSend();
+                <div className="space-y-2 p-3">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedTemplate}
+                      onChange={(event) =>
+                        setSelectedTemplate(event.target.value)
                       }
-                    }}
-                    rows={1}
-                    placeholder="Mesaj yazın... (Enter ile gönder)"
-                    className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => void handleSend()}
-                    disabled={isSending || !draft.trim()}
-                    className="h-10 rounded-xl bg-emerald-500 px-5 text-white hover:bg-emerald-600 disabled:opacity-60"
-                  >
-                    {isSending ? "..." : "Gönder"}
-                  </Button>
+                      className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    >
+                      <option value="">Template Seçiniz</option>
+                      {TEMPLATE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      onClick={() => void handleSendTemplate()}
+                      disabled={isSendingTemplate || !selectedTemplate}
+                      className="h-10 rounded-xl bg-blue-500 px-5 text-white hover:bg-blue-600 disabled:opacity-60"
+                    >
+                      {isSendingTemplate ? "..." : "Template Gönder"}
+                    </Button>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void handleSend();
+                        }
+                      }}
+                      rows={1}
+                      placeholder="Mesaj yazın... (Enter ile gönder)"
+                      className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => void handleSend()}
+                      disabled={isSending || !draft.trim()}
+                      className="h-10 rounded-xl bg-emerald-500 px-5 text-white hover:bg-emerald-600 disabled:opacity-60"
+                    >
+                      {isSending ? "..." : "Gönder"}
+                    </Button>
+                  </div>
                 </div>
               </>
             )}

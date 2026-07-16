@@ -17,6 +17,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Boxes,
+  Menu,
+  X,
 } from "lucide-react";
 
 import { loadAuth, clearAuth } from "@/lib/auth-storage";
@@ -125,6 +127,8 @@ export function Sidebar() {
   const [contactedCount, setContactedCount] = useState(0);
   const [recordedCount, setRecordedCount] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
     setUser(loadAuth()?.user ?? null);
@@ -134,6 +138,34 @@ export function Sidebar() {
   useEffect(() => {
     setCollapsed(localStorage.getItem("sidebar-collapsed") === "1");
   }, []);
+
+  // md breakpoint (768px) — collapsed sadece masaüstünde etkili olsun,
+  // mobil drawer her zaman tam genişlikte açılsın.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Sayfa değişince mobil drawer'ı kapat.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Drawer açıkken arka plan kaydırmasını engelle.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
+  // collapsed sadece masaüstünde görsel etki göstersin.
+  const showCollapsed = isDesktop && collapsed;
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -249,9 +281,9 @@ export function Sidebar() {
       <Link
         key={link.href}
         href={link.href}
-        title={collapsed ? link.label : undefined}
+        title={showCollapsed ? link.label : undefined}
         className={`relative flex items-center rounded-xl py-2 text-sm font-medium transition ${
-          collapsed ? "justify-center px-2" : "gap-3 px-3"
+          showCollapsed ? "justify-center px-2" : "gap-3 px-3"
         } ${
           isActive
             ? "bg-slate-950 text-white"
@@ -259,9 +291,9 @@ export function Sidebar() {
         }`}
       >
         <Icon className="h-4 w-4 shrink-0" />
-        {!collapsed && <span>{link.label}</span>}
+        {!showCollapsed && <span>{link.label}</span>}
         {showBadge &&
-          (collapsed ? (
+          (showCollapsed ? (
             <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
           ) : (
             <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-none text-white">
@@ -273,35 +305,68 @@ export function Sidebar() {
   };
 
   return (
-    <aside
-      className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 md:flex ${
-        collapsed ? "w-16" : "w-60"
-      }`}
-    >
+    <>
+      {/* Mobil hamburger butonu */}
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        title="Menüyü aç"
+        aria-label="Menüyü aç"
+        aria-expanded={mobileOpen}
+        className="fixed left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 md:hidden"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Mobil arka plan katmanı */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white transition-transform duration-200 md:sticky md:top-0 md:z-0 md:translate-x-0 md:transition-[width] ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        } ${showCollapsed ? "md:w-16" : "md:w-60"}`}
+      >
       <div
         className={`flex py-5 ${
-          collapsed ? "flex-col items-center gap-3 px-2" : "items-center gap-2 px-5"
+          showCollapsed ? "flex-col items-center gap-3 px-2" : "items-center gap-2 px-5"
         }`}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white">
           <Sparkles className="h-4 w-4" />
         </span>
-        {!collapsed && (
+        {!showCollapsed && (
           <div className="leading-tight">
             <div className="text-sm font-semibold text-slate-900">Menü</div>
             <div className="text-[11px] text-slate-400">Yeni özellikler</div>
           </div>
         )}
+        {/* Mobilde drawer'ı kapatma butonu */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          title="Menüyü kapat"
+          aria-label="Menüyü kapat"
+          className="ml-auto rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 md:hidden"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        {/* Masaüstünde daralt/genişlet butonu */}
         <button
           type="button"
           onClick={toggleCollapsed}
-          title={collapsed ? "Menüyü genişlet" : "Menüyü daralt"}
-          aria-label={collapsed ? "Menüyü genişlet" : "Menüyü daralt"}
-          className={`rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 ${
-            collapsed ? "" : "ml-auto"
+          title={showCollapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+          aria-label={showCollapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+          className={`hidden rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 md:inline-flex ${
+            showCollapsed ? "" : "ml-auto"
           }`}
         >
-          {collapsed ? (
+          {showCollapsed ? (
             <ChevronsRight className="h-4 w-4" />
           ) : (
             <ChevronsLeft className="h-4 w-4" />
@@ -311,7 +376,7 @@ export function Sidebar() {
 
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-2">
         <div>
-          {!collapsed && (
+          {!showCollapsed && (
             <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Çalışma Alanı
             </p>
@@ -323,7 +388,7 @@ export function Sidebar() {
 
         {visibleFeatures.length > 0 && (
           <div>
-            {!collapsed && (
+            {!showCollapsed && (
               <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 Yönetim
               </p>
@@ -334,7 +399,7 @@ export function Sidebar() {
           </div>
         )}
 
-        {upcomingLinks.length > 0 && !collapsed && (
+        {upcomingLinks.length > 0 && !showCollapsed && (
           <div>
             <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Yakında
@@ -366,7 +431,7 @@ export function Sidebar() {
       {/* Hesap profil kartı (en altta) */}
       {user && (
         <div className="border-t border-slate-200 p-3">
-          {collapsed ? (
+          {showCollapsed ? (
             <div className="flex flex-col items-center gap-2">
               <span
                 title={user.fullName || user.username}
@@ -418,6 +483,7 @@ export function Sidebar() {
           )}
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }
