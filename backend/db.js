@@ -2452,6 +2452,33 @@ async function getContactedBusinesses({
   });
 }
 
+// external_id -> sektör (activityGroup) listesi. Sektör bilgisi businesses'ta
+// tutulmaz; tools/benefit_facilities.json'dan (import kaynağı) türetilir.
+// ponytail: dosya bir kez okunup cache'lenir; veri tazelenince süreç yeniden başlar.
+let _multisportSectorMap = null;
+function getMultisportSectorMap() {
+  if (_multisportSectorMap) return _multisportSectorMap;
+  _multisportSectorMap = {};
+  try {
+    const p = require("path").join(
+      __dirname,
+      "..",
+      "tools",
+      "benefit_facilities.json"
+    );
+    const facilities = JSON.parse(require("fs").readFileSync(p, "utf8"));
+    for (const f of facilities) {
+      const groups = (f.activityGroups || [])
+        .map((g) => String(g.name || "").trim())
+        .filter(Boolean);
+      _multisportSectorMap[`multisport_${f.id}`] = [...new Set(groups)];
+    }
+  } catch (error) {
+    console.warn("multisport sektör verisi okunamadı:", error.message);
+  }
+  return _multisportSectorMap;
+}
+
 // Multisport (Benefit Systems) import'u ile gelen işletmeler.
 // scripts/importMultisportBusinesses.js ile doldurulur (source='multisport').
 async function listMultisportBusinesses({ q = null, city = null } = {}) {
@@ -2469,12 +2496,14 @@ async function listMultisportBusinesses({ q = null, city = null } = {}) {
   }
 
   const rows = await execAll(sql`
-    SELECT b.id, b.name, b.phone, b.address, b.city, b.district, b.website,
-           b.whatsapp_status, b.template_sent_at
+    SELECT b.id, b.external_id, b.name, b.phone, b.address, b.city, b.district,
+           b.website, b.whatsapp_status, b.template_sent_at
     FROM businesses b
     WHERE ${sql.join(conditions, sql` AND `)}
     ORDER BY b.city ASC, b.district ASC, b.name ASC
   `);
+
+  const sectorMap = getMultisportSectorMap();
 
   return rows.map((b) => ({
     id: b.id,
@@ -2484,6 +2513,7 @@ async function listMultisportBusinesses({ q = null, city = null } = {}) {
     city: b.city,
     district: b.district,
     website: b.website,
+    sectors: sectorMap[b.external_id] || [],
     whatsappStatus: b.whatsapp_status || "not_sent",
     templateSentAt: b.template_sent_at,
   }));

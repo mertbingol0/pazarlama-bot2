@@ -47,6 +47,7 @@ export default function MultisportPage() {
 
   const [search, setSearch] = useState("");
   const [city, setCity] = useState<string>("all");
+  const [sector, setSector] = useState<string>("all");
   const [onlyWithPhone, setOnlyWithPhone] = useState(true);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -78,17 +79,26 @@ export default function MultisportPage() {
     [businesses]
   );
 
+  const sectors = useMemo(
+    () =>
+      [...new Set(businesses.flatMap((b) => b.sectors))]
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "tr")),
+    [businesses]
+  );
+
   const filtered = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
     return businesses.filter((b) => {
       if (city !== "all" && b.city !== city) return false;
+      if (sector !== "all" && !b.sectors.includes(sector)) return false;
       if (onlyWithPhone && !b.phone) return false;
       if (!term) return true;
       return [b.name, b.address, b.district, b.phone]
         .filter(Boolean)
         .some((v) => String(v).toLocaleLowerCase("tr-TR").includes(term));
     });
-  }, [businesses, search, city, onlyWithPhone]);
+  }, [businesses, search, city, sector, onlyWithPhone]);
 
   const visible = filtered.slice(0, visibleCount);
   const selectableIds = useMemo(
@@ -182,6 +192,31 @@ export default function MultisportPage() {
                   </Select>
                 </div>
 
+                <div className="flex w-52 flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-600">
+                    Sektör
+                  </label>
+                  <Select
+                    value={sector}
+                    onValueChange={(v) => {
+                      setSector(v);
+                      setVisibleCount(PAGE_SIZE);
+                    }}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tüm sektörler</SelectItem>
+                      {sectors.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <label className="flex h-10 items-center gap-2 text-xs font-medium text-slate-600">
                   <input
                     type="checkbox"
@@ -230,6 +265,7 @@ export default function MultisportPage() {
                             </th>
                             <th className="px-3 py-2.5 font-medium">İşletme</th>
                             <th className="px-3 py-2.5 font-medium">Konum</th>
+                            <th className="px-3 py-2.5 font-medium">Sektör</th>
                             <th className="px-3 py-2.5 font-medium">Telefon</th>
                             <th className="px-3 py-2.5 font-medium">Durum</th>
                             <th className="px-3 py-2.5 font-medium">Sayfa</th>
@@ -264,6 +300,22 @@ export default function MultisportPage() {
                                   {[b.city, b.district]
                                     .filter(Boolean)
                                     .join(" / ") || "—"}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {b.sectors.length ? (
+                                    <div className="flex max-w-[14rem] flex-wrap gap-1">
+                                      {b.sectors.map((s) => (
+                                        <span
+                                          key={s}
+                                          className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+                                        >
+                                          {s}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2.5">
                                   {b.phone ? (

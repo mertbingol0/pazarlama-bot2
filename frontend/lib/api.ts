@@ -975,6 +975,7 @@ export type MultisportBusiness = {
   city: string | null;
   district: string | null;
   website: string | null;
+  sectors: string[];
   whatsappStatus: string;
   templateSentAt: string | null;
 };
