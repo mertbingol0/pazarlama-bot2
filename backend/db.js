@@ -1353,27 +1353,40 @@ async function getWhatsAppConversations() {
     });
   }
 
-  const conversations = await Promise.all(
-    Array.from(groups.values()).map(async (group) => {
-      const business = group.historical
-        ? null
-        : await findBusinessByPhone(group.phone);
+  // İşletme adlarını N+1 yerine tek sorguyla topla: telefonun son 10 hanesine
+  // göre isim eşle (aynı sonek için en yüksek id kazanır — findBusinessByPhone
+  // ile aynı davranış). Aksi halde her sohbet için `businesses` üzerinde ayrı
+  // seq scan çalışır ve pool tükenip endpoint asılır.
+  const businessRows = await execAll(sql`
+    SELECT id, name,
+           RIGHT(${normalizedBusinessPhoneSql()}, 10) AS phone_last10
+    FROM businesses
+    WHERE phone IS NOT NULL AND TRIM(phone) != ''
+    ORDER BY id ASC
+  `);
 
-      return {
-        contactKey: group.contactKey,
-        phone: group.phone,
-        businessName: group.businessName || business?.name || null,
-        lastMessage: group.lastMessage,
-        lastMessageAt: group.lastMessageAt,
-        lastIncomingAt: group.lastIncomingAt,
-        unreadCount: group.unreadCount,
-        // 24 saat müşteri hizmetleri penceresi açık mı (serbest metin için)
-        canSendFreeText:
-          group.lastIncomingAt != null &&
-          msSince(group.lastIncomingAt) < 24 * 60 * 60 * 1000,
-      };
-    })
-  );
+  const nameByPhoneKey = new Map();
+  for (const row of businessRows) {
+    const key = String(row.phone_last10 || "");
+    if (key.length < 7) continue;
+    // Son yazan (en yüksek id) kazansın — findBusinessByPhone DESC/LIMIT 1 gibi.
+    nameByPhoneKey.set(key, row.name || null);
+  }
+
+  const conversations = Array.from(groups.values()).map((group) => ({
+    contactKey: group.contactKey,
+    phone: group.phone,
+    businessName:
+      group.businessName || nameByPhoneKey.get(group.contactKey) || null,
+    lastMessage: group.lastMessage,
+    lastMessageAt: group.lastMessageAt,
+    lastIncomingAt: group.lastIncomingAt,
+    unreadCount: group.unreadCount,
+    // 24 saat müşteri hizmetleri penceresi açık mı (serbest metin için)
+    canSendFreeText:
+      group.lastIncomingAt != null &&
+      msSince(group.lastIncomingAt) < 24 * 60 * 60 * 1000,
+  }));
 
   conversations.sort((a, b) =>
     String(b.lastMessageAt || "").localeCompare(String(a.lastMessageAt || ""))
@@ -2310,6 +2323,9 @@ async function getContactedBusinesses({
   // Personele atanan kategori kısıtı (slug listesi). Dolu ise yalnız bu
   // kategorilerdeki işletmeler döner.
   categories = null,
+  // İsteği yapan kullanıcının id'si. Kategori kısıtı varken de kullanıcının
+  // kendi manuel eklediği işletmeleri görebilmesi için istisna olarak kullanılır.
+  actorId = null,
 } = {}) {
   // Aktivite penceresi: from/to varsa o aralık, yoksa (all değilse) son 24 saat.
   // Filtreyi tek ifade olarak inşa edip her UNION dalına ekliyoruz. Böylece
@@ -2395,8 +2411,14 @@ async function getContactedBusinesses({
   }
   const categoriesLiteral = toPgTextArray(categories);
   if (categoriesLiteral) {
+    // Kullanıcının sahadan kendi manuel eklediği kayıt kategoriye bakılmaksızın
+    // görünmeli — aksi halde free-text "Sektör/Kategori" alanı slug'la eşleşmediği
+    // için ekleyen personel kendi kaydını hiç göremez.
+    const ownManualClause = actorId
+      ? sql` OR (b.added_manually = TRUE AND b.created_by = ${actorId})`
+      : sql``;
     searchConditions.push(
-      sql`COALESCE(b.category, s.category) = ANY(${categoriesLiteral}::text[])`
+      sql`(COALESCE(b.category, s.category) = ANY(${categoriesLiteral}::text[])${ownManualClause})`
     );
   }
 

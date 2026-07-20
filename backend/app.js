@@ -2225,6 +2225,7 @@ app.get("/api/me/contacted", requireAuth, async (req, res) => {
       all: req.query.all === "1" || req.query.all === "true",
       userId: req.user.id,
       categories: await getUserCategoryRestriction(req.user),
+      actorId: req.user.id,
     });
     return res
       .status(200)
@@ -2408,6 +2409,7 @@ app.get("/api/businesses/contacted", requireAuth, async (req, res) => {
       q: req.query.q || null,
       all: req.query.all === "1" || req.query.all === "true",
       categories: await getUserCategoryRestriction(req.user),
+      actorId: req.user.id,
     });
     return res
       .status(200)

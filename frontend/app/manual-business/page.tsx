@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import { loadAuth } from "@/lib/auth-storage";
+import { categories as CATEGORY_OPTIONS } from "@/lib/categories";
 import {
   createManualBusiness,
   getAssignableUsers,
@@ -16,11 +17,25 @@ import {
   type AssignableUser,
   type InteractionChannel,
 } from "@/lib/api";
-import { MapPin } from "lucide-react";
+import { Check, ChevronsUpDown, MapPin } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -280,10 +295,15 @@ export default function ManualBusinessPage() {
                 <Input className="h-10 rounded-xl" {...register("email")} />
               </Field>
               <Field label="Sektör / Kategori">
-                <Input
-                  className="h-10 rounded-xl"
-                  placeholder="ör. kuaför"
-                  {...register("category")}
+                <Controller
+                  control={control}
+                  name="category"
+                  render={({ field }) => (
+                    <CategoryCombobox
+                      value={field.value || ""}
+                      onChange={field.onChange}
+                    />
+                  )}
                 />
               </Field>
               <Field label="İl">
@@ -444,5 +464,81 @@ function Field({
       {children}
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>
+  );
+}
+
+// Türkçe karakter/aksan toleranslı arama için normalize.
+function normalizeTr(value: string) {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ı", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c");
+}
+
+// Sistemde tanımlı sektör listesinden aranabilir seçim. Personelin atanmış
+// kategori kısıtına birebir uyabilmesi için serbest metin yerine slug seçilir.
+function CategoryCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = CATEGORY_OPTIONS.find((o) => o.value === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-10 w-full justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800 hover:bg-slate-50"
+        >
+          <span className={cn("truncate", !selected && "text-slate-400")}>
+            {selected ? selected.label : "Sektör seçin"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command
+          filter={(val, search) =>
+            normalizeTr(val).includes(normalizeTr(search)) ? 1 : 0
+          }
+        >
+          <CommandInput placeholder="Sektör ara..." />
+          <CommandList>
+            <CommandEmpty>Sektör bulunamadı.</CommandEmpty>
+            <CommandGroup>
+              {CATEGORY_OPTIONS.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={`${option.label} ${option.value}`}
+                  onSelect={() => {
+                    onChange(option.value === value ? "" : option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === option.value ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <span>{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
