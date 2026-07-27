@@ -25,6 +25,39 @@ import {
 import { loadAuth, clearAuth } from "@/lib/auth-storage";
 import { API_BASE_URL, TEAM_LABELS, type Team, type LoginUser } from "@/lib/api";
 
+// Sekme görünürken çalışan polling; sekme arka plana geçince duraklar
+// (kullanıcı bakmıyorsa gereksiz istek atılmaz), tekrar görünür olunca
+// hemen bir tur atıp interval'i yeniden başlatır.
+function startVisiblePolling(fn: () => void | Promise<void>, ms: number) {
+  let intervalId: number | null = null;
+
+  const stop = () => {
+    if (intervalId !== null) {
+      window.clearInterval(intervalId);
+      intervalId = null;
+    }
+  };
+
+  const start = () => {
+    if (intervalId !== null) return;
+    void fn();
+    intervalId = window.setInterval(() => void fn(), ms);
+  };
+
+  const onVisibility = () => {
+    if (document.visibilityState === "visible") start();
+    else stop();
+  };
+
+  onVisibility();
+  document.addEventListener("visibilitychange", onVisibility);
+
+  return () => {
+    document.removeEventListener("visibilitychange", onVisibility);
+    stop();
+  };
+}
+
 type SidebarLink = {
   label: string;
   href: string;
@@ -196,9 +229,7 @@ export function Sidebar() {
       }
     };
 
-    void fetchUnseenCount();
-    const intervalId = window.setInterval(fetchUnseenCount, 30000);
-    return () => window.clearInterval(intervalId);
+    return startVisiblePolling(fetchUnseenCount, 30000);
   }, []);
 
   // Görüşülen/Kayıt Alınan bildirim rozeti: son ziyaretten (localStorage) sonra
@@ -213,31 +244,24 @@ export function Sidebar() {
       return value;
     };
 
+    // Tek istek — iki farklı "since" tek endpoint çağrısında iletilir.
     const fetchCounts = async () => {
       try {
-        const [talkedRes, recordedRes] = await Promise.all([
-          fetch(
-            `${API_BASE_URL}/api/businesses/contacted-counts?since=${encodeURIComponent(
-              getSince("contacted-seen")
-            )}`
-          ).then((r) => r.json()),
-          fetch(
-            `${API_BASE_URL}/api/businesses/contacted-counts?since=${encodeURIComponent(
-              getSince("recorded-seen")
-            )}`
-          ).then((r) => r.json()),
-        ]);
-        if (talkedRes?.success) setContactedCount(Number(talkedRes.talked || 0));
-        if (recordedRes?.success)
-          setRecordedCount(Number(recordedRes.recorded || 0));
+        const url =
+          `${API_BASE_URL}/api/businesses/contacted-counts` +
+          `?sinceTalked=${encodeURIComponent(getSince("contacted-seen"))}` +
+          `&sinceRecorded=${encodeURIComponent(getSince("recorded-seen"))}`;
+        const res = await fetch(url).then((r) => r.json());
+        if (res?.success) {
+          setContactedCount(Number(res.talked || 0));
+          setRecordedCount(Number(res.recorded || 0));
+        }
       } catch (error) {
         console.warn("Bildirim sayıları alınamadı:", error);
       }
     };
 
-    void fetchCounts();
-    const intervalId = window.setInterval(fetchCounts, 30000);
-    return () => window.clearInterval(intervalId);
+    return startVisiblePolling(fetchCounts, 30000);
   }, []);
 
   // Sayfaya girilince o kategoriyi "görüldü" işaretle, rozeti sıfırla.

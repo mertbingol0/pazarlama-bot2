@@ -2574,63 +2574,82 @@ async function listMultisportBusinesses({ q = null, city = null } = {}) {
 // Sidebar bildirim rozeti: `since`'ten sonra aktivitesi (görüşme/not) olan
 // işletmeleri say; son görüşme sonucu record_taken ise "recorded", değilse
 // "talked" kovasına düşer (görüşülen/kayıt alınan sayfalarıyla aynı mantık).
-async function getContactedActivityCounts(since) {
-  const sinceTs = since ? String(since).trim() : null;
-  if (!sinceTs) return { talked: 0, recorded: 0 };
+//
+// Kullanım:
+//   getContactedActivityCounts("2025-01-01T00:00:00Z")
+//     → tek since; talked ve recorded aynı pencere.
+//   getContactedActivityCounts({ sinceTalked, sinceRecorded })
+//     → farklı pencereler için iki sorgu paralel çalışır.
+async function getContactedActivityCounts(input) {
+  const isObj = input && typeof input === "object";
+  const sinceTalked = String((isObj ? input.sinceTalked : input) || "").trim();
+  const sinceRecorded = String(
+    (isObj ? input.sinceRecorded : input) || ""
+  ).trim();
 
   const bPhoneNorm = sql`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(b.phone, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
   const bPhoneLast10 = sql`RIGHT(${bPhoneNorm}, 10)`;
 
-  // getContactedBusinesses ile aynı aktivite-tabanlı UNION deseni; her dal
-  // kendi timestamp'ini sinceTs sınırıyla filtreler, sonra business_id başına
-  // aggregate edilir.
-  const rows = await execAll(
-    sql`
-    WITH act AS (
-      SELECT i.business_id AS id
-        FROM interactions i
-       WHERE i.updated_at > ${sinceTs}::timestamp
-      UNION ALL
-      SELECT n.business_id AS id
-        FROM business_notes n
-       WHERE n.created_at > ${sinceTs}::timestamp
-      UNION ALL
-      SELECT b.id
-        FROM businesses b
-       WHERE b.template_sent_at IS NOT NULL
-         AND b.template_sent_at > ${sinceTs}::timestamp
-      UNION ALL
-      SELECT wm.business_id AS id
-        FROM whatsapp_messages wm
-       WHERE wm.direction = 'outgoing'
-         AND wm.business_id IS NOT NULL
-         AND wm.created_at > ${sinceTs}::timestamp
-      UNION ALL
-      SELECT b.id
-        FROM whatsapp_messages wm
-        JOIN businesses b ON wm.phone LIKE ('%' || ${bPhoneLast10})
-       WHERE wm.direction = 'outgoing'
-         AND wm.created_at > ${sinceTs}::timestamp
-         AND LENGTH(${bPhoneNorm}) >= 10
-    ),
-    act_agg AS (SELECT DISTINCT id FROM act)
-    SELECT
-      CASE WHEN li.outcome = 'record_taken' THEN 'recorded' ELSE 'talked' END AS bucket,
-      COUNT(*)::int AS count
-    FROM act_agg aa
-    LEFT JOIN LATERAL (
-      SELECT outcome FROM interactions i WHERE i.business_id = aa.id ORDER BY i.id DESC LIMIT 1
-    ) li ON true
-    GROUP BY bucket
-    `
-  );
+  // Tek pencere için gruplandırılmış bucket sayılarını döndürür.
+  const bucketsFor = async (sinceTs) => {
+    if (!sinceTs) return { talked: 0, recorded: 0 };
+    const rows = await execAll(
+      sql`
+      WITH act AS (
+        SELECT i.business_id AS id
+          FROM interactions i
+         WHERE i.updated_at > ${sinceTs}::timestamp
+        UNION ALL
+        SELECT n.business_id AS id
+          FROM business_notes n
+         WHERE n.created_at > ${sinceTs}::timestamp
+        UNION ALL
+        SELECT b.id
+          FROM businesses b
+         WHERE b.template_sent_at IS NOT NULL
+           AND b.template_sent_at > ${sinceTs}::timestamp
+        UNION ALL
+        SELECT wm.business_id AS id
+          FROM whatsapp_messages wm
+         WHERE wm.direction = 'outgoing'
+           AND wm.business_id IS NOT NULL
+           AND wm.created_at > ${sinceTs}::timestamp
+        UNION ALL
+        SELECT b.id
+          FROM whatsapp_messages wm
+          JOIN businesses b ON wm.phone LIKE ('%' || ${bPhoneLast10})
+         WHERE wm.direction = 'outgoing'
+           AND wm.created_at > ${sinceTs}::timestamp
+           AND LENGTH(${bPhoneNorm}) >= 10
+      ),
+      act_agg AS (SELECT DISTINCT id FROM act)
+      SELECT
+        CASE WHEN li.outcome = 'record_taken' THEN 'recorded' ELSE 'talked' END AS bucket,
+        COUNT(*)::int AS count
+      FROM act_agg aa
+      LEFT JOIN LATERAL (
+        SELECT outcome FROM interactions i WHERE i.business_id = aa.id ORDER BY i.id DESC LIMIT 1
+      ) li ON true
+      GROUP BY bucket
+      `
+    );
+    const c = { talked: 0, recorded: 0 };
+    for (const row of rows) {
+      if (row.bucket === "recorded") c.recorded = row.count;
+      else c.talked = row.count;
+    }
+    return c;
+  };
 
-  const counts = { talked: 0, recorded: 0 };
-  for (const row of rows) {
-    if (row.bucket === "recorded") counts.recorded = row.count;
-    else counts.talked = row.count;
+  // Aynı pencere ise tek sorgu; farklı ise paralel iki sorgu.
+  if (sinceTalked === sinceRecorded) {
+    return await bucketsFor(sinceTalked || null);
   }
-  return counts;
+  const [t, r] = await Promise.all([
+    bucketsFor(sinceTalked || null),
+    bucketsFor(sinceRecorded || null),
+  ]);
+  return { talked: t.talked, recorded: r.recorded };
 }
 
 // Admin dashboard istatistikleri. Varsayılan pencere: son 24 saat ("bugün").

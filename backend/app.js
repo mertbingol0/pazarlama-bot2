@@ -367,9 +367,15 @@ app.get("/api/whatsapp/conversations", async (req, res) => {
 // Sidebar bildirimi: okunmamış gelen WhatsApp mesaj sayısı.
 // Sidebar bildirim rozeti: `since` (ISO) sonrası aktivitesi olan görüşülen/
 // kayıt alınan işletme sayısı. `since` yoksa 0 döner (istemci ilk açılışta now gönderir).
+// İki farklı pencere için `sinceTalked` ve `sinceRecorded` da geçilebilir;
+// aksi halde `since` ikisine de uygulanır (geriye dönük uyum).
 app.get("/api/businesses/contacted-counts", async (req, res) => {
   try {
-    const counts = await getContactedActivityCounts(req.query.since || null);
+    const legacy = req.query.since || null;
+    const counts = await getContactedActivityCounts({
+      sinceTalked: req.query.sinceTalked || legacy,
+      sinceRecorded: req.query.sinceRecorded || legacy,
+    });
     return res.status(200).json({ success: true, ...counts });
   } catch (error) {
     console.error("/api/businesses/contacted-counts hata:", error);
