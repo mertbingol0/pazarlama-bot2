@@ -1621,39 +1621,73 @@ async function getLiveSupportLeads() {
 
 // Belirli tarih aralığında (created_at, gün bazında dahil) rapor verisi üretir.
 async function getReportData({ from, to }) {
-  const supportRows = await execAll(
-    sql`
-    SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
-           note, created_at, updated_at
-    FROM live_support_leads
-    WHERE created_at >= ${from}::date
-      AND created_at < (${to}::date + interval '1 day')
-    ORDER BY created_at DESC, id DESC
-    `
-  );
+  // Tek sorguda: leads + eşleşen businesses. Önceki N+1 pattern
+  // (her lead için ayrı findBusinessByPhone scan) yerine businesses tek
+  // kez taranır ve leads'in son-10-hane telefonlarına hash-join ile eşlenir.
+  // approved businesses sorgusu bağımsız → paralel çalışır.
+  const [supportRows, approvedRows] = await Promise.all([
+    execAll(sql`
+      WITH leads AS (
+        SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
+               note, created_at, updated_at,
+               NULLIF(
+                 RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '\\D', '', 'g'), 10),
+                 ''
+               ) AS phone_last10
+        FROM live_support_leads
+        WHERE created_at >= ${from}::date
+          AND created_at < (${to}::date + interval '1 day')
+      ),
+      biz_matches AS (
+        SELECT DISTINCT ON (bl10) bl10, name, email, instagram, socials, address, website
+        FROM (
+          SELECT id, name, email, instagram, socials, address, website,
+                 NULLIF(RIGHT(${normalizedBusinessPhoneSql()}, 10), '') AS bl10
+          FROM businesses
+          WHERE phone IS NOT NULL
+        ) bnorm
+        WHERE bl10 IS NOT NULL
+          AND bl10 IN (
+            SELECT phone_last10 FROM leads
+            WHERE phone_last10 IS NOT NULL AND LENGTH(phone_last10) >= 7
+          )
+        ORDER BY bl10, id DESC
+      )
+      SELECT l.id, l.phone, l.button_text, l.status, l.result, l.meeting_at,
+             l.assigned_to, l.note, l.created_at, l.updated_at,
+             m.name AS business_name, m.email AS business_email,
+             m.instagram AS business_instagram, m.socials AS business_socials,
+             m.address AS business_address, m.website AS business_website
+      FROM leads l
+      LEFT JOIN biz_matches m ON m.bl10 = l.phone_last10
+      ORDER BY l.created_at DESC, l.id DESC
+    `),
+    execAll(sql`
+      SELECT id, name, phone, email, instagram, socials, address, website, created_at
+      FROM businesses
+      WHERE status = 'approved'
+        AND created_at >= ${from}::date
+        AND created_at < (${to}::date + interval '1 day')
+      ORDER BY created_at DESC, id DESC
+    `),
+  ]);
 
-  const enrichedSupport = await Promise.all(
-    supportRows.map(async (row) => {
-      const business = await findBusinessByPhone(row.phone);
-
-      return {
-        id: row.id,
-        phone: row.phone,
-        status: row.status || "info_requested",
-        result: row.result || "pending",
-        meetingAt: row.meeting_at,
-        assignedTo: row.assigned_to,
-        buttonText: row.button_text,
-        note: row.note || "",
-        createdAt: row.created_at,
-        businessName: business?.name || null,
-        email: business?.email || null,
-        socials: business?.socials || business?.instagram || null,
-        address: business?.address || null,
-        website: business?.website || null,
-      };
-    })
-  );
+  const enrichedSupport = supportRows.map((row) => ({
+    id: row.id,
+    phone: row.phone,
+    status: row.status || "info_requested",
+    result: row.result || "pending",
+    meetingAt: row.meeting_at,
+    assignedTo: row.assigned_to,
+    buttonText: row.button_text,
+    note: row.note || "",
+    createdAt: row.created_at,
+    businessName: row.business_name || null,
+    email: row.business_email || null,
+    socials: row.business_socials || row.business_instagram || null,
+    address: row.business_address || null,
+    website: row.business_website || null,
+  }));
 
   const interested = enrichedSupport.filter(
     (lead) => lead.status === "info_requested"
@@ -1661,17 +1695,6 @@ async function getReportData({ from, to }) {
   const followUp = enrichedSupport.filter((lead) => lead.status === "follow_up");
   const notInterested = enrichedSupport.filter(
     (lead) => lead.status === "not_interested"
-  );
-
-  const approvedRows = await execAll(
-    sql`
-    SELECT id, name, phone, email, instagram, socials, address, website, created_at
-    FROM businesses
-    WHERE status = 'approved'
-      AND created_at >= ${from}::date
-      AND created_at < (${to}::date + interval '1 day')
-    ORDER BY created_at DESC, id DESC
-    `
   );
 
   const approved = approvedRows.map((row) => ({
@@ -2225,35 +2248,37 @@ async function getBusinessCrmBatch(businessIds) {
     sql`, `
   );
 
-  const interactions = await execAll(
-    sql`
-    SELECT DISTINCT ON (i.business_id)
-      i.id, i.business_id, i.user_id, i.team, i.channel, i.outcome,
-      i.note, i.meeting_at, i.updated_at,
-      u.full_name AS user_full_name, u.username AS user_username
-    FROM interactions i
-    LEFT JOIN users u ON u.id = i.user_id
-    WHERE i.business_id IN (${idList})
-    ORDER BY i.business_id, i.id DESC
-    `
-  );
+  // İki sorgu birbirinden bağımsız — paralel çalışsın (roundtrip'i yarıya).
+  const [interactions, notes] = await Promise.all([
+    execAll(
+      sql`
+      SELECT DISTINCT ON (i.business_id)
+        i.id, i.business_id, i.user_id, i.team, i.channel, i.outcome,
+        i.note, i.meeting_at, i.updated_at,
+        u.full_name AS user_full_name, u.username AS user_username
+      FROM interactions i
+      LEFT JOIN users u ON u.id = i.user_id
+      WHERE i.business_id IN (${idList})
+      ORDER BY i.business_id, i.id DESC
+      `
+    ),
+    execAll(
+      sql`
+      SELECT n.id, n.business_id, n.user_id, n.team, n.category, n.note, n.created_at,
+             u.full_name AS user_full_name, u.username AS user_username
+      FROM business_notes n
+      LEFT JOIN users u ON u.id = n.user_id
+      WHERE n.business_id IN (${idList})
+      ORDER BY n.created_at DESC, n.id DESC
+      `
+    ),
+  ]);
 
   for (const row of interactions) {
     if (map[row.business_id]) {
       map[row.business_id].interaction = mapInteractionRow(row);
     }
   }
-
-  const notes = await execAll(
-    sql`
-    SELECT n.id, n.business_id, n.user_id, n.team, n.category, n.note, n.created_at,
-           u.full_name AS user_full_name, u.username AS user_username
-    FROM business_notes n
-    LEFT JOIN users u ON u.id = n.user_id
-    WHERE n.business_id IN (${idList})
-    ORDER BY n.created_at DESC, n.id DESC
-    `
-  );
 
   for (const row of notes) {
     if (map[row.business_id]) {
@@ -2651,28 +2676,71 @@ async function getDashboardStats({ from = null, to = null, userId = null } = {})
   // Belirli bir personele kısıtla (Durum Takip için).
   const userCond = (col) => (userId ? sql` AND ${col} = ${userId}` : sql``);
 
-  // Sonuç bazlı toplam
-  const outcomeRows = await execAll(
-    sql`
-    SELECT outcome, COUNT(*)::int AS count
-    FROM interactions
-    WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
-    GROUP BY outcome
-    `
-  );
+  // 7 sorgu birbirinden bağımsız — Promise.all ile paralel çalıştır.
+  // Toplam süre = en yavaş sorgunun süresi (yerine tüm sorguların toplamı).
+  const [
+    outcomeRows,
+    teamRows,
+    personnelRows,
+    channelRows,
+    notesRow,
+    recentInteractions,
+    recentNotes,
+  ] = await Promise.all([
+    execAll(sql`
+      SELECT outcome, COUNT(*)::int AS count
+      FROM interactions
+      WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
+      GROUP BY outcome
+    `),
+    execAll(sql`
+      SELECT COALESCE(team, '(birimsiz)') AS team, outcome, COUNT(*)::int AS count
+      FROM interactions
+      WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
+      GROUP BY COALESCE(team, '(birimsiz)'), outcome
+    `),
+    execAll(sql`
+      SELECT i.user_id, u.full_name, u.username, i.team, i.outcome,
+             COUNT(*)::int AS count
+      FROM interactions i
+      LEFT JOIN users u ON u.id = i.user_id
+      WHERE ${cond(sql`i.updated_at`)}${userCond(sql`i.user_id`)}
+      GROUP BY i.user_id, u.full_name, u.username, i.team, i.outcome
+    `),
+    execAll(sql`
+      SELECT COALESCE(channel, 'other') AS channel, COUNT(*)::int AS count
+      FROM interactions
+      WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
+      GROUP BY COALESCE(channel, 'other')
+    `),
+    execGet(sql`
+      SELECT COUNT(*)::int AS count FROM business_notes
+      WHERE ${cond(sql`created_at`)}${userCond(sql`user_id`)}
+    `),
+    execAll(sql`
+      SELECT i.business_id, b.name AS business_name, i.outcome, i.channel, i.team,
+             i.updated_at AS at, u.full_name AS user_full_name, u.username AS user_username
+      FROM interactions i
+      JOIN businesses b ON b.id = i.business_id
+      LEFT JOIN users u ON u.id = i.user_id
+      WHERE ${cond(sql`i.updated_at`)}${userCond(sql`i.user_id`)}
+      ORDER BY i.updated_at DESC, i.id DESC
+      LIMIT 30
+    `),
+    execAll(sql`
+      SELECT n.business_id, b.name AS business_name, n.note, n.team,
+             n.created_at AS at, u.full_name AS user_full_name, u.username AS user_username
+      FROM business_notes n
+      JOIN businesses b ON b.id = n.business_id
+      LEFT JOIN users u ON u.id = n.user_id
+      WHERE ${cond(sql`n.created_at`)}${userCond(sql`n.user_id`)}
+      ORDER BY n.created_at DESC, n.id DESC
+      LIMIT 30
+    `),
+  ]);
 
   const outcomes = emptyOutcomeCounts();
   for (const row of outcomeRows) addOutcome(outcomes, row.outcome, row.count);
-
-  // Birim bazlı
-  const teamRows = await execAll(
-    sql`
-    SELECT COALESCE(team, '(birimsiz)') AS team, outcome, COUNT(*)::int AS count
-    FROM interactions
-    WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
-    GROUP BY COALESCE(team, '(birimsiz)'), outcome
-    `
-  );
 
   const teamMap = new Map();
   for (const row of teamRows) {
@@ -2681,18 +2749,6 @@ async function getDashboardStats({ from = null, to = null, userId = null } = {})
     }
     addOutcome(teamMap.get(row.team), row.outcome, row.count);
   }
-
-  // Personel bazlı
-  const personnelRows = await execAll(
-    sql`
-    SELECT i.user_id, u.full_name, u.username, i.team, i.outcome,
-           COUNT(*)::int AS count
-    FROM interactions i
-    LEFT JOIN users u ON u.id = i.user_id
-    WHERE ${cond(sql`i.updated_at`)}${userCond(sql`i.user_id`)}
-    GROUP BY i.user_id, u.full_name, u.username, i.team, i.outcome
-    `
-  );
 
   const personnelMap = new Map();
   for (const row of personnelRows) {
@@ -2709,15 +2765,6 @@ async function getDashboardStats({ from = null, to = null, userId = null } = {})
     addOutcome(personnelMap.get(key), row.outcome, row.count);
   }
 
-  // Kanal dağılımı
-  const channelRows = await execAll(
-    sql`
-    SELECT COALESCE(channel, 'other') AS channel, COUNT(*)::int AS count
-    FROM interactions
-    WHERE ${cond(sql`updated_at`)}${userCond(sql`user_id`)}
-    GROUP BY COALESCE(channel, 'other')
-    `
-  );
   const channels = { whatsapp: 0, call: 0, face_to_face: 0, other: 0, total: 0 };
   for (const row of channelRows) {
     const value = Number(row.count) || 0;
@@ -2725,39 +2772,6 @@ async function getDashboardStats({ from = null, to = null, userId = null } = {})
     else channels.other += value;
     channels.total += value;
   }
-
-  // Notlar
-  const notesRow = await execGet(
-    sql`SELECT COUNT(*)::int AS count FROM business_notes WHERE ${cond(
-      sql`created_at`
-    )}${userCond(sql`user_id`)}`
-  );
-
-  // Son aktiviteler (görüşme güncellemeleri + notlar), zaman sırasıyla.
-  const recentInteractions = await execAll(
-    sql`
-    SELECT i.business_id, b.name AS business_name, i.outcome, i.channel, i.team,
-           i.updated_at AS at, u.full_name AS user_full_name, u.username AS user_username
-    FROM interactions i
-    JOIN businesses b ON b.id = i.business_id
-    LEFT JOIN users u ON u.id = i.user_id
-    WHERE ${cond(sql`i.updated_at`)}${userCond(sql`i.user_id`)}
-    ORDER BY i.updated_at DESC, i.id DESC
-    LIMIT 30
-    `
-  );
-  const recentNotes = await execAll(
-    sql`
-    SELECT n.business_id, b.name AS business_name, n.note, n.team,
-           n.created_at AS at, u.full_name AS user_full_name, u.username AS user_username
-    FROM business_notes n
-    JOIN businesses b ON b.id = n.business_id
-    LEFT JOIN users u ON u.id = n.user_id
-    WHERE ${cond(sql`n.created_at`)}${userCond(sql`n.user_id`)}
-    ORDER BY n.created_at DESC, n.id DESC
-    LIMIT 30
-    `
-  );
 
   const recentActivity = [
     ...recentInteractions.map((r) => ({
