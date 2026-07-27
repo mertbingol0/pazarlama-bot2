@@ -27,9 +27,7 @@ import {
   type Team,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { useDateRangeForm } from "@/lib/date-range-form";
 
 type StatCardDef = {
   key: keyof OutcomeCounts | "totalContacted" | "totalNotes";
@@ -181,31 +179,22 @@ export function AdminDashboard() {
   const [contacted, setContacted] = useState<ContactedBusiness[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Tarih aralığı: kullanıcı takvimde seçer (draft), "Uygula" ile applied
-  // güncellenir; fetch yalnızca applied değişince tetiklenir.
-  const {
-    draft: dateDraft,
-    setDraft: setDateDraft,
-    applied: dateApplied,
-    apply: applyDate,
-    error: dateError,
-    isDirty: dateDirty,
-  } = useDateRangeForm();
+  const [dateRange, setDateRange] = useState({ from: "", to: "" });
   // Tıklanan sonuç kartı (detay listesi için).
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
 
+  // Yarım seçim (sadece "from" var, "to" henüz yok) fetch tetiklemesin —
+  // aksi halde her range seçimi iki isteğe (partial + tam) sebep olur.
+  const rangeIncomplete =
+    (dateRange.from && !dateRange.to) || (!dateRange.from && dateRange.to);
+
   useEffect(() => {
+    if (rangeIncomplete) return;
     let active = true;
     const filters: { from?: string; to?: string } = {};
-    if (dateApplied.from && dateApplied.to) {
-      filters.from = dateApplied.from;
-      filters.to = dateApplied.to;
-    } else if (dateApplied.from) {
-      filters.from = dateApplied.from;
-      filters.to = dateApplied.from;
-    } else if (dateApplied.to) {
-      filters.from = dateApplied.to;
-      filters.to = dateApplied.to;
+    if (dateRange.from && dateRange.to) {
+      filters.from = dateRange.from;
+      filters.to = dateRange.to;
     }
     // Not: setState yalnızca async callback'lerde (senkron effect gövdesinde değil).
     Promise.all([getDashboardStats(filters), getContactedBusinesses(filters)])
@@ -227,7 +216,7 @@ export function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [dateApplied.from, dateApplied.to]);
+  }, [dateRange.from, dateRange.to, rangeIncomplete]);
 
   const detailBusinesses = selectedOutcome
     ? contacted.filter((b) => b.interaction?.outcome === selectedOutcome)
@@ -237,12 +226,10 @@ export function AdminDashboard() {
   const formatTr = (iso: string) =>
     new Date(iso + "T00:00:00").toLocaleDateString("tr-TR");
   const periodLabel = (() => {
-    const { from, to } = dateApplied;
+    const { from, to } = dateRange;
     if (from && to) {
       return from === to ? formatTr(from) : `${formatTr(from)} – ${formatTr(to)}`;
     }
-    if (from) return formatTr(from);
-    if (to) return formatTr(to);
     return "Bugün (son 24 saat)";
   })();
 
@@ -262,26 +249,13 @@ export function AdminDashboard() {
             <label className="text-xs font-medium text-slate-600">
               Tarih aralığı
             </label>
-            <div className="flex items-center gap-2">
-              <DateRangePicker
-                value={dateDraft}
-                onChange={setDateDraft}
-                placeholder="Bugün (son 24 saat)"
-                clearLabel="Temizle"
-                align="end"
-              />
-              <Button
-                type="button"
-                onClick={applyDate}
-                disabled={!dateDirty}
-                className="h-9 rounded-xl"
-              >
-                Uygula
-              </Button>
-            </div>
-            {dateError && (
-              <p className="text-xs text-red-600">{dateError}</p>
-            )}
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              placeholder="Bugün (son 24 saat)"
+              clearLabel="Temizle"
+              align="end"
+            />
           </div>
         </div>
       </div>
