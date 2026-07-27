@@ -27,7 +27,9 @@ import {
   type Team,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { useDateRangeForm } from "@/lib/date-range-form";
 
 type StatCardDef = {
   key: keyof OutcomeCounts | "totalContacted" | "totalNotes";
@@ -179,29 +181,31 @@ export function AdminDashboard() {
   const [contacted, setContacted] = useState<ContactedBusiness[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  // Tarih aralığı: kullanıcı takvimde seçer (draft), "Uygula" ile applied
+  // güncellenir; fetch yalnızca applied değişince tetiklenir.
+  const {
+    draft: dateDraft,
+    setDraft: setDateDraft,
+    applied: dateApplied,
+    apply: applyDate,
+    error: dateError,
+    isDirty: dateDirty,
+  } = useDateRangeForm();
   // Tıklanan sonuç kartı (detay listesi için).
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
-
-  // Kullanıcı ters seçerse (bitiş < başlangıç) otomatik takasla.
-  const [effectiveFrom, effectiveTo] =
-    fromDate && toDate && toDate < fromDate
-      ? [toDate, fromDate]
-      : [fromDate, toDate];
 
   useEffect(() => {
     let active = true;
     const filters: { from?: string; to?: string } = {};
-    if (effectiveFrom && effectiveTo) {
-      filters.from = effectiveFrom;
-      filters.to = effectiveTo;
-    } else if (effectiveFrom) {
-      filters.from = effectiveFrom;
-      filters.to = effectiveFrom;
-    } else if (effectiveTo) {
-      filters.from = effectiveTo;
-      filters.to = effectiveTo;
+    if (dateApplied.from && dateApplied.to) {
+      filters.from = dateApplied.from;
+      filters.to = dateApplied.to;
+    } else if (dateApplied.from) {
+      filters.from = dateApplied.from;
+      filters.to = dateApplied.from;
+    } else if (dateApplied.to) {
+      filters.from = dateApplied.to;
+      filters.to = dateApplied.to;
     }
     // Not: setState yalnızca async callback'lerde (senkron effect gövdesinde değil).
     Promise.all([getDashboardStats(filters), getContactedBusinesses(filters)])
@@ -223,7 +227,7 @@ export function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [effectiveFrom, effectiveTo]);
+  }, [dateApplied.from, dateApplied.to]);
 
   const detailBusinesses = selectedOutcome
     ? contacted.filter((b) => b.interaction?.outcome === selectedOutcome)
@@ -233,13 +237,12 @@ export function AdminDashboard() {
   const formatTr = (iso: string) =>
     new Date(iso + "T00:00:00").toLocaleDateString("tr-TR");
   const periodLabel = (() => {
-    if (effectiveFrom && effectiveTo) {
-      return effectiveFrom === effectiveTo
-        ? formatTr(effectiveFrom)
-        : `${formatTr(effectiveFrom)} – ${formatTr(effectiveTo)}`;
+    const { from, to } = dateApplied;
+    if (from && to) {
+      return from === to ? formatTr(from) : `${formatTr(from)} – ${formatTr(to)}`;
     }
-    if (effectiveFrom) return formatTr(effectiveFrom);
-    if (effectiveTo) return formatTr(effectiveTo);
+    if (from) return formatTr(from);
+    if (to) return formatTr(to);
     return "Bugün (son 24 saat)";
   })();
 
@@ -256,17 +259,29 @@ export function AdminDashboard() {
         </div>
         <div className="flex items-end gap-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Tarih aralığı</label>
-            <DateRangePicker
-              value={{ from: fromDate, to: toDate }}
-              onChange={(v) => {
-                setFromDate(v.from);
-                setToDate(v.to);
-              }}
-              placeholder="Bugün (son 24 saat)"
-              clearLabel="Bugüne dön"
-              align="end"
-            />
+            <label className="text-xs font-medium text-slate-600">
+              Tarih aralığı
+            </label>
+            <div className="flex items-center gap-2">
+              <DateRangePicker
+                value={dateDraft}
+                onChange={setDateDraft}
+                placeholder="Bugün (son 24 saat)"
+                clearLabel="Temizle"
+                align="end"
+              />
+              <Button
+                type="button"
+                onClick={applyDate}
+                disabled={!dateDirty}
+                className="h-9 rounded-xl"
+              >
+                Uygula
+              </Button>
+            </div>
+            {dateError && (
+              <p className="text-xs text-red-600">{dateError}</p>
+            )}
           </div>
         </div>
       </div>

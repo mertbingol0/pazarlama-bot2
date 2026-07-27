@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { useDateRangeForm } from "@/lib/date-range-form";
 import { downloadContactedBusinessesAsCsv } from "@/lib/export";
 
 // Görüşme sonucu rozet renkleri.
@@ -459,8 +460,16 @@ export function ContactedBusinessesView({
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
 
   // Filtre alanları (tarih/metin sunucuda; şehir/ilçe/kullanıcı/sıralama istemcide)
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  // Tarih: draft/applied ayrımı — "Uygula" butonuna basılınca fetch tetiklenir.
+  const {
+    draft: dateDraft,
+    setDraft: setDateDraft,
+    applied: dateApplied,
+    apply: applyDate,
+    reset: resetDate,
+    error: dateError,
+    isDirty: dateDirty,
+  } = useDateRangeForm();
   const [query, setQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [districtFilter, setDistrictFilter] = useState("");
@@ -509,21 +518,22 @@ export function ContactedBusinessesView({
     []
   );
 
-  // Canlı arama: metin/tarih değiştikçe (debounce) otomatik sorgula.
+  // Canlı arama: metin/uygulanmış tarih değiştikçe (debounce) otomatik sorgula.
+  // Not: tarih için "applied" değeri kullanılıyor (draft değil) — Uygula
+  // butonuna basılana kadar fetch tetiklenmez.
   useEffect(() => {
     const handle = window.setTimeout(() => {
       const filters: ContactedFilters = {};
-      if (fromDate) filters.from = fromDate;
-      if (toDate) filters.to = toDate;
+      if (dateApplied.from) filters.from = dateApplied.from;
+      if (dateApplied.to) filters.to = dateApplied.to;
       if (query.trim()) filters.q = query.trim();
       loadData(filters, Object.keys(filters).length > 0);
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [query, fromDate, toDate, loadData]);
+  }, [query, dateApplied.from, dateApplied.to, loadData]);
 
   const handleClearFilters = () => {
-    setFromDate("");
-    setToDate("");
+    resetDate();
     setQuery("");
     setCityFilter("");
     setDistrictFilter("");
@@ -772,13 +782,23 @@ export function ContactedBusinessesView({
               <label className="text-xs font-medium text-slate-600">
                 Tarih aralığı
               </label>
-              <DateRangePicker
-                value={{ from: fromDate, to: toDate }}
-                onChange={(v) => {
-                  setFromDate(v.from);
-                  setToDate(v.to);
-                }}
-              />
+              <div className="flex items-center gap-2">
+                <DateRangePicker
+                  value={dateDraft}
+                  onChange={setDateDraft}
+                />
+                <Button
+                  type="button"
+                  onClick={applyDate}
+                  disabled={!dateDirty}
+                  className="h-9 rounded-xl"
+                >
+                  Uygula
+                </Button>
+              </div>
+              {dateError && (
+                <p className="text-xs text-red-600">{dateError}</p>
+              )}
             </div>
           </div>
 
