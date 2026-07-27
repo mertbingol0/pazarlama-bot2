@@ -1626,7 +1626,8 @@ async function getReportData({ from, to }) {
     SELECT id, phone, button_text, status, result, meeting_at, assigned_to,
            note, created_at, updated_at
     FROM live_support_leads
-    WHERE created_at::date BETWEEN ${from}::date AND ${to}::date
+    WHERE created_at >= ${from}::date
+      AND created_at < (${to}::date + interval '1 day')
     ORDER BY created_at DESC, id DESC
     `
   );
@@ -1666,7 +1667,9 @@ async function getReportData({ from, to }) {
     sql`
     SELECT id, name, phone, email, instagram, socials, address, website, created_at
     FROM businesses
-    WHERE status = 'approved' AND created_at::date BETWEEN ${from}::date AND ${to}::date
+    WHERE status = 'approved'
+      AND created_at >= ${from}::date
+      AND created_at < (${to}::date + interval '1 day')
     ORDER BY created_at DESC, id DESC
     `
   );
@@ -2338,7 +2341,9 @@ async function getContactedBusinesses({
     if (fromDate || toDate) {
       const f = fromDate || toDate;
       const t = toDate || fromDate;
-      return sql` AND (${col})::date BETWEEN ${f}::date AND ${t}::date`;
+      // Not: cast'siz karşılaştırma — timestamp index'i kullanılabilsin diye
+      // ${t}'yi kapsayacak şekilde ertesi güne kadar (exclusive) alıyoruz.
+      return sql` AND ${col} >= ${f}::date AND ${col} < (${t}::date + interval '1 day')`;
     }
     return sql` AND ${col} >= (now() - interval '24 hours')::timestamp`;
   };
@@ -2638,7 +2643,9 @@ async function getDashboardStats({ from = null, to = null, userId = null } = {})
 
   const cond = (col) =>
     useRange
-      ? sql`(${col})::date BETWEEN ${f}::date AND ${t}::date`
+      ? // Not: cast'siz karşılaştırma — timestamp index'i kullanılabilsin diye
+        // ${t}'yi kapsayacak şekilde ertesi güne kadar (exclusive) alıyoruz.
+        sql`${col} >= ${f}::date AND ${col} < (${t}::date + interval '1 day')`
       : sql`${col} >= (now() - interval '24 hours')::timestamp`;
 
   // Belirli bir personele kısıtla (Durum Takip için).

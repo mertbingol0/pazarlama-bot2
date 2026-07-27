@@ -165,6 +165,10 @@ const businesses = pgTable(
     ),
     assignedToIdx: index("idx_businesses_assigned_to").on(table.assignedTo),
     searchIdIdx: index("idx_businesses_search_id").on(table.searchId),
+    createdAtIdx: index("idx_businesses_created_at").on(table.createdAt),
+    templateSentAtIdx: index("idx_businesses_template_sent_at").on(
+      table.templateSentAt
+    ),
   })
 );
 
@@ -239,6 +243,7 @@ const whatsappMessages = pgTable(
     businessIdIdx: index("idx_whatsapp_messages_business_id").on(
       table.businessId
     ),
+    createdAtIdx: index("idx_whatsapp_messages_created_at").on(table.createdAt),
   })
 );
 
@@ -281,6 +286,7 @@ const interactions = pgTable(
     outcomeIdx: index("idx_interactions_outcome").on(table.outcome),
     meetingAtIdx: index("idx_interactions_meeting_at").on(table.meetingAt),
     createdAtIdx: index("idx_interactions_created_at").on(table.createdAt),
+    updatedAtIdx: index("idx_interactions_updated_at").on(table.updatedAt),
   })
 );
 
@@ -306,6 +312,7 @@ const businessNotes = pgTable(
   },
   (table) => ({
     businessIdIdx: index("idx_business_notes_business_id").on(table.businessId),
+    createdAtIdx: index("idx_business_notes_created_at").on(table.createdAt),
   })
 );
 
@@ -367,6 +374,7 @@ const liveSupportLeads = pgTable(
     statusIdx: index("idx_live_support_leads_status").on(table.status),
     updatedAtIdx: index("idx_live_support_leads_updated_at").on(table.updatedAt),
     seenAtIdx: index("idx_live_support_leads_seen_at").on(table.seenAt),
+    createdAtIdx: index("idx_live_support_leads_created_at").on(table.createdAt),
   })
 );
 
