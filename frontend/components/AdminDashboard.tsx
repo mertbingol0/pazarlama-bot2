@@ -180,13 +180,30 @@ export function AdminDashboard() {
   const [contacted, setContacted] = useState<ContactedBusiness[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [date, setDate] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   // Tıklanan sonuç kartı (detay listesi için).
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
 
+  // Kullanıcı ters seçerse (bitiş < başlangıç) otomatik takasla.
+  const [effectiveFrom, effectiveTo] =
+    fromDate && toDate && toDate < fromDate
+      ? [toDate, fromDate]
+      : [fromDate, toDate];
+
   useEffect(() => {
     let active = true;
-    const filters = date ? { from: date, to: date } : {};
+    const filters: { from?: string; to?: string } = {};
+    if (effectiveFrom && effectiveTo) {
+      filters.from = effectiveFrom;
+      filters.to = effectiveTo;
+    } else if (effectiveFrom) {
+      filters.from = effectiveFrom;
+      filters.to = effectiveFrom;
+    } else if (effectiveTo) {
+      filters.from = effectiveTo;
+      filters.to = effectiveTo;
+    }
     // Not: setState yalnızca async callback'lerde (senkron effect gövdesinde değil).
     Promise.all([getDashboardStats(filters), getContactedBusinesses(filters)])
       .then(([s, list]) => {
@@ -207,16 +224,25 @@ export function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [date]);
+  }, [effectiveFrom, effectiveTo]);
 
   const detailBusinesses = selectedOutcome
     ? contacted.filter((b) => b.interaction?.outcome === selectedOutcome)
     : [];
 
   const o = stats?.outcomes;
-  const periodLabel = date
-    ? new Date(date + "T00:00:00").toLocaleDateString("tr-TR")
-    : "Bugün (son 24 saat)";
+  const formatTr = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("tr-TR");
+  const periodLabel = (() => {
+    if (effectiveFrom && effectiveTo) {
+      return effectiveFrom === effectiveTo
+        ? formatTr(effectiveFrom)
+        : `${formatTr(effectiveFrom)} – ${formatTr(effectiveTo)}`;
+    }
+    if (effectiveFrom) return formatTr(effectiveFrom);
+    if (effectiveTo) return formatTr(effectiveTo);
+    return "Bugün (son 24 saat)";
+  })();
 
   return (
     <section className="mt-10">
@@ -231,19 +257,33 @@ export function AdminDashboard() {
         </div>
         <div className="flex items-end gap-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Tarih</label>
+            <label className="text-xs font-medium text-slate-600">Başlangıç</label>
             <Input
               type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => setFromDate(e.target.value)}
               className="h-9 rounded-xl"
             />
           </div>
-          {date && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-600">Bitiş</label>
+            <Input
+              type="date"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-9 rounded-xl"
+            />
+          </div>
+          {(fromDate || toDate) && (
             <Button
               type="button"
               variant="outline"
-              onClick={() => setDate("")}
+              onClick={() => {
+                setFromDate("");
+                setToDate("");
+              }}
               className="h-9 rounded-xl"
             >
               Bugün
