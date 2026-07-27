@@ -37,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { downloadContactedBusinessesAsCsv } from "@/lib/export";
 
 // Görüşme sonucu rozet renkleri.
@@ -769,22 +770,14 @@ export function ContactedBusinessesView({
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-600">
-                Başlangıç
+                Tarih aralığı
               </label>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="h-9 rounded-xl"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-600">Bitiş</label>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="h-9 rounded-xl"
+              <DateRangePicker
+                value={{ from: fromDate, to: toDate }}
+                onChange={(v) => {
+                  setFromDate(v.from);
+                  setToDate(v.to);
+                }}
               />
             </div>
           </div>

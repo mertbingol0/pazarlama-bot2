@@ -27,8 +27,7 @@ import {
   type Team,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 type StatCardDef = {
   key: keyof OutcomeCounts | "totalContacted" | "totalNotes";
@@ -257,38 +256,18 @@ export function AdminDashboard() {
         </div>
         <div className="flex items-end gap-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Başlangıç</label>
-            <Input
-              type="date"
-              value={fromDate}
-              max={toDate || undefined}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="h-9 rounded-xl"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Bitiş</label>
-            <Input
-              type="date"
-              value={toDate}
-              min={fromDate || undefined}
-              onChange={(e) => setToDate(e.target.value)}
-              className="h-9 rounded-xl"
-            />
-          </div>
-          {(fromDate || toDate) && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setFromDate("");
-                setToDate("");
+            <label className="text-xs font-medium text-slate-600">Tarih aralığı</label>
+            <DateRangePicker
+              value={{ from: fromDate, to: toDate }}
+              onChange={(v) => {
+                setFromDate(v.from);
+                setToDate(v.to);
               }}
-              className="h-9 rounded-xl"
-            >
-              Bugün
-            </Button>
-          )}
+              placeholder="Bugün (son 24 saat)"
+              clearLabel="Bugüne dön"
+              align="end"
+            />
+          </div>
         </div>
       </div>
 

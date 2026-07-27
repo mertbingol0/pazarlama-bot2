@@ -9,6 +9,7 @@ import { SocialChip } from "@/components/contact-icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 type ReportRecord = {
   id: string | number;
@@ -307,28 +308,18 @@ export default function ReportsPage() {
             <div className="flex flex-wrap items-end gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-400">
-                  Başlangıç
+                  Tarih aralığı
                 </label>
-                <input
-                  type="date"
-                  value={from}
-                  max={to}
-                  onChange={(event) => setFrom(event.target.value)}
-                  className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400">
-                  Bitiş
-                </label>
-                <input
-                  type="date"
-                  value={to}
-                  min={from}
-                  onChange={(event) => setTo(event.target.value)}
-                  className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                />
+                <div className="mt-1">
+                  <DateRangePicker
+                    value={{ from, to }}
+                    onChange={(v) => {
+                      setFrom(v.from);
+                      setTo(v.to);
+                    }}
+                    triggerClassName="h-10"
+                  />
+                </div>
               </div>
 
               <Button
