@@ -2413,12 +2413,15 @@ async function getContactedBusinesses({
        GROUP BY wm.business_id
     `);
     // Legacy giden WhatsApp mesajları (business_id set edilmemiş) için telefon
-    // son-10-hane eşleşmesi. Küçük veri hacminde nested-loop join hızlı çalışır.
+    // son-10-hane eşleşmesi. Bir üstteki dal business_id NOT NULL satırlarını zaten
+    // topladığı için burada business_id IS NULL kısıtı hem çift saymayı hem de
+    // gereksiz nested-loop taramasını engelliyor.
     branches.push(sql`
       SELECT b.id AS id, MAX(wm.created_at) AS ts
         FROM whatsapp_messages wm
         JOIN businesses b ON wm.phone LIKE ('%' || ${bPhoneLast10})
        WHERE wm.direction = 'outgoing'
+         AND wm.business_id IS NULL
          AND LENGTH(${bPhoneNorm}) >= 10${timeCol(sql`wm.created_at`)}
        GROUP BY b.id
     `);

@@ -43,6 +43,13 @@
       "when": 1785137760860,
       "tag": "0005_tan_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785137760870,
+      "tag": "0006_composite_indexes",
+      "breakpoints": true
     }
   ]
 }
